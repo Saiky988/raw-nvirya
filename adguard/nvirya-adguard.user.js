@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.4.1.2
+// @version      10.4.1.3
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -25,7 +25,7 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-const VERSION = '10.4.1.2';
+const VERSION = '10.4.1.3';
 const CONFIG_VERSION = 4;
 const K_CFG      = 'nvirya_x_config';
 const K_WL       = 'nvirya_x_whitelist';
@@ -170,28 +170,40 @@ function isDisabledHere() {
   return false;
 }
 
-const RE_AD_HOST = /(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|trafficjunky|brazzersnetwork)(?:\.|$)/i;
+const RE_AD_HOST =
+/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade)(?:\.|$)/i;
 
-const RE_GAMBLING_HOST = /(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin)(?:\.|$)/i;
+const RE_GAMBLING_HOST =
+/(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88)(?:\.|$)/i;
 
-const RE_AD_PATH = /(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container))(?:\/|\.|$)/i;
+const RE_AD_PATH =
+/(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?)(?:\/|\.|$)/i;
 
-const RE_AD_TOKEN = /(?:^|[^a-z0-9])(?:ads?|advert|advertis(?:e|ing|ement)|sponsor(?:ed)?[-_](?:ad|box|slot|block|content|unit)|banner[-_]?ads?|ad[-_]?banner|popunder|popup[-_]ad|sticky[-_]ad|interstitial[-_]ad|ad[-_](?:box|slot|unit|zone|block|wrap|holder|container|banner|area|space|placeholder|overlay))(?=[^a-z0-9]|$)/i;
+const RE_AD_TOKEN =
+/(?:^|[^a-z0-9])(?:ads?|advert|advertis(?:e|ing|ement)|sponsor(?:ed)?[-_](?:ad|box|slot|block|content|unit)|banner[-_]?ads?|ad[-_]?banner|popunder|popup[-_]ad|sticky[-_]ad|interstitial[-_]ad|ad[-_](?:box|slot|unit|zone|block|wrap|holder|container|banner|area|space|placeholder|overlay|loader|placement|wrapper)|adsbygoogle|taboola[-_]|outbrain[-_]|mgid[-_]|carbonads|dfp[-_]?ad)(?=[^a-z0-9]|$)/i;
 
-const RE_SIZING = /\b(?:728x90|300x250|320x50|468x60|160x600|300x600|970x250|970x90|336x280|320x100|250x250)\b/i;
+const RE_SIZING =
+/\b(?:728x90|300x250|320x50|468x60|160x600|300x600|970x250|970x90|336x280|320x100|250x250|120x600|240x400|180x150|125x125|980x120|980x90|960x90|950x90|1200x628|1080x1920|300x1050|320x480|480x320|768x1024|1024x768|580x400|300x50|728x250|768x90)\b/i;
 
-const RE_TRACKER = /(?:^|\.)(?:google-analytics|googletagmanager|hotjar|mixpanel|segment\.io|amplitude|fullstory|mouseflow|clarity\.ms)(?:\.|$)/i;
+const RE_TRACKER =
+/(?:^|\.)(?:google-analytics|googletagmanager|googletagservices|hotjar|mixpanel|segment\.io|amplitude|fullstory|mouseflow|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|luckyorange|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|mc\.yandex|contentsquare|optimizely|kissmetrics)(?:\.|$)/i;
 
-const RE_ANTIADB = /(?:^|[^a-z])(?:adblock|adblocker|adblock[-_]?detect|adblock[-_]?warning|adblock[-_]?modal|blockadblock|adblock-notice)(?:[^a-z]|$)/i;
+const RE_ANTIADB =
+/(?:^|[^a-z])(?:adblock|adblocker|adblock[-_]?(?:detect|warning|modal|notice|killer|check|popup|screen|wall|overlay|msg|disable|guard)|blockadblock|fuckadblock|antiadblock|ad[-_]?shield|fairblock|babasbml|detect[-_]?adblock|ads[-_]?blocker|please[-_]?disable[-_]?adblock|turn[-_]?off[-_]?adblock)(?:[^a-z]|$)/i;
 
-const RE_TRACKING_QUERY = /(?:[?&](?:utm_(?:source|medium|campaign|term|content)|click_?id|clk_?id|aff(?:iliate)?(?:_id|_sub)?|camp(?:aign)?_?id|ref_?id|track(?:ing)?_?id|ad_?id|banner_?id|zone_?id|gclid|fbclid|dclid)=)/i;
+const RE_TRACKING_QUERY =
+/(?:[?&](?:utm_(?:source|medium|campaign|term|content)|click_?id|clk_?id|aff(?:iliate)?(?:_id|_sub)?|camp(?:aign)?_?id|ref_?id|track(?:ing)?_?id|ad_?id|banner_?id|zone_?id|gclid|fbclid|dclid|msclkid|mc_cid|mc_eid|spm|ref_src|gbraid|wbraid|si|trk|trac_?id|sub_?id|s2s_?id)=)/i;
 
 const TRUSTED_POPUP_HOSTS = [
   'accounts.google.com', 'login.microsoftonline.com', 'login.live.com',
-  'appleid.apple.com', 'facebook.com', 'paypal.com', 'stripe.com',
-  'checkout.stripe.com', 'amazon.com', 'github.com', 'okta.com',
-  'auth0.com', 'onelogin.com', 'duosecurity.com', 'link-center'
+  'appleid.apple.com', 'id.apple.com', 'facebook.com', 'twitter.com',
+  'x.com', 'linkedin.com', 'github.com', 'gitlab.com', 'discord.com',
+  'slack.com', 'id.atlassian.com', 'okta.com', 'auth0.com', 'onelogin.com',
+  'duosecurity.com', 'id.zalo.me', 'oauth.telegram.org',
+  'paypal.com', 'stripe.com', 'checkout.stripe.com', 'amazon.com', 'pay.google.com', 
+  'shopify.com', 'checkout.razorpay.com', 'vnpay.vn', 'momo.vn', 'zalopay.vn', 'onepay.vn', 'payos.vn'
 ];
+
 function isTrustedPopupHost(host) {
   if (!host) return false;
   const h = host.toLowerCase().replace(/\.$/, '');
