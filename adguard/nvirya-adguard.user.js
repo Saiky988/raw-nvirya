@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.4.1.3
+// @version      10.4.1.7
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -25,7 +25,7 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-const VERSION = '10.4.1.3';
+const VERSION = '10.4.1.7';
 const CONFIG_VERSION = 4;
 const K_CFG      = 'nvirya_x_config';
 const K_WL       = 'nvirya_x_whitelist';
@@ -171,13 +171,12 @@ function isDisabledHere() {
 }
 
 const RE_AD_HOST =
-/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade)(?:\.|$)/i;
+/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|adx|adsota|masoffer|accesstrade|samsungads|plugrush|ero-advertising|hubtraffic|eclick|ambientdigital|microad|novanet|dinos|adcombo|ants\.vn|fptad|(?:static\.)?ads-twitter|static\.ads-twitter\.com)(?:\.|$)|^(?:ads|adservice|adserver|adtech|partnerads|gemini)\.yahoo(?:inc)?\.com$|^(?:ads|pixel|an)\.facebook\.com$|^(?:ads|analytics)\.linkedin\.com$|^ads\.youtube\.com$|^(?:ads|ads-api|ads-sg|business-api)\.tiktok\.com$|^(?:ads|log|trk)\.pinterest\.com$|^(?:auction|webview|config|adserver)\.unityads\.unity3d\.com$|^(?:adfox|offerwall)\.yandex\.(?:ru|net)$|^(?:iadsdk|api-adservices)\.apple\.com$|^(?:api\.ad|sdkconfig\.ad|sdkconfig\.ad\.intl)\.xiaomi\.com$|^(?:adsfs|adx\.ads|ck\.ads|data\.ads)\.oppomobile\.com$|^(?:bdapi-ads|bdapi-in-ads)\.realmemobile\.com$|^(?:adtago|analyticsengine|advice-ads)\.s3\.amazonaws\.com$|^ads-api\.twitter\.com$/i;
 
 const RE_GAMBLING_HOST =
 /(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88)(?:\.|$)/i;
 
-const RE_AD_PATH =
-/(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?)(?:\/|\.|$)/i;
+const RE_AD_PATH = /(?:^|\/)(?:ads?|pagead|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?)(?:\/|\.|$)/i;
 
 const RE_AD_TOKEN =
 /(?:^|[^a-z0-9])(?:ads?|advert|advertis(?:e|ing|ement)|sponsor(?:ed)?[-_](?:ad|box|slot|block|content|unit)|banner[-_]?ads?|ad[-_]?banner|popunder|popup[-_]ad|sticky[-_]ad|interstitial[-_]ad|ad[-_](?:box|slot|unit|zone|block|wrap|holder|container|banner|area|space|placeholder|overlay|loader|placement|wrapper)|adsbygoogle|taboola[-_]|outbrain[-_]|mgid[-_]|carbonads|dfp[-_]?ad)(?=[^a-z0-9]|$)/i;
@@ -186,7 +185,7 @@ const RE_SIZING =
 /\b(?:728x90|300x250|320x50|468x60|160x600|300x600|970x250|970x90|336x280|320x100|250x250|120x600|240x400|180x150|125x125|980x120|980x90|960x90|950x90|1200x628|1080x1920|300x1050|320x480|480x320|768x1024|1024x768|580x400|300x50|728x250|768x90)\b/i;
 
 const RE_TRACKER =
-/(?:^|\.)(?:google-analytics|googletagmanager|googletagservices|hotjar|mixpanel|segment\.io|amplitude|fullstory|mouseflow|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|luckyorange|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|mc\.yandex|contentsquare|optimizely|kissmetrics)(?:\.|$)/i;
+/(?:^|\.)(?:google-analytics|googleanalytics|googletagmanager|googletagservices|mouseflow|luckyorange|hotjar|freshmarketer|mixpanel|segment\.io|amplitude|fullstory|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|contentsquare|optimizely|kissmetrics|bugsnag|sentry-cdn|getsentry)(?:\.|$)|^(?:events|events\.redditmedia)\.reddit\.com$|^(?:analytics|analytics-sg|log\.byteoversea)\.tiktok\.com$|^logservice[0-9]?\.hicloud\.com$|^(?:metrics|metrics2|grs|logbak)\.hicloud\.com$|^(?:metrics|books-analytics-events|weather-analytics-events|notes-analytics-events)\.apple\.com$|^(?:metrics\.icloud|metrics\.mzstatic)\.com$|^(?:data\.mistat|tracking\.rus\.miui)\.(?:xiaomi|com|rus\.miui\.com)$|^(?:smetrics|nmetrics)\.samsung\.com$|^samsung-com\.112\.2o7\.net$|^(?:iot-eu-logser|iot-logser)\.realme\.com$|^click\.oneplus\.cn$|^stats\.wp\.com$|^(?:appmetrica|adfstat|metrika)\.yandex\.ru$|^(?:analytics|geo|udcm|log\.fc)\.yahoo\.com$|^log\.byteoversea\.com$|^metrics[0-9]?\.data\.hicloud\.com$|^data\.mistat\.(?:rus|india)\.xiaomi\.com$|^analytics-api\.samsunghealthcn\.com$/i;
 
 const RE_ANTIADB =
 /(?:^|[^a-z])(?:adblock|adblocker|adblock[-_]?(?:detect|warning|modal|notice|killer|check|popup|screen|wall|overlay|msg|disable|guard)|blockadblock|fuckadblock|antiadblock|ad[-_]?shield|fairblock|babasbml|detect[-_]?adblock|ads[-_]?blocker|please[-_]?disable[-_]?adblock|turn[-_]?off[-_]?adblock)(?:[^a-z]|$)/i;
@@ -368,9 +367,11 @@ function isAdUrl(u) {
   const p = u.pathname.toLowerCase();
   if (RE_GAMBLING_HOST.test(h)) return true;
   if (RE_AD_HOST.test(h)) return true;
+  if (RE_TRACKER.test(h)) return true;
   if (RE_AD_PATH.test(p)) return true;
   return false;
 }
+
 
 const PLAYER_TAGS = new Set(['video','audio','source','track']);
 const PLAYER_CLASS_RE = /(?:^|[-_\s])(?:jwplayer|jw[-_]?video|jw[-_]?wrapper|video[-_]?js|vjs[-_]|plyr|plyr__|artplayer|dplayer|videojs|media[-_]?player|video[-_]?player|shaka[-_]?video|hls[-_]?player|dashjs|flowplayer|clappr|afterglow|mediaelement)(?:[-_\s]|$)/i;
@@ -846,80 +847,72 @@ function isResponsiveAdContainer(el) {
 function inspectNode(el) {
   if (!el || el.nodeType !== 1) return { action: 'ignore' };
   const tag = (el.tagName || '').toLowerCase();
-  if (NEVER_REMOVE_TAGS.has(tag)) return { action: 'ignore' };
+  if (NEVER_REMOVE_TAGS.has(tag) && tag !== 'script') return { action: 'ignore' };
   if (isProtectedPlayer(el)) return { action: 'ignore' };
 
-  // Xử lý chuyên biệt thẻ <picture>
+  // 1. Chặn Ad Scripts Loading (ads.js, pagead.js, ad-network SDKs)
+  if (tag === 'script') {
+    const src = attr(el, 'src') || attr(el, 'data-src') || '';
+    if (src) {
+      const u = safeUrl(src);
+      if (u && (isAdUrl(u) || RE_AD_PATH.test(u.pathname) || /(?:^|\/)(?:ads?|pagead)\.js$/i.test(u.pathname))) {
+        return { action: 'remove', reason: 'ad-script-src' };
+      }
+    }
+    return { action: 'ignore' };
+  }
+
+  // 2. Xử lý chuyên biệt thẻ <picture>
   if (tag === 'picture') {
     let hasAd = false;
     const childMedia = el.querySelectorAll ? el.querySelectorAll('source, img') : [];
     for (let i = 0; i < childMedia.length; i++) {
       const cm = childMedia[i];
       const src = attr(cm, 'src') || attr(cm, 'data-src') || '';
-      if (src) {
-        const u = safeUrl(src);
-        if (u && isAdUrl(u)) { hasAd = true; break; }
-      }
+      if (src) { const u = safeUrl(src); if (u && isAdUrl(u)) { hasAd = true; break; } }
       const srcset = attr(cm, 'srcset') || attr(cm, 'data-srcset') || '';
       if (srcset) {
         const urls = extractSrcsetUrls(srcset);
-        for (let k = 0; k < urls.length; k++) {
-          const u = safeUrl(urls[k]);
-          if (u && isAdUrl(u)) { hasAd = true; break; }
-        }
+        for (let k = 0; k < urls.length; k++) { const u = safeUrl(urls[k]); if (u && isAdUrl(u)) { hasAd = true; break; } }
         if (hasAd) break;
       }
     }
     if (hasAd) return { action: 'remove', reason: 'ad-picture-srcset' };
   }
 
-  // Xử lý thẻ <source> bên trong <picture>
+  // 3. Xử lý thẻ <source> bên trong <picture>
   if (tag === 'source') {
     const p = el.parentElement;
     if (p && p.tagName && p.tagName.toLowerCase() === 'picture') {
       const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
       const src = attr(el, 'src') || '';
       let hasAd = false;
-      if (src) {
-        const u = safeUrl(src);
-        if (u && isAdUrl(u)) hasAd = true;
-      }
+      if (src) { const u = safeUrl(src); if (u && isAdUrl(u)) hasAd = true; }
       if (!hasAd && srcset) {
         const urls = extractSrcsetUrls(srcset);
-        for (let k = 0; k < urls.length; k++) {
-          const u = safeUrl(urls[k]);
-          if (u && isAdUrl(u)) { hasAd = true; break; }
-        }
+        for (let k = 0; k < urls.length; k++) { const u = safeUrl(urls[k]); if (u && isAdUrl(u)) { hasAd = true; break; } }
       }
-      if (hasAd) {
-        applyAction(p, 'remove', 'ad-picture-srcset');
-        return { action: 'ignore' };
-      }
+      if (hasAd) { applyAction(p, 'remove', 'ad-picture-srcset'); return { action: 'ignore' }; }
     }
     return { action: 'ignore' };
   }
 
   const idc = ((el.id || '') + ' ' + classString(el)).trim();
-  const src = attr(el,'src') || attr(el,'data-src') || attr(el,'data-original') || attr(el,'data-lazy-src') || '';
-  const href = attr(el,'href') || '';
-  const style = attr(el,'style') || '';
+  const src = attr(el, 'src') || attr(el, 'data-src') || attr(el, 'data-original') || attr(el, 'data-lazy-src') || '';
+  const href = attr(el, 'href') || '';
+  const style = attr(el, 'style') || '';
 
-  if (src) {
-    const u = safeUrl(src);
-    if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-url' };
-  }
-  if (href) {
-    const u = safeUrl(href);
-    if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-href' };
-  }
+  if (src) { const u = safeUrl(src); if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-url' }; }
+  if (href) { const u = safeUrl(href); if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-href' }; }
+
   if (tag === 'iframe') {
-    const sb = attr(el,'sandbox') || '';
+    const sb = attr(el, 'sandbox') || '';
     const hasEscape = /allow-popups-to-escape-sandbox|allow-top-navigation(?:-to-custom-protocols)?/i.test(sb);
     const hasSameOrigin = /allow-same-origin/i.test(sb);
     if (hasEscape && !hasSameOrigin) return { action: 'remove', reason: 'sandbox-escape' };
   }
 
-  // Quét srcset trên thẻ <img> và lọc ảnh Base64/Data-URI gắn link tracking
+  // 4. Quét srcset trên thẻ <img> và lọc ảnh Base64/Data-URI gắn link tracking
   if (tag === 'img') {
     const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
     if (srcset) {
@@ -938,8 +931,7 @@ function inspectNode(el) {
     }
 
     if (src && src.startsWith('data:image/')) {
-      let anchor = el.parentElement;
-      let depth = 0;
+      let anchor = el.parentElement, depth = 0;
       while (anchor && anchor.nodeType === 1 && depth < 3) {
         if (anchor.tagName && anchor.tagName.toLowerCase() === 'a') break;
         anchor = anchor.parentElement;
@@ -961,13 +953,12 @@ function inspectNode(el) {
     }
   }
 
-  // Quét Responsive Ad Container
+  // 5. Quét Responsive Ad Container
   if ((tag === 'div' || tag === 'section' || tag === 'aside' || tag === 'figure' || tag === 'a' || tag === 'ins') && isResponsiveAdContainer(el)) {
     return { action: 'remove', reason: 'responsive-ad-container' };
   }
 
-  let signals = 0;
-  let reason = '';
+  let signals = 0, reason = '';
   if (idc && RE_AD_TOKEN.test(idc)) { signals++; reason = reason || 'ad-token'; }
   if (RE_SIZING.test(src) || RE_SIZING.test(idc) || RE_SIZING.test(style)) { signals++; reason = reason || 'ad-sizing'; }
 
@@ -982,6 +973,7 @@ function inspectNode(el) {
   if (signals >= 1 && config.strictMode) return { action: 'hide', reason };
   return { action: 'ignore' };
 }
+
 
 function isSuspiciousOverlay(el) {
   if (!el || el.nodeType !== 1) return false;
@@ -1394,6 +1386,18 @@ function installCosmeticCSS() {
       visibility: hidden !important;
       pointer-events: none !important;
     }
+
+		.ad-banner, .advert-box, .dynamic-ad,
+		[class*="dynamic-ad"], [id*="dynamic-ad"],
+		[class*="ad-placement"], [data-ad-placeholder],
+		[class^="ad_"], [id^="ad_"],
+		.ad, .ads, .banner-ad {
+ 		  display: none !important;
+		  visibility: hidden !important;
+		  height: 0 !important;
+		  opacity: 0 !important;
+		  pointer-events: none !important;
+		}
   `;
   try {
     let style = D.querySelector('style[data-nvirya-cosmetic]');
