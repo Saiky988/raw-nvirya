@@ -5,9 +5,9 @@
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
-// @author       Sayra
+// @author       Nvirya
 // @match        *://*/*
-// @icon         https://www.nvirya.com/assets/icon.png
+// @icon         https://raw.nvirya.com/assets/icon.png
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
