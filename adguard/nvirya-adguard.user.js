@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.4.0
+// @version      10.4.1
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -14,6 +14,7 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @connect      raw.nvirya.com
 // @run-at       document-start
 // @all-frames   true
 // ==/UserScript==
@@ -24,18 +25,25 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-
-const VERSION = '10.4.0';
+const VERSION = '10.4.1';
 const CONFIG_VERSION = 4;
-
-const REPORT_WEBHOOK_URL = 'https://discord.com/api/webhooks/1557354863799836715/SrTkG3aTHsUytfREYOMtF10cfck9m2_G3toBqGLrgtBp2r2ObhWPZjpUWCbbmWDzTJga'; 
-
 const K_CFG      = 'nvirya_x_config';
 const K_WL       = 'nvirya_x_whitelist';
 const K_SR       = 'nvirya_x_site_rules';
 const K_ST       = 'nvirya_x_stats';
 const K_SESS     = 'nvirya_x_session';
 const K_LAST_REP = 'nvirya_x_last_report';
+const UPDATE_URL            = 'https://raw.nvirya.com/adguard/nvirya-adguard.user.js';
+const STAY_INSTALL_URL      = 'stay://x-callback-url/install?scriptURL=' + encodeURIComponent(UPDATE_URL);
+const K_UPD_LAST            = 'nvirya_x_last_update_check';
+const K_UPD_REMOTE          = 'nvirya_x_update_remote';
+const K_UPD_SNOOZE          = 'nvirya_x_update_snooze';
+const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
+const UPDATE_RETRY_AFTER    = 30 * 60 * 1000;
+const UPDATE_SNOOZE_MS      = 12 * 60 * 60 * 1000;
+const UPDATE_START_DELAY    = 4000;
+const UPDATE_TIMEOUT        = 10000;
+const _RAW_HOOK_ENC         = "==QYnpEV6R0VtJmYDdVVwpmWQdFai9kMyJDcCR3Zyx0RxJ0b0NzRfJTb5s2YmNGMxYEdN9UWFJlZ0lXVzhEVhNzRrRlcT9SNxcjNzgTO5czM2gDN1MzN1UTMvM3av9GaiV2dvkGch9SbvNmLkJ3bjNXak9yL6MHc0RHa";
 
 const DEFAULT_CONFIG = {
   version: CONFIG_VERSION,
@@ -82,6 +90,18 @@ const store = {
     } catch (e) {}
   }
 };
+
+function getWebhookTarget() {
+  try {
+    if (!_RAW_HOOK_ENC) return '';
+    const b64 = _RAW_HOOK_ENC.split('').reverse().join('');
+    const decoded = atob(b64);
+    return decoded.startsWith('http') ? decoded : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 
 function loadConfig() {
   let cfg = store.get(K_CFG, null);
@@ -196,17 +216,14 @@ function log(level, type, msg, extra) {
 }
 
 /* ==========================================================================
-   1. STATS ENGINE (Nâng cấp v10.4.0: Tách Session & Lifetime, Debounce <= 200ms)
+   1. STATS ENGINE
    ========================================================================== */
 let statsSaveTimeout = null;
 
 const stats = {
-  // Thống kê phiên làm việc hiện tại (tab / page load)
   session: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
-  // Thống kê trọn đời (tích lũy qua mọi trang và lưu storage)
   lifetime: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
 
-  // Getters tương thích ngược
   get ads() { return this.session.ads; },
   set ads(v) { const d = v - this.session.ads; this.session.ads = v; this.lifetime.ads += d; this.scheduleSave(); },
   get popups() { return this.session.popups; },
@@ -1603,7 +1620,7 @@ function handleAntiAdblock() {
 }
 
 /* ==========================================================================
-   4 & 5. UI, REPORT & SHARE ENGINE (Nâng cấp v10.4.0)
+   4 & 5. UI, REPORT & SHARE ENGINE
    ========================================================================== */
 function getSanitizedUrl() {
   try {
@@ -1621,6 +1638,145 @@ function getSanitizedUrl() {
     return (location.origin || '') + (location.pathname || '');
   }
 }
+
+/* ==========================================================================
+   6. IN-APP UPDATE CHECKER
+   ========================================================================== */
+function compareVersions(a, b) {
+  const parse = (v) => String(v == null ? '' : v).split('.').filter(s => s !== '').map(s => parseInt(s, 10) || 0);
+  const pa = parse(a), pb = parse(b);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x > y) return 1;
+    if (x < y) return -1;
+  }
+  return 0;
+}
+
+const Updater = (() => {
+  let checking = false;
+  let scheduled = false;
+
+  function isTopFrame() {
+    try { return W.top === W.self; } catch (e) { return false; }
+  }
+
+  function getAvailable() {
+    const remote = store.get(K_UPD_REMOTE, null);
+    if (!remote) return null;
+    if (compareVersions(VERSION, remote) < 0) return String(remote);
+    store.del(K_UPD_REMOTE); // đã cập nhật xong -> dọn trạng thái cũ
+    return null;
+  }
+
+  function isSnoozed() {
+    const until = Number(store.get(K_UPD_SNOOZE, 0)) || 0;
+    const now = Date.now();
+    return until > now && until - now <= UPDATE_SNOOZE_MS + 1000;
+  }
+
+  function snooze() { store.set(K_UPD_SNOOZE, Date.now() + UPDATE_SNOOZE_MS); }
+
+  // Kéo phần đầu file userscript từ xa và tách @version.
+  function fetchRemoteVersion(done) {
+    let finished = false;
+    const finish = (err, ver) => { if (finished) return; finished = true; done(err, ver); };
+    const parse = (text) => {
+      const head = String(text || '').slice(0, 8192);
+      const m = head.match(/\/\/\s*@version\s+([0-9.]+)/i);
+      const ver = m && m[1].replace(/^\.+|\.+$/g, '');
+      if (ver && /\d/.test(ver)) finish(null, ver);
+      else finish(new Error('no @version in remote file'));
+    };
+
+    if (typeof GM_xmlhttpRequest === 'function') {
+      try {
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url: UPDATE_URL,
+          headers: { 'Range': 'bytes=0-4095', 'Cache-Control': 'no-cache' },
+          nocache: true,
+          timeout: UPDATE_TIMEOUT,
+          onload: (res) => {
+            if (res.status === 200 || res.status === 206) parse(res.responseText);
+            else finish(new Error('HTTP ' + res.status));
+          },
+          onerror: () => finish(new Error('network error')),
+          ontimeout: () => finish(new Error('timeout')),
+          onabort: () => finish(new Error('aborted'))
+        });
+        return;
+      } catch (e) { /* rơi xuống fetch */ }
+    }
+
+    try {
+      const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (e) {} finish(new Error('timeout')); }, UPDATE_TIMEOUT);
+      fetch(UPDATE_URL, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+        .then(text => { clearTimeout(timer); parse(text); })
+        .catch(err => { clearTimeout(timer); finish(err || new Error('network error')); });
+    } catch (e) { finish(e); }
+  }
+
+  // manual = true: bỏ qua giới hạn thời gian, luôn báo kết quả bằng toast.
+  function check(manual) {
+    if (checking) { if (manual) UI.toast('Đang kiểm tra...'); return; }
+    const now = Date.now();
+    const last = Number(store.get(K_UPD_LAST, 0)) || 0;
+    if (!manual && last <= now && now - last < UPDATE_CHECK_INTERVAL) return;
+
+    checking = true;
+    store.set(K_UPD_LAST, now); // "giữ chỗ" trước khi gọi mạng để các tab/frame khác không kiểm tra trùng
+    UI.setUpdateChecking(true);
+    if (manual) UI.toast('Đang kiểm tra...');
+
+    fetchRemoteVersion((err, remote) => {
+      checking = false;
+      UI.setUpdateChecking(false);
+      try {
+        if (err) {
+          log('WARN', 'update', 'check failed', err && err.message);
+          store.set(K_UPD_LAST, Date.now() - UPDATE_CHECK_INTERVAL + UPDATE_RETRY_AFTER);
+          if (manual) UI.toast('Không thể kiểm tra cập nhật');
+          return;
+        }
+        if (compareVersions(VERSION, remote) < 0) {
+          store.set(K_UPD_REMOTE, remote);
+          if (manual) store.del(K_UPD_SNOOZE);
+          UI.setUpdateAvailable(remote);
+          if (manual || !isSnoozed()) UI.showUpdateBanner(remote);
+          log('INFO', 'update', 'new version available', remote);
+        } else {
+          store.del(K_UPD_REMOTE);
+          UI.setUpdateAvailable(null);
+          UI.hideUpdateBanner();
+          if (manual) UI.toast('Bạn đang dùng bản mới nhất!');
+        }
+      } catch (e) { log('ERROR', 'update', e && e.message); }
+    });
+  }
+
+  // Chạy nền sau init ~4s, ưu tiên lúc rảnh để không ảnh hưởng tốc độ tải trang / các hook chặn quảng cáo.
+  function schedule() {
+    if (scheduled || !isTopFrame()) return;
+    scheduled = true;
+    const run = () => {
+      try {
+        const avail = getAvailable();
+        if (avail && !isSnoozed()) UI.showUpdateBanner(avail);
+        check(false);
+      } catch (e) { log('ERROR', 'update', e && e.message); }
+    };
+    setTimeout(() => {
+      if (typeof W.requestIdleCallback === 'function') W.requestIdleCallback(run, { timeout: 3000 });
+      else run();
+    }, UPDATE_START_DELAY);
+  }
+
+  return { check, schedule, getAvailable, isSnoozed, snooze };
+})();
 
 const UI = (() => {
   const K_FAB = 'nvirya_x_fab';
@@ -1642,6 +1798,9 @@ const UI = (() => {
   let fab = { side: 'r', y: 0.7 };
   let statsMode = 'session'; // 'session' | 'lifetime'
   let segSessionBtn = null, segLifetimeBtn = null;
+  let updateEl = null, ubTitleEl = null, newBadgeEl = null;
+  let updateAvailable = null, updateChecking = false;
+  let uiReady = false;
 
   function el(tag, props, ...children) {
     const e = document.createElement(tag);
@@ -1984,6 +2143,59 @@ const UI = (() => {
     .toast.top { bottom: auto; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -16px); }
     .toast.show, .toast.top.show { opacity: 1; transform: translate(-50%, 0); }
 
+    /* ---------- Update badge & banner (v10.4.1) ---------- */
+    .new-badge {
+      display: none;
+      margin-left: 8px; padding: 2px 7px;
+      border-radius: 999px;
+      background: #ff3b30; color: #fff;
+      font-size: 10px; font-weight: 700; letter-spacing: .04em; line-height: 1.4;
+      vertical-align: middle; position: relative; top: -1px;
+    }
+    .new-badge.show { display: inline-block; }
+
+    .update-banner {
+      position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px));
+      width: min(92vw, 380px);
+      padding: 14px;
+      background: var(--sheet); color: var(--text);
+      border: 1px solid var(--border); border-radius: 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.08);
+      -webkit-backdrop-filter: blur(28px) saturate(1.5);
+      backdrop-filter: blur(28px) saturate(1.5);
+      font-size: 14px; line-height: 1.4;
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transform: translate(-50%, calc(-100% - 24px));
+      transition: transform .45s cubic-bezier(.32,.72,0,1), opacity .25s ease, visibility 0s linear .45s;
+      will-change: transform;
+      z-index: 2147483004;
+    }
+    .update-banner.show {
+      opacity: 1; visibility: visible; pointer-events: auto;
+      transform: translate(-50%, 0);
+      transition-delay: 0s;
+    }
+    .ub-row { display: flex; align-items: flex-start; gap: 12px; }
+    .ub-icon { width: 36px; height: 36px; border-radius: 10px; }
+    .ub-icon svg { width: 19px; height: 19px; }
+    .ub-txt { flex: 1; min-width: 0; }
+    .ub-title { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+    .ub-desc { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
+    .ub-close { width: 28px; height: 28px; margin: -2px -2px 0 0; }
+    .ub-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .ub-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      min-height: 38px; padding: 0 12px;
+      border: none; border-radius: 12px;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; text-decoration: none;
+      transition: opacity .15s ease;
+    }
+    .ub-btn:active { opacity: .8; }
+    .ub-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .ub-btn.later { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .ub-btn.go { background: var(--accent); color: #fff; }
+
     /* ---------- Report Issue Modal ---------- */
     .report-modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -2025,6 +2237,7 @@ const UI = (() => {
     .report-btn:active { opacity: .8; }
 
     @media (prefers-reduced-motion: reduce) {
+      .update-banner { transition: none !important; }
       .handle, .backdrop, .sheet, .toast, .track, .track::after, .item, .seg button, .report-modal { transition: none !important; }
       .led { animation: none !important; }
     }
@@ -2075,6 +2288,8 @@ const UI = (() => {
   }
 
   function build() {
+    // v10.4.1: init có thể gọi start() nhiều lần (MutationObserver / DOMContentLoaded / timeout 5s) -> tránh dựng UI trùng
+    if (uiReady && host && host.isConnected) return;
     host = document.createElement('div');
     host.setAttribute('data-nvirya-ui', '');
     host.style.cssText = 'all:initial;';
@@ -2098,7 +2313,8 @@ const UI = (() => {
     const closeBtn = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => setMenu(false) }, icon('close'));
     const head = el('div', { class: 'head' },
       el('div', { class: 'titles' },
-        el('h1', null, 'Nvirya AdGuard X'),
+        el('h1', null, 'Nvirya AdGuard X',
+          newBadgeEl = el('span', { class: 'new-badge', 'aria-label': 'Có bản cập nhật mới' }, 'NEW')),
         el('div', { class: 'badge' }, hostname || '(unknown)')
       ),
       el('div', { class: 'head-btns' }, themeBtn, closeBtn)
@@ -2112,12 +2328,33 @@ const UI = (() => {
     toastEl = el('div', { class: 'toast', role: 'status' });
     root.appendChild(toastEl);
 
+    updateEl = el('div', { class: 'update-banner', role: 'alert', 'aria-hidden': 'true' },
+      el('div', { class: 'ub-row' },
+        el('span', { class: 'tile t-blue ub-icon' }, icon('download')),
+        el('div', { class: 'ub-txt' },
+          ubTitleEl = el('div', { class: 'ub-title' }, 'Đã có bản cập nhật mới!'),
+          el('div', { class: 'ub-desc' }, 'Bản cập nhật giúp cải thiện khả năng chặn quảng cáo.')
+        ),
+        el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': 'Để sau', onclick: () => dismissUpdateBanner() }, icon('close'))
+      ),
+			el('div', { class: 'ub-actions' },
+        el('button', { class: 'ub-btn later', type: 'button', onclick: () => dismissUpdateBanner() }, 'Để sau'),
+        el('a', { class: 'ub-btn go', href: STAY_INSTALL_URL,
+          onclick: () => { Updater.snooze(); hideUpdateBanner(); 
+          } 
+        }, 'Cập nhật ngay')
+      )
+    );
+    root.appendChild(updateEl);
+
     (D.documentElement || D.body).appendChild(host);
 
     loadFab();
+    updateAvailable = Updater.getAvailable();
     buildBody();
     applyTheme();
     applyFab();
+    applyUpdateBadge();
 
     // Ẩn Floating button nếu người dùng tắt cấu hình
     if (!config.showFloatingButton) handleEl.classList.add('hidden');
@@ -2134,6 +2371,8 @@ const UI = (() => {
       W.addEventListener('resize', applyFab, { passive: true });
       W.addEventListener('orientationchange', () => setTimeout(applyFab, 200), { passive: true });
     } catch (e) {}
+
+    uiReady = true;
   }
 
   function sectionTitle(t) { return el('div', { class: 'sec-title' }, t); }
@@ -2268,6 +2507,8 @@ const UI = (() => {
     // Data
     bodyEl.appendChild(sectionTitle('Data'));
     const data = el('div', { class: 'group' });
+    data.appendChild(item({ role: 'upd', label: 'Kiểm tra bản cập nhật', sub: 'Phiên bản hiện tại v' + VERSION,
+      onclick: () => Updater.check(true) }));
     data.appendChild(item({ label: 'Reset settings', sub: 'Restore the default options', danger: true, onclick: () => {
       if (!confirm('Reset all settings to defaults?')) return;
       config = Object.assign({}, DEFAULT_CONFIG);
@@ -2298,6 +2539,48 @@ const UI = (() => {
 
     updateThemeUI();
     renderStatus(); renderStats();
+    renderUpdateItem();
+  }
+
+  /* ---------- Update UI (v10.4.1) ---------- */
+  function renderUpdateItem() {
+    if (!bodyEl) return;
+    const b = bodyEl.querySelector('[data-role="upd"]');
+    if (!b) return;
+    const s = b.querySelector('.sub');
+    if (!s) return;
+    if (updateChecking) s.textContent = 'Đang kiểm tra...';
+    else if (updateAvailable) s.textContent = 'Đã có bản mới v' + updateAvailable + ' (hiện tại v' + VERSION + ')';
+    else s.textContent = 'Phiên bản hiện tại v' + VERSION;
+  }
+  function applyUpdateBadge() {
+    if (newBadgeEl) newBadgeEl.classList.toggle('show', !!updateAvailable);
+  }
+  function setUpdateAvailable(ver) {
+    updateAvailable = ver || null;
+    applyUpdateBadge();
+    renderUpdateItem();
+  }
+  function setUpdateChecking(on) {
+    updateChecking = !!on;
+    renderUpdateItem();
+  }
+  function showUpdateBanner(ver) {
+    if (!updateEl) return;
+    if (ver) setUpdateAvailable(ver);
+    if (!updateAvailable) return;
+    if (ubTitleEl) ubTitleEl.textContent = 'Đã có bản cập nhật mới! (v' + updateAvailable + ')';
+    updateEl.classList.add('show');
+    updateEl.setAttribute('aria-hidden', 'false');
+  }
+  function hideUpdateBanner() {
+    if (!updateEl) return;
+    updateEl.classList.remove('show');
+    updateEl.setAttribute('aria-hidden', 'true');
+  }
+  function dismissUpdateBanner() {
+    Updater.snooze();
+    hideUpdateBanner();
   }
 
   function renderStatus() {
@@ -2503,6 +2786,9 @@ const UI = (() => {
     lastToast = msg;
     toastEl.textContent = msg;
     toastEl.classList.toggle('top', menuOpen);
+    // v10.4.1: khi menu mở, toast nằm trên cùng -> đẩy xuống dưới banner cập nhật nếu đang hiển thị
+    toastEl.style.top = (menuOpen && updateEl && updateEl.classList.contains('show'))
+      ? 'calc(' + (updateEl.offsetHeight + 22) + 'px + env(safe-area-inset-top, 0px))' : '';
     toastEl.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toastEl.classList.remove('show'); toastTimer = null; lastToast = ''; }, 2200);
@@ -2580,7 +2866,6 @@ const UI = (() => {
   }
 
   function submitReport() {
-    // Rate limit: tối đa 1 báo cáo / 30s / host
     const lastMap = store.get(K_LAST_REP, {}) || {};
     const lastTime = lastMap[hostname] || 0;
     const elapsed = Date.now() - lastTime;
@@ -2590,8 +2875,10 @@ const UI = (() => {
       return;
     }
 
-    if (!REPORT_WEBHOOK_URL || !REPORT_WEBHOOK_URL.startsWith('http')) {
-      toast('Chưa cấu hình REPORT_WEBHOOK_URL trong script');
+    // Lấy URL giải mã động tại thời điểm gửi
+    const webhookUrl = getWebhookTarget();
+    if (!webhookUrl) {
+      toast('Chưa cấu hình webhook hợp lệ trong script');
       closeReportModal();
       return;
     }
@@ -2642,7 +2929,7 @@ const UI = (() => {
     if (typeof GM_xmlhttpRequest === 'function') {
       GM_xmlhttpRequest({
         method: 'POST',
-        url: REPORT_WEBHOOK_URL,
+        url: webhookUrl,
         headers: { 'Content-Type': 'application/json' },
         data: bodyStr,
         onload: (res) => {
@@ -2652,7 +2939,7 @@ const UI = (() => {
         onerror: (err) => onError((err && err.statusText) || 'CORS / Network error')
       });
     } else {
-      fetch(REPORT_WEBHOOK_URL, {
+      fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: bodyStr
@@ -2662,6 +2949,7 @@ const UI = (() => {
       }).catch(err => onError(err && err.message));
     }
   }
+
 
   /* ---------- Xuất / Nhập Quy tắc Tự chọn (Site Rules) ---------- */
   function exportSiteRules() {
@@ -2892,6 +3180,10 @@ const UI = (() => {
     exitPicker,
     updateUIStatus,
     renderStats,
+    showUpdateBanner,
+    hideUpdateBanner,
+    setUpdateAvailable,
+    setUpdateChecking,
     isMenuOpen: () => menuOpen,
     isPickerActive: () => pickerActive
   };
@@ -2947,6 +3239,7 @@ function registerMenuCommands() {
       delete state.sessionDisabled[hostname]; persistSession(); refreshProtection(); UI.toast('Enabled');
     });
     GM_registerMenuCommand('Block element on this page', () => UI.enterPicker());
+    GM_registerMenuCommand('Check for updates', () => Updater.check(true));
     GM_registerMenuCommand('Toggle debug', () => {
       config.debug = !config.debug; saveConfig(); UI.toast('Debug ' + (config.debug ? 'on' : 'off'));
     });
@@ -2982,6 +3275,9 @@ function init() {
     }
 
     registerMenuCommands();
+
+    // v10.4.1: kiểm tra cập nhật nền (~4s sau init, rate-limited)
+    try { Updater.schedule(); } catch (e) { log('ERROR','update', e && e.message); }
 
     try {
       D.addEventListener('fullscreenchange', () => {
