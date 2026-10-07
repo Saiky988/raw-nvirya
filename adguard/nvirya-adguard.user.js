@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.3.1
+// @version      10.4.0
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -12,6 +12,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @run-at       document-start
 // @all-frames   true
@@ -24,13 +25,17 @@ const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
 
-const VERSION = '10.3.1';
-const CONFIG_VERSION = 3;
-const K_CFG = 'nvirya_x_config';
-const K_WL  = 'nvirya_x_whitelist';
-const K_SR  = 'nvirya_x_site_rules';
-const K_ST  = 'nvirya_x_stats';
-const K_SESS= 'nvirya_x_session';
+const VERSION = '10.4.0';
+const CONFIG_VERSION = 4;
+
+const REPORT_WEBHOOK_URL = 'https://discord.com/api/webhooks/1557354863799836715/SrTkG3aTHsUytfREYOMtF10cfck9m2_G3toBqGLrgtBp2r2ObhWPZjpUWCbbmWDzTJga'; 
+
+const K_CFG      = 'nvirya_x_config';
+const K_WL       = 'nvirya_x_whitelist';
+const K_SR       = 'nvirya_x_site_rules';
+const K_ST       = 'nvirya_x_stats';
+const K_SESS     = 'nvirya_x_session';
+const K_LAST_REP = 'nvirya_x_last_report';
 
 const DEFAULT_CONFIG = {
   version: CONFIG_VERSION,
@@ -42,6 +47,7 @@ const DEFAULT_CONFIG = {
   antiAdblock: true,
   strictMode: false,
   elementPicker: true,
+  showFloatingButton: true,
   edgeHandle: true,
   theme: 'auto',            // 'auto' | 'light' | 'dark'
   debug: false
@@ -80,12 +86,15 @@ const store = {
 function loadConfig() {
   let cfg = store.get(K_CFG, null);
   if (!cfg || typeof cfg !== 'object') cfg = Object.assign({}, DEFAULT_CONFIG);
-  // migrate
   if (cfg.version !== CONFIG_VERSION) {
     cfg = Object.assign({}, DEFAULT_CONFIG, cfg, { version: CONFIG_VERSION });
   } else {
     cfg = Object.assign({}, DEFAULT_CONFIG, cfg);
   }
+  if (cfg.showFloatingButton === undefined) {
+    cfg.showFloatingButton = cfg.edgeHandle !== undefined ? cfg.edgeHandle : true;
+  }
+  cfg.edgeHandle = cfg.showFloatingButton;
   return cfg;
 }
 function saveConfig() { store.set(K_CFG, config); }
@@ -98,7 +107,7 @@ const state = {
   siteRules: store.get(K_SR, {}) || {},
   sessionDisabled: store.get(K_SESS, {}) || {},
   tempAllowPopupHosts: new Set(),
-  manualBlocks: new Map(), // hostname -> [{selector, action}]
+  manualBlocks: new Map(),
   hiddenNodes: new WeakSet(),
   removedNodes: [],
   pickerActive: false,
@@ -141,7 +150,7 @@ function isDisabledHere() {
   return false;
 }
 
-const RE_AD_HOST = /(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag)(?:\.|$)/i;
+const RE_AD_HOST = /(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|trafficjunky|brazzersnetwork)(?:\.|$)/i;
 
 const RE_GAMBLING_HOST = /(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin)(?:\.|$)/i;
 
@@ -155,11 +164,13 @@ const RE_TRACKER = /(?:^|\.)(?:google-analytics|googletagmanager|hotjar|mixpanel
 
 const RE_ANTIADB = /(?:^|[^a-z])(?:adblock|adblocker|adblock[-_]?detect|adblock[-_]?warning|adblock[-_]?modal|blockadblock|adblock-notice)(?:[^a-z]|$)/i;
 
+const RE_TRACKING_QUERY = /(?:[?&](?:utm_(?:source|medium|campaign|term|content)|click_?id|clk_?id|aff(?:iliate)?(?:_id|_sub)?|camp(?:aign)?_?id|ref_?id|track(?:ing)?_?id|ad_?id|banner_?id|zone_?id|gclid|fbclid|dclid)=)/i;
+
 const TRUSTED_POPUP_HOSTS = [
   'accounts.google.com', 'login.microsoftonline.com', 'login.live.com',
   'appleid.apple.com', 'facebook.com', 'paypal.com', 'stripe.com',
   'checkout.stripe.com', 'amazon.com', 'github.com', 'okta.com',
-  'auth0.com', 'onelogin.com', 'duosecurity.com'
+  'auth0.com', 'onelogin.com', 'duosecurity.com', 'link-center'
 ];
 function isTrustedPopupHost(host) {
   if (!host) return false;
@@ -184,19 +195,92 @@ function log(level, type, msg, extra) {
   }
 }
 
+/* ==========================================================================
+   1. STATS ENGINE (Nâng cấp v10.4.0: Tách Session & Lifetime, Debounce <= 200ms)
+   ========================================================================== */
+let statsSaveTimeout = null;
+
 const stats = {
-  ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0,
+  // Thống kê phiên làm việc hiện tại (tab / page load)
+  session: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
+  // Thống kê trọn đời (tích lũy qua mọi trang và lưu storage)
+  lifetime: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
+
+  // Getters tương thích ngược
+  get ads() { return this.session.ads; },
+  set ads(v) { const d = v - this.session.ads; this.session.ads = v; this.lifetime.ads += d; this.scheduleSave(); },
+  get popups() { return this.session.popups; },
+  set popups(v) { const d = v - this.session.popups; this.session.popups = v; this.lifetime.popups += d; this.scheduleSave(); },
+  get redirects() { return this.session.redirects; },
+  set redirects(v) { const d = v - this.session.redirects; this.session.redirects = v; this.lifetime.redirects += d; this.scheduleSave(); },
+  get hidden() { return this.session.hidden; },
+  set hidden(v) { const d = v - this.session.hidden; this.session.hidden = v; this.lifetime.hidden += d; this.scheduleSave(); },
+  get removed() { return this.session.removed; },
+  set removed(v) { const d = v - this.session.removed; this.session.removed = v; this.lifetime.removed += d; this.scheduleSave(); },
+  get requests() { return this.session.requests; },
+  set requests(v) { const d = v - this.session.requests; this.session.requests = v; this.lifetime.requests += d; this.scheduleSave(); },
+
   load() {
     const s = store.get(K_ST, null) || {};
-    this.ads = s.ads|0; this.popups = s.popups|0; this.redirects = s.redirects|0;
-    this.hidden = s.hidden|0; this.removed = s.removed|0; this.requests = s.requests|0;
+    this.lifetime.ads = (s.ads | 0);
+    this.lifetime.popups = (s.popups | 0);
+    this.lifetime.redirects = (s.redirects | 0);
+    this.lifetime.hidden = (s.hidden | 0);
+    this.lifetime.removed = (s.removed | 0);
+    this.lifetime.requests = (s.requests | 0);
   },
-  save() { store.set(K_ST, { ads:this.ads, popups:this.popups, redirects:this.redirects, hidden:this.hidden, removed:this.removed, requests:this.requests }); },
-  reset() { this.ads=this.popups=this.redirects=this.hidden=this.removed=this.requests=0; this.save(); }
+
+  saveImmediate() {
+    if (statsSaveTimeout) {
+      clearTimeout(statsSaveTimeout);
+      statsSaveTimeout = null;
+    }
+    store.set(K_ST, {
+      ads: this.lifetime.ads,
+      popups: this.lifetime.popups,
+      redirects: this.lifetime.redirects,
+      hidden: this.lifetime.hidden,
+      removed: this.lifetime.removed,
+      requests: this.lifetime.requests
+    });
+  },
+
+  scheduleSave() {
+    if (statsSaveTimeout) return;
+    statsSaveTimeout = setTimeout(() => {
+      statsSaveTimeout = null;
+      this.saveImmediate();
+    }, 200); // Lưu tức thì trong vòng 200ms chống mất dữ liệu Safari iOS
+  },
+
+  inc(key, delta = 1) {
+    if (this.session[key] !== undefined) this.session[key] += delta;
+    if (this.lifetime[key] !== undefined) this.lifetime[key] += delta;
+    this.scheduleSave();
+    if (typeof UI !== 'undefined' && UI.isMenuOpen && UI.isMenuOpen()) {
+      UI.renderStats();
+    }
+  },
+
+  save() { this.saveImmediate(); },
+
+  reset() {
+    this.session = { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 };
+    this.lifetime = { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 };
+    this.saveImmediate();
+  }
 };
 stats.load();
-let statsDirty = false;
-setInterval(() => { if (statsDirty) { stats.save(); statsDirty = false; } }, 4000);
+
+// Đảm bảo flush dữ liệu ngay lập tức khi người dùng chuyển trang hoặc đóng tab trên iOS
+try {
+  const syncFlush = () => { stats.saveImmediate(); };
+  W.addEventListener('pagehide', syncFlush, { capture: true });
+  W.addEventListener('beforeunload', syncFlush);
+  D.addEventListener('visibilitychange', () => {
+    if (D.visibilityState === 'hidden') syncFlush();
+  });
+} catch (e) {}
 
 function safeUrl(input) {
   if (!input) return null;
@@ -269,12 +353,15 @@ function isProtectedPlayer(el) {
   let cur = el, depth = 0;
   while (cur && cur.nodeType === 1 && depth < 6) {
     const tag = cur.tagName ? cur.tagName.toLowerCase() : '';
+    if (tag === 'source' && cur.parentElement && cur.parentElement.tagName.toLowerCase() === 'picture') {
+      // Source trong picture không phải là media player
+      return false;
+    }
     if (PLAYER_TAGS.has(tag)) return true;
     const id = cur.id || '';
     const cls = typeof cur.className === 'string' ? cur.className : (cur.getAttribute ? (cur.getAttribute('class') || '') : '');
     if (id && PLAYER_ID_RE.test(id)) return true;
     if (cls && PLAYER_CLASS_RE.test(cls)) return true;
-    // Custom elements that look like players
     if (tag && /-(?:player|video)$/.test(tag)) return true;
     cur = cur.parentElement;
     depth++;
@@ -297,9 +384,8 @@ function isActualPlayerControlPath(path) {
 }
 
 function recordBlocked(kind, source, detail) {
-  if (kind === 'popup') stats.popups++;
-  else stats.redirects++;
-  statsDirty = true;
+  if (kind === 'popup') stats.inc('popups');
+  else stats.inc('redirects');
   log('BLOCK', kind, source, detail || '');
 }
 
@@ -314,7 +400,7 @@ function makeDummyWindow() {
   } catch (e) {}
   dummyLocation.assign = function () {};
   dummyLocation.replace = function () {};
-  const dummy = {
+  return {
     closed: true,
     opener: null,
     location: dummyLocation,
@@ -323,7 +409,6 @@ function makeDummyWindow() {
     blur: function () {},
     postMessage: function () {}
   };
-  return dummy;
 }
 
 function popupBlock(source, detail) {
@@ -340,8 +425,6 @@ function installPopupGuard() {
     try {
       if (!config.popupProtection || isDisabledHere()) return origOpen.apply(this, arguments);
       const rawStr = url == null ? '' : String(url).trim();
-      // about:blank can be navigated later to bypass a URL check, so it is
-      // blocked rather than treated as a harmless intermediate window.
       if (!rawStr || /^about:blank(?:[#?].*)?$/i.test(rawStr))
         return popupBlock('empty-or-blank-url', rawStr || '(empty)');
       const u = safeUrl(rawStr);
@@ -351,8 +434,6 @@ function installPopupGuard() {
       return origOpen.apply(this, arguments);
     } catch (e) {
       log('ERROR','popup', e && e.message);
-      // Fail closed: a parsing or browser-wrapper error must not turn into an
-      // unguarded popup.
       recordBlocked('popup', 'guard-error', e && e.message);
       return makeDummyWindow();
     }
@@ -405,8 +486,6 @@ function findAnchorInPath(path) {
 
 function isSuspiciousPlayerOverlayClick(target, path) {
   if (!target || target.nodeType !== 1 || isActualPlayerControlPath(path)) return false;
-  // An external link inside the player subtree is usually an injected layer,
-  // not a playback control.
   if (path.some(node => node && node.nodeType === 1 && isProtectedPlayer(node))) return true;
 
   const tag = String(target.tagName || '').toLowerCase();
@@ -471,9 +550,6 @@ function installAnchorClickHook() {
 function installRedirectGuard() {
   installAnchorClickHook();
 
-  // A capture listener catches synthetic clicks and suspicious overlays.
-  // Trusted, ordinary same-tab links remain usable; only third-party ad or
-  // player-overlay navigation is cancelled.
   try {
     D.addEventListener('click', function (e) {
       if (!config.redirectProtection || isDisabledHere()) return;
@@ -500,9 +576,6 @@ function installRedirectGuard() {
     }, true);
   } catch (e) { log('WARN','redirect','capture click hook unavailable', e && e.message); }
 
-  // Safari/WebKit often exposes window.location as an unforgeable property.
-  // Patch only configurable browser descriptors; click, anchor and meta-refresh
-  // guards below remain the fallback when it cannot be intercepted.
   try {
     const LocProto = W.Location && W.Location.prototype;
     if (LocProto) {
@@ -553,9 +626,6 @@ function installRedirectGuard() {
     }
   } catch (e) { log('WARN','redirect','Location prototype unavailable', e && e.message); }
 
-  // Some engines expose a configurable Window.location descriptor; otherwise
-  // assignment to window.location is covered only by the browser's native guard
-  // and the fallbacks above.
   try {
     const winLoc = Object.getOwnPropertyDescriptor(W, 'location');
     if (winLoc && winLoc.configurable && typeof winLoc.set === 'function') {
@@ -579,7 +649,6 @@ function installRedirectGuard() {
 }
 
 function installNetworkGuard() {
-  // fetch
   try {
     if (typeof W.fetch === 'function' && !W.fetch.__nvirya) {
       const origFetch = W.fetch;
@@ -589,7 +658,7 @@ function installNetworkGuard() {
             const url = typeof input === 'string' ? input : (input && input.url) || '';
             const u = safeUrl(url);
             if (u && isAdUrl(u) && config.strictMode) {
-              stats.requests++; statsDirty = true;
+              stats.inc('requests');
               log('BLOCK','network','fetch', u.href);
               return Promise.reject(new TypeError('Blocked by nvirya AdGuard X'));
             }
@@ -602,7 +671,6 @@ function installNetworkGuard() {
     }
   } catch (e) {}
 
-  // XHR open
   try {
     const XHR = W.XMLHttpRequest;
     if (XHR && XHR.prototype && !XHR.prototype.__nvirya_open) {
@@ -612,7 +680,7 @@ function installNetworkGuard() {
           if (config.enabled && !isDisabledHere() && config.strictMode) {
             const u = safeUrl(url);
             if (u && isAdUrl(u)) {
-              stats.requests++; statsDirty = true;
+              stats.inc('requests');
               log('BLOCK','network','xhr', u.href);
               this.__nvirya_blocked = true;
             }
@@ -630,7 +698,6 @@ function installNetworkGuard() {
     }
   } catch (e) {}
 
-  // sendBeacon
   try {
     if (typeof W.navigator.sendBeacon === 'function' && !W.navigator.sendBeacon.__nvirya) {
       const orig = W.navigator.sendBeacon;
@@ -638,7 +705,7 @@ function installNetworkGuard() {
         try {
           if (config.enabled && !isDisabledHere() && config.strictMode) {
             const u = safeUrl(url);
-            if (u && isAdUrl(u)) { stats.requests++; statsDirty = true; log('BLOCK','beacon', u.href); return false; }
+            if (u && isAdUrl(u)) { stats.inc('requests'); log('BLOCK','beacon', u.href); return false; }
           }
         } catch (e) {}
         return orig.apply(this, arguments);
@@ -649,8 +716,16 @@ function installNetworkGuard() {
   } catch (e) {}
 }
 
-const CANDIDATE_TAGS = new Set(['img','iframe','a','div','section','dialog','aside','ins','embed','object','script','span']);
-const NEVER_REMOVE_TAGS = new Set(['html','head','body','main','video','audio','source','form','input','button','nav','header','footer','script']);
+/* ==========================================================================
+   3. RESPONSIVE MEDIA & AD CONTAINER GUARD (Nâng cấp v10.4.0)
+   ========================================================================== */
+const CANDIDATE_TAGS = new Set([
+  'img','iframe','a','div','section','dialog','aside','ins','embed','object','script','span',
+  'picture','source','figure'
+]);
+const NEVER_REMOVE_TAGS = new Set([
+  'html','head','body','main','video','audio','form','input','button','nav','header','footer','script'
+]);
 const CLOSE_TOKEN_RE = /(?:^|[-_\s])(?:close|dismiss|btn[-_]?close|modal[-_]?close|popup[-_]?close|ad[-_]?close|dialog[-_]?close)(?:[-_\s]|$)/i;
 const CLOSE_ICON_TEXT_RE = /^(?:[\u00D7\u2715\u2716xX\u2297]|close)$/i;
 
@@ -664,20 +739,142 @@ function classString(el) {
   return attr(el, 'class') || '';
 }
 
-// Returns { action: 'remove'|'hide'|'ignore', reason }
+// Trích xuất toàn bộ URL từ thuộc tính responsive srcset
+function extractSrcsetUrls(srcset) {
+  if (!srcset || typeof srcset !== 'string') return [];
+  const urls = [];
+  const regex = /(?:^|,)\s*(data:[^,\s]+,[^\s]+|[^\s,]+)(?:\s+[^,]+)?/gi;
+  let match;
+  while ((match = regex.exec(srcset)) !== null) {
+    const u = match[1].trim();
+    if (u) urls.push(u);
+  }
+  return urls;
+}
+
+// Kiểm tra container có khớp kích thước chuẩn của banner quảng cáo IAB hay không
+function isMatchingAdBannerSize(el) {
+  if (!el || el.nodeType !== 1) return false;
+  const idc = ((el.id || '') + ' ' + classString(el)).trim();
+  const styleAttr = attr(el, 'style') || '';
+  if (RE_SIZING.test(idc) || RE_SIZING.test(styleAttr)) return true;
+
+  if (/aspect-ratio\s*:\s*(?:300\/250|728\/90|320\/50|300\/100|320\/100|160\/600|300\/600|970\/250|970\/90|336\/280|468\/60|1\/1)/i.test(styleAttr)) {
+    return true;
+  }
+
+  let w = parseInt(attr(el, 'width'), 10);
+  let h = parseInt(attr(el, 'height'), 10);
+  if (isNaN(w) || isNaN(h)) {
+    try {
+      const r = el.getBoundingClientRect();
+      w = Math.round(r.width);
+      h = Math.round(r.height);
+    } catch (e) { return false; }
+  }
+  if (!w || !h) return false;
+
+  return (
+    (Math.abs(w - 300) <= 15 && Math.abs(h - 250) <= 15) ||
+    (Math.abs(w - 728) <= 20 && Math.abs(h - 90) <= 15) ||
+    (Math.abs(w - 320) <= 15 && Math.abs(h - 50) <= 12) ||
+    (Math.abs(w - 300) <= 15 && Math.abs(h - 100) <= 15) ||
+    (Math.abs(w - 320) <= 15 && Math.abs(h - 100) <= 15) ||
+    (Math.abs(w - 160) <= 15 && Math.abs(h - 600) <= 25) ||
+    (Math.abs(w - 300) <= 15 && Math.abs(h - 600) <= 25) ||
+    (Math.abs(w - 970) <= 25 && Math.abs(h - 250) <= 20) ||
+    (Math.abs(w - 970) <= 25 && Math.abs(h - 90) <= 15) ||
+    (Math.abs(w - 336) <= 15 && Math.abs(h - 280) <= 15) ||
+    (Math.abs(w - 468) <= 20 && Math.abs(h - 60) <= 15) ||
+    (Math.abs(w - 250) <= 15 && Math.abs(h - 250) <= 15)
+  );
+}
+
+// Kiểm tra Responsive Ad Container chứa tracking params hoặc ad networks
+function isResponsiveAdContainer(el) {
+  if (!el || el.nodeType !== 1) return false;
+  if (isProtectedPlayer(el) || hasProtectedCleanupContent(el)) return false;
+  if (!isMatchingAdBannerSize(el)) return false;
+
+  const links = el.tagName.toLowerCase() === 'a' ? [el] : (el.querySelectorAll ? el.querySelectorAll('a[href]') : []);
+  if (!links.length) return false;
+
+  let hasAdOrTrackingLink = false;
+  for (let i = 0; i < Math.min(links.length, 3); i++) {
+    const a = links[i];
+    const u = safeUrl(a.href || attr(a, 'href'));
+    if (!u) continue;
+    if (isAdUrl(u)) { hasAdOrTrackingLink = true; break; }
+    if (isUntrustedCrossSiteUrl(u) && RE_TRACKING_QUERY.test(u.search)) { hasAdOrTrackingLink = true; break; }
+    const aIdc = ((a.id || '') + ' ' + classString(a)).trim();
+    if (isUntrustedCrossSiteUrl(u) && RE_AD_TOKEN.test(aIdc)) { hasAdOrTrackingLink = true; break; }
+  }
+  if (!hasAdOrTrackingLink) return false;
+  if (meaningfulText(el).length > 40) return false;
+  return true;
+}
+
 function inspectNode(el) {
   if (!el || el.nodeType !== 1) return { action: 'ignore' };
   const tag = (el.tagName || '').toLowerCase();
   if (NEVER_REMOVE_TAGS.has(tag)) return { action: 'ignore' };
   if (isProtectedPlayer(el)) return { action: 'ignore' };
 
-  // Fast path: bail cheaply if neither id/class nor interesting attr
+  // Xử lý chuyên biệt thẻ <picture>
+  if (tag === 'picture') {
+    let hasAd = false;
+    const childMedia = el.querySelectorAll ? el.querySelectorAll('source, img') : [];
+    for (let i = 0; i < childMedia.length; i++) {
+      const cm = childMedia[i];
+      const src = attr(cm, 'src') || attr(cm, 'data-src') || '';
+      if (src) {
+        const u = safeUrl(src);
+        if (u && isAdUrl(u)) { hasAd = true; break; }
+      }
+      const srcset = attr(cm, 'srcset') || attr(cm, 'data-srcset') || '';
+      if (srcset) {
+        const urls = extractSrcsetUrls(srcset);
+        for (let k = 0; k < urls.length; k++) {
+          const u = safeUrl(urls[k]);
+          if (u && isAdUrl(u)) { hasAd = true; break; }
+        }
+        if (hasAd) break;
+      }
+    }
+    if (hasAd) return { action: 'remove', reason: 'ad-picture-srcset' };
+  }
+
+  // Xử lý thẻ <source> bên trong <picture>
+  if (tag === 'source') {
+    const p = el.parentElement;
+    if (p && p.tagName && p.tagName.toLowerCase() === 'picture') {
+      const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
+      const src = attr(el, 'src') || '';
+      let hasAd = false;
+      if (src) {
+        const u = safeUrl(src);
+        if (u && isAdUrl(u)) hasAd = true;
+      }
+      if (!hasAd && srcset) {
+        const urls = extractSrcsetUrls(srcset);
+        for (let k = 0; k < urls.length; k++) {
+          const u = safeUrl(urls[k]);
+          if (u && isAdUrl(u)) { hasAd = true; break; }
+        }
+      }
+      if (hasAd) {
+        applyAction(p, 'remove', 'ad-picture-srcset');
+        return { action: 'ignore' };
+      }
+    }
+    return { action: 'ignore' };
+  }
+
   const idc = ((el.id || '') + ' ' + classString(el)).trim();
   const src = attr(el,'src') || attr(el,'data-src') || attr(el,'data-original') || attr(el,'data-lazy-src') || '';
   const href = attr(el,'href') || '';
   const style = attr(el,'style') || '';
 
-  // Strong signals first (single-signal block)
   if (src) {
     const u = safeUrl(src);
     if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-url' };
@@ -693,14 +890,59 @@ function inspectNode(el) {
     if (hasEscape && !hasSameOrigin) return { action: 'remove', reason: 'sandbox-escape' };
   }
 
-  // Multi-signal
+  // Quét srcset trên thẻ <img> và lọc ảnh Base64/Data-URI gắn link tracking
+  if (tag === 'img') {
+    const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
+    if (srcset) {
+      const urls = extractSrcsetUrls(srcset);
+      for (let k = 0; k < urls.length; k++) {
+        const u = safeUrl(urls[k]);
+        if (u && isAdUrl(u)) {
+          const p = el.parentElement;
+          if (p && p.tagName && p.tagName.toLowerCase() === 'picture') {
+            applyAction(p, 'remove', 'ad-picture-srcset');
+            return { action: 'ignore' };
+          }
+          return { action: 'remove', reason: 'ad-srcset-url' };
+        }
+      }
+    }
+
+    if (src && src.startsWith('data:image/')) {
+      let anchor = el.parentElement;
+      let depth = 0;
+      while (anchor && anchor.nodeType === 1 && depth < 3) {
+        if (anchor.tagName && anchor.tagName.toLowerCase() === 'a') break;
+        anchor = anchor.parentElement;
+        depth++;
+      }
+      if (anchor && anchor.tagName && anchor.tagName.toLowerCase() === 'a') {
+        const aHref = anchor.href || attr(anchor, 'href') || '';
+        const u = safeUrl(aHref);
+        if (u) {
+          const adLink = isAdUrl(u);
+          const crossTracking = isUntrustedCrossSiteUrl(u) && RE_TRACKING_QUERY.test(u.search);
+          const aIdc = ((anchor.id || '') + ' ' + classString(anchor)).trim();
+          if (adLink || crossTracking || (isUntrustedCrossSiteUrl(u) && RE_AD_TOKEN.test(aIdc))) {
+            applyAction(anchor, 'remove', 'data-uri-ad-anchor');
+            return { action: 'ignore' };
+          }
+        }
+      }
+    }
+  }
+
+  // Quét Responsive Ad Container
+  if ((tag === 'div' || tag === 'section' || tag === 'aside' || tag === 'figure' || tag === 'a' || tag === 'ins') && isResponsiveAdContainer(el)) {
+    return { action: 'remove', reason: 'responsive-ad-container' };
+  }
+
   let signals = 0;
   let reason = '';
   if (idc && RE_AD_TOKEN.test(idc)) { signals++; reason = reason || 'ad-token'; }
   if (RE_SIZING.test(src) || RE_SIZING.test(idc) || RE_SIZING.test(style)) { signals++; reason = reason || 'ad-sizing'; }
 
   if (tag === 'img') {
-    // Tracking pixel
     const w = el.naturalWidth || el.width || 0;
     const h = el.naturalHeight || el.height || 0;
     if (w === 1 && h === 1) { signals++; reason = reason || 'tracking-pixel'; }
@@ -712,7 +954,6 @@ function inspectNode(el) {
   return { action: 'ignore' };
 }
 
-// Overlay / click hijack detection — called only on suspicious looking divs
 function isSuspiciousOverlay(el) {
   if (!el || el.nodeType !== 1) return false;
   const tag = (el.tagName || '').toLowerCase();
@@ -725,16 +966,12 @@ function isSuspiciousOverlay(el) {
   if (!isFinite(z) || z < 10000) return false;
   const op = parseFloat(cs.opacity);
   if (isFinite(op) && op > 0.15) return false;
-  // Must cover most of viewport
   const w = el.offsetWidth, h = el.offsetHeight;
   if (w < W.innerWidth * 0.6 || h < W.innerHeight * 0.6) return false;
-  // Must have effectively empty content or be an external iframe
   if (tag === 'iframe') {
     const src = attr(el,'src') || '';
     const u = safeUrl(src);
-    if (u && u.hostname && !hostMatches(u.hostname, hostname)) {
-      return true;
-    }
+    if (u && u.hostname && !hostMatches(u.hostname, hostname)) return true;
     return false;
   }
   const txt = (el.textContent || '').trim();
@@ -902,8 +1139,6 @@ function isFloatingAdModal(el) {
     if (u && isTrustedPopupHost(u.hostname)) trustedIdentityLink = true;
   }
 
-  // Require an ad/network signal, an external linked banner, or a sparse
-  // image-only card with an explicit close control to avoid generic dialogs.
   const sparseImageDialog = media.length > 0 && text.length < 15 && containsCloseControl(el);
   if (trustedIdentityLink && !adEvidence) return false;
   return adEvidence || (media.length > 0 && untrustedExternalLink) || sparseImageDialog;
@@ -944,7 +1179,8 @@ function removeTrackedAdNode(el, reason) {
     const parent = el.parentNode, next = el.nextSibling;
     state.removedNodes.push({ el, parent, next });
     parent.removeChild(el);
-    stats.removed++; stats.ads++; statsDirty = true;
+    stats.inc('removed');
+    stats.inc('ads');
     log('BLOCK','dom', reason || 'remove', el.tagName);
     return true;
   } catch (e) { log('ERROR','apply', e && e.message); return false; }
@@ -984,7 +1220,7 @@ function applyAction(el, action, reason) {
       if (state.hiddenNodes.has(el)) return;
       state.hiddenNodes.add(el);
       el.setAttribute('data-nvirya-hidden', reason || '1');
-      stats.hidden++; statsDirty = true;
+      stats.inc('hidden');
     }
   } catch (e) { log('ERROR','apply', e && e.message); }
 }
@@ -1045,6 +1281,7 @@ function isOrphanCloseButton(el) {
   const z = parseInt(style.zIndex, 10);
   if (!isFinite(z) || z < 50) return false;
   if (hasNearbyMeaningfulContent(el, rect)) return false;
+  const parentTag = String(parent.tagName || '').toLowerCase();
   return parentTag === 'body' || parentTag === 'html' || !hasNonClosePayload(parent, el);
 }
 
@@ -1130,25 +1367,32 @@ function installCosmeticCSS() {
     }
   `;
   try {
-    const style = D.createElement('style');
-    style.setAttribute('data-nvirya-cosmetic','');
+    let style = D.querySelector('style[data-nvirya-cosmetic]');
+    if (!style) {
+      style = D.createElement('style');
+      style.setAttribute('data-nvirya-cosmetic','');
+      (D.head || D.documentElement).appendChild(style);
+    }
     style.textContent = css;
-    (D.head || D.documentElement).appendChild(style);
     cosmeticStyleEl = style;
   } catch (e) {}
 }
 
-// Per-domain manual rules from picker
 function installSiteRulesCSS() {
   const rules = state.siteRules[hostname];
-  if (!rules || !rules.length) return;
-  const css = rules.map(r => r.action === 'hide' ? `${r.selector}{display:none!important;}` : `${r.selector}{display:none!important;}`).join('\n');
-  if (!css) return;
+  let style = D.querySelector('style[data-nvirya-site-rules]');
+  if (!rules || !rules.length) {
+    if (style && style.parentNode) style.parentNode.removeChild(style);
+    return;
+  }
+  const css = rules.map(r => `${r.selector}{display:none!important;}`).join('\n');
   try {
-    const style = D.createElement('style');
-    style.setAttribute('data-nvirya-site-rules','');
+    if (!style) {
+      style = D.createElement('style');
+      style.setAttribute('data-nvirya-site-rules','');
+      (D.head || D.documentElement).appendChild(style);
+    }
     style.textContent = css;
-    (D.head || D.documentElement).appendChild(style);
   } catch (e) {}
 }
 
@@ -1216,12 +1460,8 @@ function inspectAndAct(el) {
   if (isNviryaNode(el)) return;
   if (el.hasAttribute && el.hasAttribute('data-nvirya-hidden')) return;
 
-  // Fast reject: skip elements that aren't candidates
   const tag = (el.tagName || '').toLowerCase();
-  if (!CANDIDATE_TAGS.has(tag)) {
-    // Still descend into children via observer; nothing to inspect here
-    return;
-  }
+  if (!CANDIDATE_TAGS.has(tag)) return;
 
   if ((tag === 'div' || tag === 'section' || tag === 'dialog') && isFloatingAdModal(el)) {
     applyAction(el, 'remove', 'floating-ad-modal');
@@ -1234,40 +1474,18 @@ function inspectAndAct(el) {
     return;
   }
 
-  // Overlay check — only for div/section/iframe with plausible signals
-  if ((tag === 'div' || tag === 'section' || tag === 'iframe')) {
-    if (isSuspiciousOverlay(el)) {
-      applyAction(el, 'remove', 'suspicious-overlay');
-    }
+  if (tag === 'div' || tag === 'section' || tag === 'iframe') {
+    if (isSuspiciousOverlay(el)) applyAction(el, 'remove', 'suspicious-overlay');
   }
 }
 
 function enqueue(el) {
   if (!el || el.nodeType !== 1) return;
   if (pendingSet.has(el)) return;
-  if (pendingQueue.length >= MAX_QUEUE) {
-    // Drop oldest to keep fresh — prevents storm
-    pendingQueue.shift();
-  }
+  if (pendingQueue.length >= MAX_QUEUE) pendingQueue.shift();
   pendingSet.add(el);
   pendingQueue.push(el);
   scheduleProcess();
-}
-
-function scanSubtree(root) {
-  if (!root || root.nodeType !== 1) return;
-  enqueue(root);
-  // Limit subtree walk to avoid huge scans
-  let walked = 0;
-  const it = D.createTreeWalker ? D.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null) : null;
-  if (it) {
-    let n = it.nextNode();
-    while (n && walked < 500) { enqueue(n); n = it.nextNode(); walked++; }
-  } else {
-    const all = root.querySelectorAll ? root.querySelectorAll('*') : [];
-    const lim = Math.min(all.length, 500);
-    for (let i = 0; i < lim; i++) enqueue(all[i]);
-  }
 }
 
 function startObserver() {
@@ -1282,10 +1500,9 @@ function startObserver() {
             if (n.nodeType === 1) {
               scheduleOverlayCleanup(n);
               removeMetaRefresh(n);
-              if (n.nodeType === 1 && String(n.tagName).toLowerCase() === 'meta'
+              if (String(n.tagName).toLowerCase() === 'meta'
                 && (attr(n, 'http-equiv') || '').trim().toLowerCase() === 'refresh') continue;
               enqueue(n);
-              // Also enqueue a limited set of children to catch subtree ads
               if (n.children && n.children.length) {
                 const lim = Math.min(n.children.length, 30);
                 for (let k = 0; k < lim; k++) enqueue(n.children[k]);
@@ -1306,7 +1523,7 @@ function startObserver() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['src','href','style','class','id','data-src','http-equiv','aria-label','title']
+    attributeFilter: ['src','href','style','class','id','data-src','srcset','data-srcset','http-equiv','aria-label','title']
   });
 }
 
@@ -1315,7 +1532,6 @@ function initialScan() {
   if (!root) return;
   removeMetaRefresh(root);
   scheduleOverlayCleanup(root);
-  // Chunked scan of initial DOM
   const all = root.querySelectorAll ? root.querySelectorAll('*') : [];
   const CHUNK = 200;
   let i = 0;
@@ -1350,7 +1566,6 @@ let lastHref = location.href;
 function onLocationChange() {
   if (location.href === lastHref) return;
   lastHref = location.href;
-  // Re-check whitelist/disable status; refresh rules; keep protection running
   if (isDisabledHere()) {
     if (observer) { try { observer.disconnect(); } catch (e) {} observer = null; }
   } else {
@@ -1380,11 +1595,31 @@ function handleAntiAdblock() {
       if (isOverlay) {
         el.setAttribute('data-nvirya-hidden','anti-adblock');
         state.hiddenNodes.add(el);
-        stats.hidden++; statsDirty = true;
+        stats.inc('hidden');
         log('BLOCK','anti-adblock','removed overlay');
       }
     }
   } catch (e) {}
+}
+
+/* ==========================================================================
+   4 & 5. UI, REPORT & SHARE ENGINE (Nâng cấp v10.4.0)
+   ========================================================================== */
+function getSanitizedUrl() {
+  try {
+    const u = new URL(location.href);
+    const sensitive = /auth|token|session|key|pass|code|secret|credential|email|user/i;
+    const cleanParams = new URLSearchParams();
+    u.searchParams.forEach((v, k) => {
+      if (!sensitive.test(k)) cleanParams.set(k, v);
+      else cleanParams.set(k, '[REDACTED]');
+    });
+    u.search = cleanParams.toString() ? '?' + cleanParams.toString() : '';
+    u.hash = '';
+    return u.href;
+  } catch (e) {
+    return (location.origin || '') + (location.pathname || '');
+  }
 }
 
 const UI = (() => {
@@ -1398,14 +1633,16 @@ const UI = (() => {
   let handleEl = null, backdropEl = null, sheetEl = null, grabEl = null, bodyEl = null;
   let themeBtn = null, segBtns = [];
   let statusEl = null, statsEl = null, toastEl = null;
+  let reportModalEl = null, reportReasonSelect = null, reportNoteInput = null;
   let pickerEl = null, pickerLabelEl = null, pickerActive = false;
   let pickerHover = null;
   let toastTimer = null;
   let lastToast = '';
   let statsTimer = null;
   let fab = { side: 'r', y: 0.7 };
+  let statsMode = 'session'; // 'session' | 'lifetime'
+  let segSessionBtn = null, segLifetimeBtn = null;
 
-  /* ---------- DOM helpers (no innerHTML: safe under Trusted Types) ---------- */
   function el(tag, props, ...children) {
     const e = document.createElement(tag);
     if (props) for (const k in props) {
@@ -1421,17 +1658,19 @@ const UI = (() => {
   function clear(n) { while (n && n.firstChild) n.removeChild(n.firstChild); }
 
   const ICONS = {
-    shield:  ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
-    sun:     [['c', 12, 12, 4], 'M12 2v2', 'M12 20v2', 'M4.93 4.93l1.41 1.41', 'M17.66 17.66l1.41 1.41', 'M2 12h2', 'M20 12h2', 'M6.34 17.66l-1.41 1.41', 'M19.07 4.93l-1.41 1.41'],
-    moon:    ['M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'],
-    close:   ['M18 6 6 18', 'M6 6l12 12'],
-    chevron: ['m9 18 6-6-6-6'],
-    allow:   [['c', 12, 12, 10], 'm8 12 3 3 5-6'],
-    pause:   [['c', 12, 12, 10], 'M10 9v6', 'M14 9v6'],
-    target:  [['c', 12, 12, 10], 'M22 12h-4', 'M6 12H2', 'M12 6V2', 'M12 22v-4'],
-    wand:    ['M15 4V2', 'M15 16v-2', 'M8 9h2', 'M20 9h2', 'M17.8 11.8 19 13', 'M15 9h.01', 'M17.8 6.2 19 5', 'M3 21l9-9', 'M12.2 6.2 11 5'],
-    undo:    ['M3 7v6h6', 'M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13'],
-    copy:    [['r', 9, 9, 13, 13, 2], 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1']
+    shield:   ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
+    sun:      [['c', 12, 12, 4], 'M12 2v2', 'M12 20v2', 'M4.93 4.93l1.41 1.41', 'M17.66 17.66l1.41 1.41', 'M2 12h2', 'M20 12h2', 'M6.34 17.66l-1.41 1.41', 'M19.07 4.93l-1.41 1.41'],
+    moon:     ['M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'],
+    close:    ['M18 6 6 18', 'M6 6l12 12'],
+    chevron:  ['m9 18 6-6-6-6'],
+    allow:    [['c', 12, 12, 10], 'm8 12 3 3 5-6'],
+    pause:    [['c', 12, 12, 10], 'M10 9v6', 'M14 9v6'],
+    target:   [['c', 12, 12, 10], 'M22 12h-4', 'M6 12H2', 'M12 6V2', 'M12 22v-4'],
+    wand:     ['M15 4V2', 'M15 16v-2', 'M8 9h2', 'M20 9h2', 'M17.8 11.8 19 13', 'M15 9h.01', 'M17.8 6.2 19 5', 'M3 21l9-9', 'M12.2 6.2 11 5'],
+    undo:     ['M3 7v6h6', 'M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13'],
+    copy:     [['r', 9, 9, 13, 13, 2], 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'],
+    flag:     ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
+    download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm7 10 5 5 5-5', 'M12 15V3']
   };
   function icon(name, cls) {
     const s = document.createElementNS(SVG_NS, 'svg');
@@ -1462,10 +1701,9 @@ const UI = (() => {
   }
   function fmt(n) { try { return Number(n || 0).toLocaleString(); } catch (e) { return String(n); } }
 
-  /* ---------- Theme ---------- */
   const LIGHT_VARS = `
       --cs: light;
-      --sheet: rgba(255,255,255,.92);
+      --sheet: rgba(255,255,255,.94);
       --card: #f4f4f6;
       --card-hover: #eaeaea;
       --text: #18181b;
@@ -1486,7 +1724,7 @@ const UI = (() => {
   `;
   const DARK_VARS = `
       --cs: dark;
-      --sheet: rgba(18,18,21,.92);
+      --sheet: rgba(18,18,21,.94);
       --card: #1a1a1e;
       --card-hover: #232328;
       --text: #f4f4f5;
@@ -1523,7 +1761,6 @@ const UI = (() => {
     button { font: inherit; color: inherit; margin: 0; }
     svg { display: block; }
 
-    /* ---------- Floating button ---------- */
     .handle {
       position: fixed; left: auto; top: auto;
       width: ${FAB_SIZE}px; height: ${FAB_SIZE}px;
@@ -1545,7 +1782,7 @@ const UI = (() => {
     .handle svg { width: 22px; height: 22px; }
     .handle:hover, .handle:focus-visible { opacity: 1; }
     .handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .handle.hidden { display: none; }
+    .handle.hidden { display: none !important; }
     .handle.dragging { cursor: grabbing; opacity: 1; transform: scale(1.08); transition: opacity .18s ease, transform .18s ease; }
     .handle.away { opacity: 0; pointer-events: none; transform: scale(.8); }
     .handle { --lc: 34,197,94; }
@@ -1558,7 +1795,6 @@ const UI = (() => {
       box-shadow: 0 0 0 2px var(--ring);
     }
 
-    /* ---------- Backdrop ---------- */
     .backdrop {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: var(--backdrop);
@@ -1571,7 +1807,6 @@ const UI = (() => {
     }
     .backdrop.open { opacity: 1; visibility: visible; transition-delay: 0s; }
 
-    /* ---------- Sheet (mobile: bottom sheet) ---------- */
     .sheet {
       position: fixed; left: 0; right: 0; bottom: 0;
       max-height: 85vh; max-height: 85dvh;
@@ -1595,11 +1830,10 @@ const UI = (() => {
     .sheet.open { transform: translateY(0); visibility: visible; transition-delay: 0s; }
     .sheet:focus { outline: none; }
 
-    /* ---------- Sheet (tablet / desktop: floating dialog card) ---------- */
     @media (min-width: 641px) {
       .sheet {
         left: 50%; right: auto; top: 50%; bottom: auto;
-        width: 380px; max-height: 85vh;
+        width: 390px; max-height: 85vh;
         border: 1px solid var(--border);
         border-radius: 20px;
         box-shadow: 0 24px 70px rgba(0,0,0,.35);
@@ -1610,7 +1844,6 @@ const UI = (() => {
       .pill { display: none; }
     }
 
-    /* ---------- Header ---------- */
     .grab { flex: none; padding-top: 8px; touch-action: none; }
     .pill { width: 36px; height: 5px; border-radius: 3px; background: var(--pill); margin: 0 auto 8px; }
     .head {
@@ -1643,7 +1876,6 @@ const UI = (() => {
     .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (hover: hover) { .icon-btn:hover { background: var(--card-hover); color: var(--text); } }
 
-    /* ---------- Body ---------- */
     .body {
       flex: 1; min-height: 0;
       overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
@@ -1651,7 +1883,6 @@ const UI = (() => {
     }
     .sec-title { margin: 20px 4px 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 
-    /* Status card */
     .status {
       display: flex; align-items: center; gap: 12px;
       padding: 14px;
@@ -1676,14 +1907,13 @@ const UI = (() => {
     .status .t { font-size: 15px; font-weight: 600; }
     .status .s { font-size: 12px; color: var(--muted); margin-top: 1px; }
 
-    /* Stats */
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; min-width: 0; }
     .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .stat b { display: block; font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--text); }
-    .stat span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+    .stat span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); font-weight: 500; }
+    .stat-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); opacity: .85; }
 
-    /* iOS-style grouped list */
     .group { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; --sep: 14px; }
     .group.icons { --sep: 56px; }
     .group.pad { padding: 6px; }
@@ -1715,7 +1945,6 @@ const UI = (() => {
     .t-purple { background: #6366f1; }
     .t-gray   { background: #8e8e93; }
 
-    /* Switch (iOS style) */
     .switch { position: relative; flex: none; width: 46px; height: 28px; }
     .switch input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
     .track { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 14px; background: var(--switch-off); transition: background .22s ease; }
@@ -1729,7 +1958,6 @@ const UI = (() => {
     .switch input:checked + .track::after { transform: translateX(18px); }
     .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-    /* Segmented control */
     .seg { display: flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--seg-bg); }
     .seg button {
       flex: 1; padding: 7px 0; border: none; border-radius: 8px;
@@ -1742,7 +1970,6 @@ const UI = (() => {
 
     .footer { margin-top: 18px; text-align: center; font-size: 11.5px; color: var(--muted); opacity: .8; }
 
-    /* ---------- Toast ---------- */
     .toast {
       position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
       transform: translate(-50%, 16px);
@@ -1757,13 +1984,52 @@ const UI = (() => {
     .toast.top { bottom: auto; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -16px); }
     .toast.show, .toast.top.show { opacity: 1; transform: translate(-50%, 0); }
 
+    /* ---------- Report Issue Modal ---------- */
+    .report-modal {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--backdrop);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px; opacity: 0; visibility: hidden;
+      transition: opacity .25s ease, visibility 0s linear .25s;
+      z-index: 2147483010;
+    }
+    .report-modal.open { opacity: 1; visibility: visible; transition-delay: 0s; }
+    .report-card {
+      background: var(--sheet); color: var(--text);
+      width: 100%; max-width: 360px;
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 18px; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 10px;
+      box-sizing: border-box;
+    }
+    .report-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .report-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
+    .report-lbl { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+    .report-select, .report-textarea {
+      width: 100%; box-sizing: border-box;
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 9px 12px; font-size: 13.5px; font-family: inherit;
+    }
+    .report-select:focus, .report-textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .report-textarea { resize: vertical; min-height: 64px; }
+    .report-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .report-btn {
+      flex: 1; padding: 10px 0; border-radius: 10px; border: none;
+      font-size: 13.5px; font-weight: 600; cursor: pointer;
+      transition: opacity .15s ease;
+    }
+    .report-btn.cancel { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .report-btn.submit { background: var(--accent); color: #fff; }
+    .report-btn:active { opacity: .8; }
+
     @media (prefers-reduced-motion: reduce) {
-      .handle, .backdrop, .sheet, .toast, .track, .track::after, .item, .seg button { transition: none !important; }
+      .handle, .backdrop, .sheet, .toast, .track, .track::after, .item, .seg button, .report-modal { transition: none !important; }
       .led { animation: none !important; }
     }
   `;
 
-  /* ---------- Theme logic ---------- */
   function themeSetting() { return THEMES.indexOf(config.theme) !== -1 ? config.theme : 'auto'; }
   function effectiveTheme() {
     const t = themeSetting();
@@ -1792,7 +2058,6 @@ const UI = (() => {
     applyTheme();
   }
 
-  /* ---------- Floating button position ---------- */
   function loadFab() {
     const s = store.get(K_FAB, null);
     if (s && (s.side === 'l' || s.side === 'r') && typeof s.y === 'number' && isFinite(s.y)) {
@@ -1809,7 +2074,6 @@ const UI = (() => {
     handleEl.style.top = top + 'px';
   }
 
-  /* ---------- Build ---------- */
   function build() {
     host = document.createElement('div');
     host.setAttribute('data-nvirya-ui', '');
@@ -1819,7 +2083,6 @@ const UI = (() => {
     style.textContent = CSS;
     root.appendChild(style);
 
-    // Floating action button
     handleEl = el('div', {
       class: 'handle', role: 'button', tabindex: '0',
       'aria-label': 'nvirya AdGuard', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
@@ -1827,11 +2090,9 @@ const UI = (() => {
     }, icon('shield'), el('span', { class: 'fab-dot' }));
     root.appendChild(handleEl);
 
-    // Backdrop
     backdropEl = el('div', { class: 'backdrop', onclick: () => setMenu(false) });
     root.appendChild(backdropEl);
 
-    // Sheet
     sheetEl = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Nvirya AdGuard X', 'aria-hidden': 'true', tabindex: '-1' });
     themeBtn = el('button', { class: 'icon-btn', type: 'button', onclick: () => setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark') });
     const closeBtn = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => setMenu(false) }, icon('close'));
@@ -1848,7 +2109,6 @@ const UI = (() => {
     sheetEl.appendChild(bodyEl);
     root.appendChild(sheetEl);
 
-    // Toast
     toastEl = el('div', { class: 'toast', role: 'status' });
     root.appendChild(toastEl);
 
@@ -1858,11 +2118,13 @@ const UI = (() => {
     buildBody();
     applyTheme();
     applyFab();
-    if (!config.edgeHandle) handleEl.classList.add('hidden');
+
+    // Ẩn Floating button nếu người dùng tắt cấu hình
+    if (!config.showFloatingButton) handleEl.classList.add('hidden');
+
     wireHandle();
     wireSheet();
 
-    // Keep "auto" theme icon in sync with the OS setting, and keep the FAB on-screen
     try {
       const mq = W.matchMedia('(prefers-color-scheme: dark)');
       if (mq.addEventListener) mq.addEventListener('change', updateThemeUI);
@@ -1887,19 +2149,32 @@ const UI = (() => {
     return b;
   }
 
+  function setStatsMode(mode) {
+    statsMode = mode;
+    if (segSessionBtn) segSessionBtn.setAttribute('aria-pressed', String(mode === 'session'));
+    if (segLifetimeBtn) segLifetimeBtn.setAttribute('aria-pressed', String(mode === 'lifetime'));
+    renderStats();
+  }
+
   function buildBody() {
     clear(bodyEl);
 
-    // Status card
     statusEl = el('div', { class: 'status' });
     bodyEl.appendChild(statusEl);
 
-    // Stats grid
-    bodyEl.appendChild(sectionTitle('Blocked (session totals)'));
+    // Section Stats (Tách Session & Lifetime)
+    bodyEl.appendChild(sectionTitle('Blocked Stats'));
+    const statSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Stats Mode', style: { marginBottom: '8px' } });
+    segSessionBtn = el('button', { type: 'button', 'aria-pressed': 'true', onclick: () => setStatsMode('session') }, 'This Page');
+    segLifetimeBtn = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => setStatsMode('lifetime') }, 'All Time');
+    statSeg.appendChild(segSessionBtn);
+    statSeg.appendChild(segLifetimeBtn);
+    bodyEl.appendChild(statSeg);
+
     statsEl = el('div', { class: 'stats' });
     bodyEl.appendChild(statsEl);
 
-    // Actions (iOS Settings style list)
+    // Actions
     bodyEl.appendChild(sectionTitle('Actions'));
     const actions = el('div', { class: 'group icons' });
 
@@ -1917,8 +2192,10 @@ const UI = (() => {
       onclick: () => { setMenu(false); enterPicker(); } }));
     actions.appendChild(item({ label: 'Clean page', sub: 'Hide leftover ad frames now', tone: 'purple', icon: 'wand', chevron: true,
       onclick: () => { cleanPage(); toast('Page cleaned'); } }));
+    actions.appendChild(item({ label: 'Report broken / Missed ad', sub: 'Report missed ads or page breakage', tone: 'orange', icon: 'flag', chevron: true,
+      onclick: () => openReportModal() }));
     actions.appendChild(item({ label: 'Undo last block', sub: 'Restore the last removed element', tone: 'gray', icon: 'undo', chevron: true,
-      onclick: () => { undoLast(); } }));
+      onclick: () => undoLast() }));
     bodyEl.appendChild(actions);
 
     // Settings
@@ -1943,7 +2220,7 @@ const UI = (() => {
       ['playerProtection', 'Player protection'],
       ['antiAdblock', 'Anti-adblock cleanup'],
       ['strictMode', 'Strict mode'],
-      ['edgeHandle', 'Floating button'],
+      ['showFloatingButton', 'Show floating button'], // Tùy chọn ẩn hoàn toàn FAB
       ['debug', 'Debug logging'],
     ];
     const swGroup = el('div', { class: 'group' });
@@ -1954,8 +2231,11 @@ const UI = (() => {
       inp.checked = !!config[k];
       inp.addEventListener('change', () => {
         config[k] = inp.checked;
+        if (k === 'showFloatingButton') {
+          config.edgeHandle = inp.checked;
+          if (handleEl) handleEl.classList.toggle('hidden', !inp.checked);
+        }
         saveConfig();
-        if (k === 'edgeHandle') handleEl.classList.toggle('hidden', !inp.checked || !config.edgeHandle);
         if (k === 'enabled' || k === 'cosmeticFiltering' || k === 'redirectProtection') refreshProtection();
         renderStatus(); renderStats();
       });
@@ -1964,6 +2244,27 @@ const UI = (() => {
     }
     bodyEl.appendChild(swGroup);
 
+    // Backup & Share Rules
+    bodyEl.appendChild(sectionTitle('Backup & Share Rules'));
+    const shareGroup = el('div', { class: 'group icons' });
+    shareGroup.appendChild(item({
+      label: 'Export Rules',
+      sub: 'Copy custom site rules to clipboard',
+      tone: 'blue',
+      icon: 'copy',
+      chevron: true,
+      onclick: () => exportSiteRules()
+    }));
+    shareGroup.appendChild(item({
+      label: 'Import Rules',
+      sub: 'Merge rules from JSON or Base64',
+      tone: 'purple',
+      icon: 'download',
+      chevron: true,
+      onclick: () => importSiteRules()
+    }));
+    bodyEl.appendChild(shareGroup);
+
     // Data
     bodyEl.appendChild(sectionTitle('Data'));
     const data = el('div', { class: 'group' });
@@ -1971,11 +2272,11 @@ const UI = (() => {
       if (!confirm('Reset all settings to defaults?')) return;
       config = Object.assign({}, DEFAULT_CONFIG);
       saveConfig(); buildBody(); applyTheme();
-      handleEl.classList.toggle('hidden', !config.edgeHandle);
+      if (handleEl) handleEl.classList.toggle('hidden', !config.showFloatingButton);
       refreshProtection(); toast('Settings reset');
     }}));
     data.appendChild(item({ label: 'Clear statistics', sub: 'Set all counters back to zero', danger: true, onclick: () => {
-      if (!confirm('Clear statistics?')) return;
+      if (!confirm('Clear all lifetime and session statistics?')) return;
       stats.reset(); renderStats(); toast('Stats cleared');
     }}));
     data.appendChild(item({ label: 'Reset site rules', sub: 'Remove all blocked elements on this site', danger: true, onclick: () => {
@@ -2032,22 +2333,41 @@ const UI = (() => {
 
   function renderStats() {
     if (!statsEl) return;
+    const currentData = statsMode === 'session' ? stats.session : stats.lifetime;
+    const secondaryData = statsMode === 'session' ? stats.lifetime : stats.session;
+    const secLabel = statsMode === 'session' ? 'All-time: ' : 'This page: ';
+
     const rows = [
-      ['Ads removed', stats.ads],
-      ['Elements hidden', stats.hidden],
-      ['Popups blocked', stats.popups],
-      ['Redirects blocked', stats.redirects],
-      ['Requests blocked', stats.requests],
+      ['Ads removed', currentData.ads, secondaryData.ads],
+      ['Elements hidden', currentData.hidden, secondaryData.hidden],
+      ['Popups blocked', currentData.popups, secondaryData.popups],
+      ['Redirects blocked', currentData.redirects, secondaryData.redirects],
+      ['Requests blocked', currentData.requests, secondaryData.requests],
     ];
+
     if (statsEl.childNodes.length !== rows.length) {
       clear(statsEl);
-      for (const r of rows) statsEl.appendChild(el('div', { class: 'stat' }, el('b', null, '0'), el('span', null, r[0])));
+      for (const r of rows) {
+        const statCard = el('div', { class: 'stat' },
+          el('b', null, fmt(r[1])),
+          el('span', null, r[0]),
+          el('small', { class: 'stat-sub' }, secLabel + fmt(r[2]))
+        );
+        statsEl.appendChild(statCard);
+      }
+    } else {
+      rows.forEach((r, i) => {
+        const card = statsEl.childNodes[i];
+        const b = card.childNodes[0];
+        const span = card.childNodes[1];
+        const sub = card.childNodes[2];
+        const valStr = fmt(r[1]);
+        const subStr = secLabel + fmt(r[2]);
+        if (b.textContent !== valStr) b.textContent = valStr;
+        if (span.textContent !== r[0]) span.textContent = r[0];
+        if (sub && sub.textContent !== subStr) sub.textContent = subStr;
+      });
     }
-    rows.forEach((r, i) => {
-      const b = statsEl.childNodes[i].firstChild;
-      const s = fmt(r[1]);
-      if (b.textContent !== s) b.textContent = s;
-    });
   }
 
   function setMenu(open) {
@@ -2055,8 +2375,10 @@ const UI = (() => {
     menuOpen = !!open;
     sheetEl.classList.toggle('open', menuOpen);
     backdropEl.classList.toggle('open', menuOpen);
-    handleEl.classList.toggle('away', menuOpen);
-    handleEl.setAttribute('aria-expanded', String(menuOpen));
+    if (handleEl) {
+      handleEl.classList.toggle('away', menuOpen);
+      handleEl.setAttribute('aria-expanded', String(menuOpen));
+    }
     sheetEl.setAttribute('aria-hidden', String(!menuOpen));
     if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
     if (menuOpen) {
@@ -2066,9 +2388,7 @@ const UI = (() => {
     }
   }
 
-  /* ---------- Gestures ---------- */
   function wireHandle() {
-    // Draggable FAB: free drag, snaps to the nearest side edge on release
     let drag = null;
     handleEl.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -2111,10 +2431,10 @@ const UI = (() => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMenu(!menuOpen); }
     });
 
-    // Close on Escape (the backdrop handles outside taps)
     D.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (pickerActive) exitPicker(true);
+        else if (reportModalEl && reportModalEl.classList.contains('open')) closeReportModal();
         else if (menuOpen) setMenu(false);
       }
     }, true);
@@ -2124,7 +2444,6 @@ const UI = (() => {
     try { return !W.matchMedia('(min-width: 641px)').matches; } catch (e) { return (W.innerWidth || 0) <= 640; }
   }
 
-  // Swipe down to close (bottom-sheet mode only)
   function wireSheet() {
     let tracking = false, dragging = false, fromGrab = false;
     let x0 = 0, y0 = 0, t0 = 0, dy = 0;
@@ -2186,12 +2505,241 @@ const UI = (() => {
     toastEl.classList.toggle('top', menuOpen);
     toastEl.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl.classList.remove('show'); toastTimer = null; lastToast = ''; }, 2000);
+    toastTimer = setTimeout(() => { toastEl.classList.remove('show'); toastTimer = null; lastToast = ''; }, 2200);
   }
 
   function updateUIStatus() { renderStatus(); renderStats(); }
 
-  /* ---------- Picker ---------- */
+  /* ---------- Modal Báo cáo Discord Webhook ---------- */
+  function buildReportModal() {
+    if (reportModalEl) return;
+
+    const closeBtn = el('button', {
+      class: 'icon-btn',
+      type: 'button',
+      'aria-label': 'Close',
+      onclick: () => closeReportModal()
+    }, icon('close'));
+
+    const head = el('div', { class: 'report-head' },
+      el('div', { class: 'titles' },
+        el('h2', null, 'Báo cáo sự cố'),
+        el('div', { class: 'badge', style: { marginTop: '2px' } }, hostname || '(unknown)')
+      ),
+      closeBtn
+    );
+
+    reportReasonSelect = el('select', { class: 'report-select' },
+      el('option', { value: 'Lọt quảng cáo (Missed ad)' }, 'Lọt quảng cáo (Missed ad)'),
+      el('option', { value: 'Lỗi giao diện (Broken layout)' }, 'Lỗi giao diện (Broken layout)'),
+      el('option', { value: 'Lỗi phát video (Player issue)' }, 'Lỗi phát video (Player issue)'),
+      el('option', { value: 'Khác (Other)' }, 'Khác (Other)')
+    );
+
+    reportNoteInput = el('textarea', {
+      class: 'report-textarea',
+      placeholder: 'Ghi chú thêm vị trí xuất hiện quảng cáo...',
+      rows: '3'
+    });
+
+    const cancelBtn = el('button', {
+      class: 'report-btn cancel',
+      type: 'button',
+      onclick: () => closeReportModal()
+    }, 'Hủy');
+
+    const submitBtn = el('button', {
+      class: 'report-btn submit',
+      type: 'button',
+      onclick: () => submitReport()
+    }, 'Gửi báo cáo');
+
+    const actions = el('div', { class: 'report-actions' }, cancelBtn, submitBtn);
+
+    const card = el('div', { class: 'report-card' },
+      head,
+      el('div', { class: 'report-lbl' }, 'Lý do:'),
+      reportReasonSelect,
+      el('div', { class: 'report-lbl' }, 'Ghi chú (tùy chọn):'),
+      reportNoteInput,
+      actions
+    );
+
+    reportModalEl = el('div', { class: 'report-modal' }, card);
+    root.appendChild(reportModalEl);
+  }
+
+  function openReportModal() {
+    if (!reportModalEl) buildReportModal();
+    if (reportNoteInput) reportNoteInput.value = '';
+    reportModalEl.classList.add('open');
+  }
+
+  function closeReportModal() {
+    if (reportModalEl) reportModalEl.classList.remove('open');
+  }
+
+  function submitReport() {
+    // Rate limit: tối đa 1 báo cáo / 30s / host
+    const lastMap = store.get(K_LAST_REP, {}) || {};
+    const lastTime = lastMap[hostname] || 0;
+    const elapsed = Date.now() - lastTime;
+    if (elapsed < 30000) {
+      const waitSec = Math.ceil((30000 - elapsed) / 1000);
+      toast(`Vui lòng đợi ${waitSec}s trước khi gửi lại`);
+      return;
+    }
+
+    if (!REPORT_WEBHOOK_URL || !REPORT_WEBHOOK_URL.startsWith('http')) {
+      toast('Chưa cấu hình REPORT_WEBHOOK_URL trong script');
+      closeReportModal();
+      return;
+    }
+
+    const reason = (reportReasonSelect && reportReasonSelect.value) || 'Missed ad';
+    const note = (reportNoteInput && reportNoteInput.value.trim()) || '';
+    const cleanUrl = getSanitizedUrl();
+    const recentLogs = logRing.slice(-5).map(e => `[${e.level}] ${e.type}: ${e.msg} ${e.extra || ''}`).join('\n') || 'Không có log';
+
+    const payload = {
+      username: 'Nvirya AdGuard Reporter',
+      avatar_url: 'https://raw.nvirya.com/assets/icon.png',
+      embeds: [
+        {
+          title: 'Báo cáo sự cố: ' + reason,
+          color: reason.includes('Lọt') ? 15158332 : 16107018,
+          fields: [
+            { name: 'Domain', value: hostname || 'unknown', inline: true },
+            { name: 'Phiên bản', value: 'v' + VERSION, inline: true },
+            { name: 'Lý do', value: reason, inline: true },
+            { name: 'URL (Sanitized)', value: cleanUrl },
+            { name: 'Ghi chú', value: note || '(Không có)' },
+            {
+              name: 'Thống kê chặn',
+              value: `• **Phiên hiện tại (Session):** Chặn ${stats.session.ads} ads, Ẩn ${stats.session.hidden} el, Chặn ${stats.session.popups} popups\n• **Tổng tích lũy (Lifetime):** Chặn ${stats.lifetime.ads} ads, Ẩn ${stats.lifetime.hidden} el`
+            },
+            { name: 'Logs gần nhất', value: '```text\n' + recentLogs + '\n```' },
+            { name: 'User Agent', value: '```\n' + (navigator.userAgent || 'unknown').slice(0, 220) + '\n```' }
+          ],
+          footer: { text: 'Nvirya AdGuard Security Report' },
+          timestamp: new Date().toISOString()
+        }
+      ]
+    };
+
+    const onSuccess = () => {
+      lastMap[hostname] = Date.now();
+      store.set(K_LAST_REP, lastMap);
+      toast('Báo cáo đã gửi thành công! Cảm ơn bạn.');
+      closeReportModal();
+    };
+
+    const onError = (msg) => {
+      toast('Gửi thất bại: ' + (msg || 'Lỗi kết nối'));
+    };
+
+    const bodyStr = JSON.stringify(payload);
+    if (typeof GM_xmlhttpRequest === 'function') {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: REPORT_WEBHOOK_URL,
+        headers: { 'Content-Type': 'application/json' },
+        data: bodyStr,
+        onload: (res) => {
+          if (res.status >= 200 && res.status < 300) onSuccess();
+          else onError('HTTP ' + res.status);
+        },
+        onerror: (err) => onError((err && err.statusText) || 'CORS / Network error')
+      });
+    } else {
+      fetch(REPORT_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bodyStr
+      }).then(res => {
+        if (res.ok) onSuccess();
+        else onError('HTTP ' + res.status);
+      }).catch(err => onError(err && err.message));
+    }
+  }
+
+  /* ---------- Xuất / Nhập Quy tắc Tự chọn (Site Rules) ---------- */
+  function exportSiteRules() {
+    const rules = state.siteRules || {};
+    let totalRules = 0;
+    for (const h in rules) if (Array.isArray(rules[h])) totalRules += rules[h].length;
+    if (totalRules === 0) {
+      toast('Chưa có quy tắc tự chọn nào để xuất');
+      return;
+    }
+    const jsonStr = JSON.stringify(rules);
+    let payload = jsonStr;
+    try {
+      payload = btoa(unescape(encodeURIComponent(jsonStr)));
+    } catch (e) {
+      payload = jsonStr;
+    }
+
+    const fallback = () => prompt('Sao chép mã quy tắc (Base64/JSON):', payload);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(payload).then(() => {
+          toast(`Đã sao chép ${totalRules} quy tắc vào Clipboard!`);
+        }).catch(fallback);
+      } else {
+        fallback();
+      }
+    } catch (e) { fallback(); }
+  }
+
+  function importSiteRules() {
+    const input = prompt('Dán chuỗi quy tắc (JSON hoặc Base64):');
+    if (!input || !input.trim()) return;
+    const raw = input.trim();
+    let parsed = null;
+
+    try {
+      const decoded = decodeURIComponent(escape(atob(raw)));
+      parsed = JSON.parse(decoded);
+    } catch (e) {
+      try { parsed = JSON.parse(raw); } catch (e2) {}
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      toast('Định dạng quy tắc không hợp lệ');
+      return;
+    }
+
+    let mergedCount = 0;
+    if (!state.siteRules) state.siteRules = {};
+
+    for (const host of Object.keys(parsed)) {
+      const hostRules = parsed[host];
+      if (!Array.isArray(hostRules)) continue;
+      const normHost = host.toLowerCase().trim();
+      if (!state.siteRules[normHost]) state.siteRules[normHost] = [];
+
+      const existingSelectors = new Set(state.siteRules[normHost].map(r => r.selector));
+      for (const rule of hostRules) {
+        if (rule && rule.selector && !existingSelectors.has(rule.selector)) {
+          state.siteRules[normHost].push({
+            selector: rule.selector,
+            action: rule.action || 'hide',
+            created: rule.created || Date.now()
+          });
+          existingSelectors.add(rule.selector);
+          mergedCount++;
+        }
+      }
+    }
+
+    persistSiteRules();
+    installSiteRulesCSS();
+    initialScan();
+    toast(`Đã gộp ${mergedCount} quy tắc mới thành công!`);
+  }
+
+  /* ---------- Element Picker ---------- */
   function buildPicker() {
     if (pickerEl) return;
     pickerEl = document.createElement('div');
@@ -2276,23 +2824,19 @@ const UI = (() => {
   function makeSelector(el) {
     if (!el || el.nodeType !== 1) return null;
     if (el.id && /^[a-zA-Z][\w-]*$/.test(el.id)) return '#' + el.id;
-    // data-testid / data-qa / data-attr
     for (const a of ['data-testid','data-qa','data-test','data-cy','data-id']) {
       const v = el.getAttribute(a);
       if (v) return `${el.tagName.toLowerCase()}[${a}="${CSS.escape(v)}"]`;
     }
-    // Class combination with tag
     const cls = classString(el).split(/\s+/).filter(c => c && c.length < 40);
     if (cls.length) {
       const combo = cls.slice(0, 2).map(c => '.' + CSS.escape(c)).join('');
-      // Verify uniqueness
       try {
         const matches = D.querySelectorAll(el.tagName.toLowerCase() + combo);
         if (matches.length === 1) return el.tagName.toLowerCase() + combo;
       } catch (e) {}
       return el.tagName.toLowerCase() + combo;
     }
-    // Fallback to parent + nth-child — less stable
     const parent = el.parentElement;
     if (!parent) return el.tagName.toLowerCase();
     const idx = Array.prototype.indexOf.call(parent.children, el) + 1;
@@ -2301,27 +2845,25 @@ const UI = (() => {
 
   function selectElement(el) {
     if (!el || el.nodeType !== 1) return;
-    if (isProtectedPlayer(el) && !confirm('This element looks like a player. Blocking it may break playback. Continue?')) {
+    if (isProtectedPlayer(el) && !confirm('Phần tử này thuộc trình phát media. Chặn có thể làm hỏng phát video. Tiếp tục?')) {
       exitPicker(true); return;
     }
     const sel = makeSelector(el);
-    if (!sel) { toast('Could not build selector'); exitPicker(true); return; }
-    if (!confirm('Block this element?\n\n' + sel)) { exitPicker(true); return; }
+    if (!sel) { toast('Không thể tạo selector'); exitPicker(true); return; }
+    if (!confirm('Chặn phần tử này trên trang?\n\n' + sel)) { exitPicker(true); return; }
     if (!state.siteRules[hostname]) state.siteRules[hostname] = [];
     state.siteRules[hostname].push({ selector: sel, action: 'hide', created: Date.now() });
     persistSiteRules();
-    // Hide immediately
     try {
       el.setAttribute('data-nvirya-hidden','manual');
       state.hiddenNodes.add(el);
-      stats.hidden++; statsDirty = true;
+      stats.inc('hidden');
     } catch (e) {}
     installSiteRulesCSS();
-    toast('Element blocked');
+    toast('Đã chặn phần tử');
     exitPicker(true);
   }
 
-  /* ---------- Debug ---------- */
   function collectDebugInfo() {
     const lines = [];
     lines.push('Nvirya AdGuard X v' + VERSION);
@@ -2333,7 +2875,8 @@ const UI = (() => {
     lines.push('Strict mode: ' + config.strictMode);
     lines.push('Observer: ' + (observer ? 'active' : 'inactive'));
     lines.push('Queue length: ' + pendingQueue.length);
-    lines.push('Stats: ' + JSON.stringify({ ads: stats.ads, hidden: stats.hidden, popups: stats.popups, redirects: stats.redirects, requests: stats.requests }));
+    lines.push('Stats (Session): ' + JSON.stringify(stats.session));
+    lines.push('Stats (Lifetime): ' + JSON.stringify(stats.lifetime));
     lines.push('Recent events:');
     const tail = logRing.slice(-15);
     for (const e of tail) lines.push('  ' + e.level + ' ' + e.type + ' ' + e.msg + (e.extra ? ' ' + e.extra : ''));
@@ -2348,13 +2891,14 @@ const UI = (() => {
     enterPicker,
     exitPicker,
     updateUIStatus,
+    renderStats,
+    isMenuOpen: () => menuOpen,
     isPickerActive: () => pickerActive
   };
 })();
 
 function cleanPage() {
   try {
-    // Remove obvious cosmetic-only ad nodes on demand
     const sel = '[id^="google_ads_"], ins.adsbygoogle, iframe[src*="googlesyndication"], iframe[src*="doubleclick"]';
     const list = D.querySelectorAll(sel);
     const lim = Math.min(list.length, 200);
@@ -2363,10 +2907,9 @@ function cleanPage() {
       if (!isProtectedPlayer(el)) {
         el.setAttribute('data-nvirya-hidden','clean');
         state.hiddenNodes.add(el);
-        stats.hidden++;
+        stats.inc('hidden');
       }
     }
-    statsDirty = true;
     handleAntiAdblock();
   } catch (e) { log('ERROR','clean', e && e.message); }
 }
@@ -2414,53 +2957,36 @@ function init() {
   if (state.initialized) return;
   state.initialized = true;
 
-  // Early guards
   installPopupGuard();
   installRedirectGuard();
   installNetworkGuard();
 
   const start = () => {
-    // Cosmetic CSS
     installCosmeticCSS();
     installSiteRulesCSS();
-
-    // Observer on documentElement (so it captures head/body swaps too)
     startObserver();
-
-    // Initial scan
     initialScan();
 
-    // Anti-adblock scan (delayed to let overlays appear)
     setTimeout(handleAntiAdblock, 1500);
     setTimeout(handleAntiAdblock, 4000);
 
-    // SPA hooks
     installSPAHooks();
 
-    // UI
     try { UI.build(); } catch (e) { log('ERROR','ui', e && e.message); }
-    if (!config.edgeHandle) {
-      const h = document.querySelector('[data-nvirya-ui]');
+    if (!config.showFloatingButton) {
+      const h = D.querySelector('[data-nvirya-ui]');
       if (h && h.shadowRoot) {
         const handle = h.shadowRoot.querySelector('.handle');
         if (handle) handle.classList.add('hidden');
       }
     }
 
-    // Menu commands
     registerMenuCommands();
 
-    // Stats flush on unload
-    try {
-      W.addEventListener('pagehide', () => { try { stats.save(); } catch (e) {} }, { capture: true });
-      W.addEventListener('beforeunload', () => { try { stats.save(); } catch (e) {} });
-    } catch (e) {}
-
-    // Fullscreen handling
     try {
       D.addEventListener('fullscreenchange', () => {
         const fsEl = D.fullscreenElement;
-        const h = document.querySelector('[data-nvirya-ui]');
+        const h = D.querySelector('[data-nvirya-ui]');
         if (!h || !h.shadowRoot) return;
         const handle = h.shadowRoot.querySelector('.handle');
         if (!handle) return;
@@ -2474,13 +3000,11 @@ function init() {
   if (D.documentElement && D.body) {
     start();
   } else if (D.documentElement) {
-    // Body not yet present
     const mo = new MutationObserver((muts, obs) => {
       if (D.body) { obs.disconnect(); start(); }
     });
     try { mo.observe(D.documentElement, { childList: true, subtree: true }); } catch (e) { setTimeout(start, 100); }
     D.addEventListener('DOMContentLoaded', () => { if (!state.initialized) return; start(); }, { once: true });
-    // Failsafe
     setTimeout(() => { try { mo.disconnect(); } catch (e) {} start(); }, 5000);
   } else {
     setTimeout(init, 20);
