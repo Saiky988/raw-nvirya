@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.3.0
+// @version      10.3.1
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -24,7 +24,7 @@ const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
 
-const VERSION = '10.3.0';
+const VERSION = '10.3.1';
 const CONFIG_VERSION = 3;
 const K_CFG = 'nvirya_x_config';
 const K_WL  = 'nvirya_x_whitelist';
