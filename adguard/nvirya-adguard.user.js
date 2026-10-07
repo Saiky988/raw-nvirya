@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.4.1
+// @version      10.4.1.2
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -25,7 +25,7 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-const VERSION = '10.4.1';
+const VERSION = '10.4.1.2';
 const CONFIG_VERSION = 4;
 const K_CFG      = 'nvirya_x_config';
 const K_WL       = 'nvirya_x_whitelist';
@@ -3247,12 +3247,25 @@ function registerMenuCommands() {
 }
 
 function init() {
+  if (!D.documentElement) {
+    if (D.readyState === 'loading') {
+      D.addEventListener('DOMContentLoaded', init, { once: true });
+    } else {
+      setTimeout(init, 16);
+    }
+    return;
+  }
+
   if (state.initialized) return;
   state.initialized = true;
 
   installPopupGuard();
   installRedirectGuard();
   installNetworkGuard();
+
+  const isTop = (function () {
+    try { return W.self === W.top; } catch (e) { return false; }
+  })();
 
   const start = () => {
     installCosmeticCSS();
@@ -3265,48 +3278,71 @@ function init() {
 
     installSPAHooks();
 
-    try { UI.build(); } catch (e) { log('ERROR','ui', e && e.message); }
-    if (!config.showFloatingButton) {
-      const h = D.querySelector('[data-nvirya-ui]');
-      if (h && h.shadowRoot) {
-        const handle = h.shadowRoot.querySelector('.handle');
-        if (handle) handle.classList.add('hidden');
+    if (isTop) {
+      try { UI.build(); } catch (e) { log('ERROR', 'ui', e && e.message); }
+      
+      if (!config.showFloatingButton) {
+        const h = D.querySelector('[data-nvirya-ui]');
+        if (h && h.shadowRoot) {
+          const handle = h.shadowRoot.querySelector('.handle');
+          if (handle) handle.classList.add('hidden');
+        }
       }
+
+      registerMenuCommands();
+
+      try { Updater.schedule(); } catch (e) { log('ERROR', 'update', e && e.message); }
+
+      try {
+        D.addEventListener('fullscreenchange', () => {
+          const fsEl = D.fullscreenElement;
+          const h = D.querySelector('[data-nvirya-ui]');
+          if (!h || !h.shadowRoot) return;
+          const handle = h.shadowRoot.querySelector('.handle');
+          if (!handle) return;
+          handle.style.display = fsEl ? 'none' : '';
+        });
+      } catch (e) {}
     }
 
-    registerMenuCommands();
-
-    // v10.4.1: kiểm tra cập nhật nền (~4s sau init, rate-limited)
-    try { Updater.schedule(); } catch (e) { log('ERROR','update', e && e.message); }
-
-    try {
-      D.addEventListener('fullscreenchange', () => {
-        const fsEl = D.fullscreenElement;
-        const h = D.querySelector('[data-nvirya-ui]');
-        if (!h || !h.shadowRoot) return;
-        const handle = h.shadowRoot.querySelector('.handle');
-        if (!handle) return;
-        handle.style.display = fsEl ? 'none' : '';
-      });
-    } catch (e) {}
-
-    log('INFO','init', 'ready v' + VERSION);
+    log('INFO', 'init', 'ready v' + VERSION);
   };
 
-  if (D.documentElement && D.body) {
+  if (D.body) {
     start();
-  } else if (D.documentElement) {
-    const mo = new MutationObserver((muts, obs) => {
-      if (D.body) { obs.disconnect(); start(); }
-    });
-    try { mo.observe(D.documentElement, { childList: true, subtree: true }); } catch (e) { setTimeout(start, 100); }
-    D.addEventListener('DOMContentLoaded', () => { if (!state.initialized) return; start(); }, { once: true });
-    setTimeout(() => { try { mo.disconnect(); } catch (e) {} start(); }, 5000);
   } else {
-    setTimeout(init, 20);
-    return;
+    let started = false;
+    const triggerStart = () => {
+      if (started) return;
+      started = true;
+      if (bodyObserver) {
+        try { bodyObserver.disconnect(); } catch (e) {}
+      }
+      start();
+    };
+
+    let bodyObserver = null;
+    try {
+      bodyObserver = new MutationObserver(() => {
+        if (D.body) triggerStart();
+      });
+      bodyObserver.observe(D.documentElement, { childList: true });
+    } catch (e) {}
+
+    D.addEventListener('DOMContentLoaded', triggerStart, { once: true });
+    setTimeout(triggerStart, 1500);
   }
 }
+
+try {
+  W.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      if (!observer) startObserver();
+      installCosmeticCSS();
+      installSiteRulesCSS();
+    }
+  });
+} catch (e) {}
 
 try {
   init();
