@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
+// @license      MIT
 // @namespace    https://nvirya.com/adguard
 // @version      10.4.1.8
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
-// @description  
+// @description  A lightweight, mobile-first userscript designed to block intrusive ads, popups, redirects, and overlays with a native-style UI and custom element picker.
 // @author       Nvirya
 // @match        *://*/*
 // @icon         https://raw.nvirya.com/assets/icon.png
