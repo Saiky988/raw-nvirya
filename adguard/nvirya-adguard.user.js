@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya AdGuard
 // @namespace    https://nvirya.com/adguard
-// @version      10.4.1.7
+// @version      10.4.1.8
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  
@@ -15,6 +15,9 @@
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      raw.nvirya.com
+// @connect      raw.nvirya.com
+// @connect      discord.com
+// @connect      discordapp.com
 // @run-at       document-start
 // @all-frames   true
 // ==/UserScript==
@@ -25,7 +28,7 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-const VERSION = '10.4.1.7';
+const VERSION = '10.4.1.8';
 const CONFIG_VERSION = 4;
 const K_CFG      = 'nvirya_x_config';
 const K_WL       = 'nvirya_x_whitelist';
@@ -38,12 +41,15 @@ const STAY_INSTALL_URL      = 'stay://x-callback-url/install?scriptURL=' + encod
 const K_UPD_LAST            = 'nvirya_x_last_update_check';
 const K_UPD_REMOTE          = 'nvirya_x_update_remote';
 const K_UPD_SNOOZE          = 'nvirya_x_update_snooze';
-const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
-const UPDATE_RETRY_AFTER    = 30 * 60 * 1000;
+
+const UPDATE_CHECK_INTERVAL = 1 * 60 * 60 * 1000;
+const UPDATE_RETRY_AFTER    = 15 * 60 * 1000;
 const UPDATE_SNOOZE_MS      = 12 * 60 * 60 * 1000;
-const UPDATE_START_DELAY    = 4000;
-const UPDATE_TIMEOUT        = 10000;
-const _RAW_HOOK_ENC         = "==QYnpEV6R0VtJmYDdVVwpmWQdFai9kMyJDcCR3Zyx0RxJ0b0NzRfJTb5s2YmNGMxYEdN9UWFJlZ0lXVzhEVhNzRrRlcT9SNxcjNzgTO5czM2gDN1MzN1UTMvM3av9GaiV2dvkGch9SbvNmLkJ3bjNXak9yL6MHc0RHa";
+const UPDATE_START_DELAY    = 1500;
+const UPDATE_TIMEOUT        = 4000;
+
+// Feedback/Bug report Discord webhook 
+const WEBHOOK_PAYLOAD       = "==QYnpEV6R0VtJmYDdVVwpmWQdFai9kMyJDcCR3Zyx0RxJ0b0NzRfJTb5s2YmNGMxYEdN9UWFJlZ0lXVzhEVhNzRrRlcT9SNxcjNzgTO5czM2gDN1MzN1UTMvM3av9GaiV2dvkGch9SbvNmLkJ3bjNXak9yL6MHc0RHa";
 
 const DEFAULT_CONFIG = {
   version: CONFIG_VERSION,
@@ -93,8 +99,8 @@ const store = {
 
 function getWebhookTarget() {
   try {
-    if (!_RAW_HOOK_ENC) return '';
-    const b64 = _RAW_HOOK_ENC.split('').reverse().join('');
+    if (!WEBHOOK_PAYLOAD) return '';
+    const b64 = WEBHOOK_PAYLOAD.split('').reverse().join('');
     const decoded = atob(b64);
     return decoded.startsWith('http') ? decoded : '';
   } catch (e) {
@@ -171,12 +177,13 @@ function isDisabledHere() {
 }
 
 const RE_AD_HOST =
-/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|adx|adsota|masoffer|accesstrade|samsungads|plugrush|ero-advertising|hubtraffic|eclick|ambientdigital|microad|novanet|dinos|adcombo|ants\.vn|fptad|(?:static\.)?ads-twitter|static\.ads-twitter\.com)(?:\.|$)|^(?:ads|adservice|adserver|adtech|partnerads|gemini)\.yahoo(?:inc)?\.com$|^(?:ads|pixel|an)\.facebook\.com$|^(?:ads|analytics)\.linkedin\.com$|^ads\.youtube\.com$|^(?:ads|ads-api|ads-sg|business-api)\.tiktok\.com$|^(?:ads|log|trk)\.pinterest\.com$|^(?:auction|webview|config|adserver)\.unityads\.unity3d\.com$|^(?:adfox|offerwall)\.yandex\.(?:ru|net)$|^(?:iadsdk|api-adservices)\.apple\.com$|^(?:api\.ad|sdkconfig\.ad|sdkconfig\.ad\.intl)\.xiaomi\.com$|^(?:adsfs|adx\.ads|ck\.ads|data\.ads)\.oppomobile\.com$|^(?:bdapi-ads|bdapi-in-ads)\.realmemobile\.com$|^(?:adtago|analyticsengine|advice-ads)\.s3\.amazonaws\.com$|^ads-api\.twitter\.com$/i;
+/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade)(?:\.|$)/i;
 
 const RE_GAMBLING_HOST =
 /(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88)(?:\.|$)/i;
 
-const RE_AD_PATH = /(?:^|\/)(?:ads?|pagead|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?)(?:\/|\.|$)/i;
+const RE_AD_PATH =
+/(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?)(?:\/|\.|$)/i;
 
 const RE_AD_TOKEN =
 /(?:^|[^a-z0-9])(?:ads?|advert|advertis(?:e|ing|ement)|sponsor(?:ed)?[-_](?:ad|box|slot|block|content|unit)|banner[-_]?ads?|ad[-_]?banner|popunder|popup[-_]ad|sticky[-_]ad|interstitial[-_]ad|ad[-_](?:box|slot|unit|zone|block|wrap|holder|container|banner|area|space|placeholder|overlay|loader|placement|wrapper)|adsbygoogle|taboola[-_]|outbrain[-_]|mgid[-_]|carbonads|dfp[-_]?ad)(?=[^a-z0-9]|$)/i;
@@ -185,7 +192,7 @@ const RE_SIZING =
 /\b(?:728x90|300x250|320x50|468x60|160x600|300x600|970x250|970x90|336x280|320x100|250x250|120x600|240x400|180x150|125x125|980x120|980x90|960x90|950x90|1200x628|1080x1920|300x1050|320x480|480x320|768x1024|1024x768|580x400|300x50|728x250|768x90)\b/i;
 
 const RE_TRACKER =
-/(?:^|\.)(?:google-analytics|googleanalytics|googletagmanager|googletagservices|mouseflow|luckyorange|hotjar|freshmarketer|mixpanel|segment\.io|amplitude|fullstory|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|contentsquare|optimizely|kissmetrics|bugsnag|sentry-cdn|getsentry)(?:\.|$)|^(?:events|events\.redditmedia)\.reddit\.com$|^(?:analytics|analytics-sg|log\.byteoversea)\.tiktok\.com$|^logservice[0-9]?\.hicloud\.com$|^(?:metrics|metrics2|grs|logbak)\.hicloud\.com$|^(?:metrics|books-analytics-events|weather-analytics-events|notes-analytics-events)\.apple\.com$|^(?:metrics\.icloud|metrics\.mzstatic)\.com$|^(?:data\.mistat|tracking\.rus\.miui)\.(?:xiaomi|com|rus\.miui\.com)$|^(?:smetrics|nmetrics)\.samsung\.com$|^samsung-com\.112\.2o7\.net$|^(?:iot-eu-logser|iot-logser)\.realme\.com$|^click\.oneplus\.cn$|^stats\.wp\.com$|^(?:appmetrica|adfstat|metrika)\.yandex\.ru$|^(?:analytics|geo|udcm|log\.fc)\.yahoo\.com$|^log\.byteoversea\.com$|^metrics[0-9]?\.data\.hicloud\.com$|^data\.mistat\.(?:rus|india)\.xiaomi\.com$|^analytics-api\.samsunghealthcn\.com$/i;
+/(?:^|\.)(?:google-analytics|googletagmanager|googletagservices|hotjar|mixpanel|segment\.io|amplitude|fullstory|mouseflow|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|luckyorange|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|mc\.yandex|contentsquare|optimizely|kissmetrics)(?:\.|$)/i;
 
 const RE_ANTIADB =
 /(?:^|[^a-z])(?:adblock|adblocker|adblock[-_]?(?:detect|warning|modal|notice|killer|check|popup|screen|wall|overlay|msg|disable|guard)|blockadblock|fuckadblock|antiadblock|ad[-_]?shield|fairblock|babasbml|detect[-_]?adblock|ads[-_]?blocker|please[-_]?disable[-_]?adblock|turn[-_]?off[-_]?adblock)(?:[^a-z]|$)/i;
@@ -200,7 +207,7 @@ const TRUSTED_POPUP_HOSTS = [
   'slack.com', 'id.atlassian.com', 'okta.com', 'auth0.com', 'onelogin.com',
   'duosecurity.com', 'id.zalo.me', 'oauth.telegram.org',
   'paypal.com', 'stripe.com', 'checkout.stripe.com', 'amazon.com', 'pay.google.com', 
-  'shopify.com', 'checkout.razorpay.com', 'vnpay.vn', 'momo.vn', 'zalopay.vn', 'onepay.vn', 'payos.vn'
+  'shopify.com', 'checkout.razorpay.com', 'vnpay.vn', 'momo.vn', 'zalopay.vn', 'onepay.vn', 'payos.vn', 't.me'
 ];
 
 function isTrustedPopupHost(host) {
@@ -226,9 +233,6 @@ function log(level, type, msg, extra) {
   }
 }
 
-/* ==========================================================================
-   1. STATS ENGINE
-   ========================================================================== */
 let statsSaveTimeout = null;
 
 const stats = {
@@ -278,7 +282,7 @@ const stats = {
     statsSaveTimeout = setTimeout(() => {
       statsSaveTimeout = null;
       this.saveImmediate();
-    }, 200); // Lưu tức thì trong vòng 200ms chống mất dữ liệu Safari iOS
+    }, 100);
   },
 
   inc(key, delta = 1) {
@@ -300,7 +304,6 @@ const stats = {
 };
 stats.load();
 
-// Đảm bảo flush dữ liệu ngay lập tức khi người dùng chuyển trang hoặc đóng tab trên iOS
 try {
   const syncFlush = () => { stats.saveImmediate(); };
   W.addEventListener('pagehide', syncFlush, { capture: true });
@@ -367,11 +370,9 @@ function isAdUrl(u) {
   const p = u.pathname.toLowerCase();
   if (RE_GAMBLING_HOST.test(h)) return true;
   if (RE_AD_HOST.test(h)) return true;
-  if (RE_TRACKER.test(h)) return true;
   if (RE_AD_PATH.test(p)) return true;
   return false;
 }
-
 
 const PLAYER_TAGS = new Set(['video','audio','source','track']);
 const PLAYER_CLASS_RE = /(?:^|[-_\s])(?:jwplayer|jw[-_]?video|jw[-_]?wrapper|video[-_]?js|vjs[-_]|plyr|plyr__|artplayer|dplayer|videojs|media[-_]?player|video[-_]?player|shaka[-_]?video|hls[-_]?player|dashjs|flowplayer|clappr|afterglow|mediaelement)(?:[-_\s]|$)/i;
@@ -384,7 +385,6 @@ function isProtectedPlayer(el) {
   while (cur && cur.nodeType === 1 && depth < 6) {
     const tag = cur.tagName ? cur.tagName.toLowerCase() : '';
     if (tag === 'source' && cur.parentElement && cur.parentElement.tagName.toLowerCase() === 'picture') {
-      // Source trong picture không phải là media player
       return false;
     }
     if (PLAYER_TAGS.has(tag)) return true;
@@ -746,9 +746,6 @@ function installNetworkGuard() {
   } catch (e) {}
 }
 
-/* ==========================================================================
-   3. RESPONSIVE MEDIA & AD CONTAINER GUARD (Nâng cấp v10.4.0)
-   ========================================================================== */
 const CANDIDATE_TAGS = new Set([
   'img','iframe','a','div','section','dialog','aside','ins','embed','object','script','span',
   'picture','source','figure'
@@ -769,7 +766,6 @@ function classString(el) {
   return attr(el, 'class') || '';
 }
 
-// Trích xuất toàn bộ URL từ thuộc tính responsive srcset
 function extractSrcsetUrls(srcset) {
   if (!srcset || typeof srcset !== 'string') return [];
   const urls = [];
@@ -782,7 +778,6 @@ function extractSrcsetUrls(srcset) {
   return urls;
 }
 
-// Kiểm tra container có khớp kích thước chuẩn của banner quảng cáo IAB hay không
 function isMatchingAdBannerSize(el) {
   if (!el || el.nodeType !== 1) return false;
   const idc = ((el.id || '') + ' ' + classString(el)).trim();
@@ -820,7 +815,6 @@ function isMatchingAdBannerSize(el) {
   );
 }
 
-// Kiểm tra Responsive Ad Container chứa tracking params hoặc ad networks
 function isResponsiveAdContainer(el) {
   if (!el || el.nodeType !== 1) return false;
   if (isProtectedPlayer(el) || hasProtectedCleanupContent(el)) return false;
@@ -847,72 +841,80 @@ function isResponsiveAdContainer(el) {
 function inspectNode(el) {
   if (!el || el.nodeType !== 1) return { action: 'ignore' };
   const tag = (el.tagName || '').toLowerCase();
-  if (NEVER_REMOVE_TAGS.has(tag) && tag !== 'script') return { action: 'ignore' };
+  if (NEVER_REMOVE_TAGS.has(tag)) return { action: 'ignore' };
   if (isProtectedPlayer(el)) return { action: 'ignore' };
 
-  // 1. Chặn Ad Scripts Loading (ads.js, pagead.js, ad-network SDKs)
-  if (tag === 'script') {
-    const src = attr(el, 'src') || attr(el, 'data-src') || '';
-    if (src) {
-      const u = safeUrl(src);
-      if (u && (isAdUrl(u) || RE_AD_PATH.test(u.pathname) || /(?:^|\/)(?:ads?|pagead)\.js$/i.test(u.pathname))) {
-        return { action: 'remove', reason: 'ad-script-src' };
-      }
-    }
-    return { action: 'ignore' };
-  }
-
-  // 2. Xử lý chuyên biệt thẻ <picture>
+  // <picture>
   if (tag === 'picture') {
     let hasAd = false;
     const childMedia = el.querySelectorAll ? el.querySelectorAll('source, img') : [];
     for (let i = 0; i < childMedia.length; i++) {
       const cm = childMedia[i];
       const src = attr(cm, 'src') || attr(cm, 'data-src') || '';
-      if (src) { const u = safeUrl(src); if (u && isAdUrl(u)) { hasAd = true; break; } }
+      if (src) {
+        const u = safeUrl(src);
+        if (u && isAdUrl(u)) { hasAd = true; break; }
+      }
       const srcset = attr(cm, 'srcset') || attr(cm, 'data-srcset') || '';
       if (srcset) {
         const urls = extractSrcsetUrls(srcset);
-        for (let k = 0; k < urls.length; k++) { const u = safeUrl(urls[k]); if (u && isAdUrl(u)) { hasAd = true; break; } }
+        for (let k = 0; k < urls.length; k++) {
+          const u = safeUrl(urls[k]);
+          if (u && isAdUrl(u)) { hasAd = true; break; }
+        }
         if (hasAd) break;
       }
     }
     if (hasAd) return { action: 'remove', reason: 'ad-picture-srcset' };
   }
 
-  // 3. Xử lý thẻ <source> bên trong <picture>
+  // Handle <source> tag inside <picture>
   if (tag === 'source') {
     const p = el.parentElement;
     if (p && p.tagName && p.tagName.toLowerCase() === 'picture') {
       const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
       const src = attr(el, 'src') || '';
       let hasAd = false;
-      if (src) { const u = safeUrl(src); if (u && isAdUrl(u)) hasAd = true; }
+      if (src) {
+        const u = safeUrl(src);
+        if (u && isAdUrl(u)) hasAd = true;
+      }
       if (!hasAd && srcset) {
         const urls = extractSrcsetUrls(srcset);
-        for (let k = 0; k < urls.length; k++) { const u = safeUrl(urls[k]); if (u && isAdUrl(u)) { hasAd = true; break; } }
+        for (let k = 0; k < urls.length; k++) {
+          const u = safeUrl(urls[k]);
+          if (u && isAdUrl(u)) { hasAd = true; break; }
+        }
       }
-      if (hasAd) { applyAction(p, 'remove', 'ad-picture-srcset'); return { action: 'ignore' }; }
+      if (hasAd) {
+        applyAction(p, 'remove', 'ad-picture-srcset');
+        return { action: 'ignore' };
+      }
     }
     return { action: 'ignore' };
   }
 
   const idc = ((el.id || '') + ' ' + classString(el)).trim();
-  const src = attr(el, 'src') || attr(el, 'data-src') || attr(el, 'data-original') || attr(el, 'data-lazy-src') || '';
-  const href = attr(el, 'href') || '';
-  const style = attr(el, 'style') || '';
+  const src = attr(el,'src') || attr(el,'data-src') || attr(el,'data-original') || attr(el,'data-lazy-src') || '';
+  const href = attr(el,'href') || '';
+  const style = attr(el,'style') || '';
 
-  if (src) { const u = safeUrl(src); if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-url' }; }
-  if (href) { const u = safeUrl(href); if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-href' }; }
-
+  if (src) {
+    const u = safeUrl(src);
+    if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-url' };
+  }
+  if (href) {
+    const u = safeUrl(href);
+    if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-href' };
+  }
   if (tag === 'iframe') {
-    const sb = attr(el, 'sandbox') || '';
+    const sb = attr(el,'sandbox') || '';
     const hasEscape = /allow-popups-to-escape-sandbox|allow-top-navigation(?:-to-custom-protocols)?/i.test(sb);
     const hasSameOrigin = /allow-same-origin/i.test(sb);
     if (hasEscape && !hasSameOrigin) return { action: 'remove', reason: 'sandbox-escape' };
   }
 
-  // 4. Quét srcset trên thẻ <img> và lọc ảnh Base64/Data-URI gắn link tracking
+  // Scan srcset on the <img> tag and filter Base64/Data-URI images with link tracking
   if (tag === 'img') {
     const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
     if (srcset) {
@@ -931,7 +933,8 @@ function inspectNode(el) {
     }
 
     if (src && src.startsWith('data:image/')) {
-      let anchor = el.parentElement, depth = 0;
+      let anchor = el.parentElement;
+      let depth = 0;
       while (anchor && anchor.nodeType === 1 && depth < 3) {
         if (anchor.tagName && anchor.tagName.toLowerCase() === 'a') break;
         anchor = anchor.parentElement;
@@ -953,12 +956,12 @@ function inspectNode(el) {
     }
   }
 
-  // 5. Quét Responsive Ad Container
   if ((tag === 'div' || tag === 'section' || tag === 'aside' || tag === 'figure' || tag === 'a' || tag === 'ins') && isResponsiveAdContainer(el)) {
     return { action: 'remove', reason: 'responsive-ad-container' };
   }
 
-  let signals = 0, reason = '';
+  let signals = 0;
+  let reason = '';
   if (idc && RE_AD_TOKEN.test(idc)) { signals++; reason = reason || 'ad-token'; }
   if (RE_SIZING.test(src) || RE_SIZING.test(idc) || RE_SIZING.test(style)) { signals++; reason = reason || 'ad-sizing'; }
 
@@ -973,7 +976,6 @@ function inspectNode(el) {
   if (signals >= 1 && config.strictMode) return { action: 'hide', reason };
   return { action: 'ignore' };
 }
-
 
 function isSuspiciousOverlay(el) {
   if (!el || el.nodeType !== 1) return false;
@@ -1386,18 +1388,6 @@ function installCosmeticCSS() {
       visibility: hidden !important;
       pointer-events: none !important;
     }
-
-		.ad-banner, .advert-box, .dynamic-ad,
-		[class*="dynamic-ad"], [id*="dynamic-ad"],
-		[class*="ad-placement"], [data-ad-placeholder],
-		[class^="ad_"], [id^="ad_"],
-		.ad, .ads, .banner-ad {
- 		  display: none !important;
-		  visibility: hidden !important;
-		  height: 0 !important;
-		  opacity: 0 !important;
-		  pointer-events: none !important;
-		}
   `;
   try {
     let style = D.querySelector('style[data-nvirya-cosmetic]');
@@ -1635,9 +1625,6 @@ function handleAntiAdblock() {
   } catch (e) {}
 }
 
-/* ==========================================================================
-   4 & 5. UI, REPORT & SHARE ENGINE
-   ========================================================================== */
 function getSanitizedUrl() {
   try {
     const u = new URL(location.href);
@@ -1655,9 +1642,6 @@ function getSanitizedUrl() {
   }
 }
 
-/* ==========================================================================
-   6. IN-APP UPDATE CHECKER
-   ========================================================================== */
 function compareVersions(a, b) {
   const parse = (v) => String(v == null ? '' : v).split('.').filter(s => s !== '').map(s => parseInt(s, 10) || 0);
   const pa = parse(a), pb = parse(b);
@@ -1682,7 +1666,7 @@ const Updater = (() => {
     const remote = store.get(K_UPD_REMOTE, null);
     if (!remote) return null;
     if (compareVersions(VERSION, remote) < 0) return String(remote);
-    store.del(K_UPD_REMOTE); // đã cập nhật xong -> dọn trạng thái cũ
+    store.del(K_UPD_REMOTE);
     return null;
   }
 
@@ -1694,7 +1678,6 @@ const Updater = (() => {
 
   function snooze() { store.set(K_UPD_SNOOZE, Date.now() + UPDATE_SNOOZE_MS); }
 
-  // Kéo phần đầu file userscript từ xa và tách @version.
   function fetchRemoteVersion(done) {
     let finished = false;
     const finish = (err, ver) => { if (finished) return; finished = true; done(err, ver); };
@@ -1723,7 +1706,7 @@ const Updater = (() => {
           onabort: () => finish(new Error('aborted'))
         });
         return;
-      } catch (e) { /* rơi xuống fetch */ }
+      } catch (e) { /* fetch */ }
     }
 
     try {
@@ -1736,17 +1719,16 @@ const Updater = (() => {
     } catch (e) { finish(e); }
   }
 
-  // manual = true: bỏ qua giới hạn thời gian, luôn báo kết quả bằng toast.
   function check(manual) {
-    if (checking) { if (manual) UI.toast('Đang kiểm tra...'); return; }
+    if (checking) { if (manual) UI.toast('Checking...'); return; }
     const now = Date.now();
     const last = Number(store.get(K_UPD_LAST, 0)) || 0;
     if (!manual && last <= now && now - last < UPDATE_CHECK_INTERVAL) return;
 
     checking = true;
-    store.set(K_UPD_LAST, now); // "giữ chỗ" trước khi gọi mạng để các tab/frame khác không kiểm tra trùng
+    store.set(K_UPD_LAST, now);
     UI.setUpdateChecking(true);
-    if (manual) UI.toast('Đang kiểm tra...');
+    if (manual) UI.toast('Checking...');
 
     fetchRemoteVersion((err, remote) => {
       checking = false;
@@ -1774,7 +1756,6 @@ const Updater = (() => {
     });
   }
 
-  // Chạy nền sau init ~4s, ưu tiên lúc rảnh để không ảnh hưởng tốc độ tải trang / các hook chặn quảng cáo.
   function schedule() {
     if (scheduled || !isTopFrame()) return;
     scheduled = true;
@@ -2159,7 +2140,6 @@ const UI = (() => {
     .toast.top { bottom: auto; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -16px); }
     .toast.show, .toast.top.show { opacity: 1; transform: translate(-50%, 0); }
 
-    /* ---------- Update badge & banner (v10.4.1) ---------- */
     .new-badge {
       display: none;
       margin-left: 8px; padding: 2px 7px;
@@ -2212,7 +2192,6 @@ const UI = (() => {
     .ub-btn.later { background: var(--card); color: var(--text); border: 1px solid var(--border); }
     .ub-btn.go { background: var(--accent); color: #fff; }
 
-    /* ---------- Report Issue Modal ---------- */
     .report-modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: var(--backdrop);
@@ -2304,7 +2283,6 @@ const UI = (() => {
   }
 
   function build() {
-    // v10.4.1: init có thể gọi start() nhiều lần (MutationObserver / DOMContentLoaded / timeout 5s) -> tránh dựng UI trùng
     if (uiReady && host && host.isConnected) return;
     host = document.createElement('div');
     host.setAttribute('data-nvirya-ui', '');
@@ -2330,7 +2308,7 @@ const UI = (() => {
     const head = el('div', { class: 'head' },
       el('div', { class: 'titles' },
         el('h1', null, 'Nvirya AdGuard X',
-          newBadgeEl = el('span', { class: 'new-badge', 'aria-label': 'Có bản cập nhật mới' }, 'NEW')),
+          newBadgeEl = el('span', { class: 'new-badge', 'aria-label': 'There is a new update' }, 'NEW')),
         el('div', { class: 'badge' }, hostname || '(unknown)')
       ),
       el('div', { class: 'head-btns' }, themeBtn, closeBtn)
@@ -2348,8 +2326,8 @@ const UI = (() => {
       el('div', { class: 'ub-row' },
         el('span', { class: 'tile t-blue ub-icon' }, icon('download')),
         el('div', { class: 'ub-txt' },
-          ubTitleEl = el('div', { class: 'ub-title' }, 'Đã có bản cập nhật mới!'),
-          el('div', { class: 'ub-desc' }, 'Bản cập nhật giúp cải thiện khả năng chặn quảng cáo.')
+          ubTitleEl = el('div', { class: 'ub-title' }, 'There is a new update!'),
+          el('div', { class: 'ub-desc' }, 'The update helps improve the ability to block ads.')
         ),
         el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': 'Để sau', onclick: () => dismissUpdateBanner() }, icon('close'))
       ),
@@ -2372,7 +2350,6 @@ const UI = (() => {
     applyFab();
     applyUpdateBadge();
 
-    // Ẩn Floating button nếu người dùng tắt cấu hình
     if (!config.showFloatingButton) handleEl.classList.add('hidden');
 
     wireHandle();
@@ -2417,7 +2394,6 @@ const UI = (() => {
     statusEl = el('div', { class: 'status' });
     bodyEl.appendChild(statusEl);
 
-    // Section Stats (Tách Session & Lifetime)
     bodyEl.appendChild(sectionTitle('Blocked Stats'));
     const statSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Stats Mode', style: { marginBottom: '8px' } });
     segSessionBtn = el('button', { type: 'button', 'aria-pressed': 'true', onclick: () => setStatsMode('session') }, 'This Page');
@@ -2429,7 +2405,6 @@ const UI = (() => {
     statsEl = el('div', { class: 'stats' });
     bodyEl.appendChild(statsEl);
 
-    // Actions
     bodyEl.appendChild(sectionTitle('Actions'));
     const actions = el('div', { class: 'group icons' });
 
@@ -2453,7 +2428,6 @@ const UI = (() => {
       onclick: () => undoLast() }));
     bodyEl.appendChild(actions);
 
-    // Settings
     bodyEl.appendChild(sectionTitle('Settings'));
     const themeGroup = el('div', { class: 'group pad' });
     const seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Theme' });
@@ -2475,7 +2449,7 @@ const UI = (() => {
       ['playerProtection', 'Player protection'],
       ['antiAdblock', 'Anti-adblock cleanup'],
       ['strictMode', 'Strict mode'],
-      ['showFloatingButton', 'Show floating button'], // Tùy chọn ẩn hoàn toàn FAB
+      ['showFloatingButton', 'Show floating button'],
       ['debug', 'Debug logging'],
     ];
     const swGroup = el('div', { class: 'group' });
@@ -2499,7 +2473,6 @@ const UI = (() => {
     }
     bodyEl.appendChild(swGroup);
 
-    // Backup & Share Rules
     bodyEl.appendChild(sectionTitle('Backup & Share Rules'));
     const shareGroup = el('div', { class: 'group icons' });
     shareGroup.appendChild(item({
@@ -2520,10 +2493,9 @@ const UI = (() => {
     }));
     bodyEl.appendChild(shareGroup);
 
-    // Data
     bodyEl.appendChild(sectionTitle('Data'));
     const data = el('div', { class: 'group' });
-    data.appendChild(item({ role: 'upd', label: 'Kiểm tra bản cập nhật', sub: 'Phiên bản hiện tại v' + VERSION,
+    data.appendChild(item({ role: 'upd', label: 'Check for updates', sub: 'Current version v' + VERSION,
       onclick: () => Updater.check(true) }));
     data.appendChild(item({ label: 'Reset settings', sub: 'Restore the default options', danger: true, onclick: () => {
       if (!confirm('Reset all settings to defaults?')) return;
@@ -2542,7 +2514,6 @@ const UI = (() => {
     }}));
     bodyEl.appendChild(data);
 
-    // Debug
     bodyEl.appendChild(sectionTitle('Debug'));
     const dbg = el('div', { class: 'group icons' });
     dbg.appendChild(item({ label: 'Copy debug info', sub: 'Copy diagnostics to the clipboard', tone: 'gray', icon: 'copy', onclick: () => {
@@ -2558,16 +2529,15 @@ const UI = (() => {
     renderUpdateItem();
   }
 
-  /* ---------- Update UI (v10.4.1) ---------- */
   function renderUpdateItem() {
     if (!bodyEl) return;
     const b = bodyEl.querySelector('[data-role="upd"]');
     if (!b) return;
     const s = b.querySelector('.sub');
     if (!s) return;
-    if (updateChecking) s.textContent = 'Đang kiểm tra...';
-    else if (updateAvailable) s.textContent = 'Đã có bản mới v' + updateAvailable + ' (hiện tại v' + VERSION + ')';
-    else s.textContent = 'Phiên bản hiện tại v' + VERSION;
+    if (updateChecking) s.textContent = 'Checking...';
+    else if (updateAvailable) s.textContent = 'There is a new version v' + updateAvailable + ' (now v' + VERSION + ')';
+    else s.textContent = 'Current version v' + VERSION;
   }
   function applyUpdateBadge() {
     if (newBadgeEl) newBadgeEl.classList.toggle('show', !!updateAvailable);
@@ -2585,7 +2555,7 @@ const UI = (() => {
     if (!updateEl) return;
     if (ver) setUpdateAvailable(ver);
     if (!updateAvailable) return;
-    if (ubTitleEl) ubTitleEl.textContent = 'Đã có bản cập nhật mới! (v' + updateAvailable + ')';
+    if (ubTitleEl) ubTitleEl.textContent = 'There is a new update! (v' + updateAvailable + ')';
     updateEl.classList.add('show');
     updateEl.setAttribute('aria-hidden', 'false');
   }
@@ -2802,7 +2772,6 @@ const UI = (() => {
     lastToast = msg;
     toastEl.textContent = msg;
     toastEl.classList.toggle('top', menuOpen);
-    // v10.4.1: khi menu mở, toast nằm trên cùng -> đẩy xuống dưới banner cập nhật nếu đang hiển thị
     toastEl.style.top = (menuOpen && updateEl && updateEl.classList.contains('show'))
       ? 'calc(' + (updateEl.offsetHeight + 22) + 'px + env(safe-area-inset-top, 0px))' : '';
     toastEl.classList.add('show');
@@ -2812,7 +2781,6 @@ const UI = (() => {
 
   function updateUIStatus() { renderStatus(); renderStats(); }
 
-  /* ---------- Modal Báo cáo Discord Webhook ---------- */
   function buildReportModal() {
     if (reportModalEl) return;
 
@@ -2825,7 +2793,7 @@ const UI = (() => {
 
     const head = el('div', { class: 'report-head' },
       el('div', { class: 'titles' },
-        el('h2', null, 'Báo cáo sự cố'),
+        el('h2', null, 'Report an incident'),
         el('div', { class: 'badge', style: { marginTop: '2px' } }, hostname || '(unknown)')
       ),
       closeBtn
@@ -2840,7 +2808,7 @@ const UI = (() => {
 
     reportNoteInput = el('textarea', {
       class: 'report-textarea',
-      placeholder: 'Ghi chú thêm vị trí xuất hiện quảng cáo...',
+      placeholder: 'Note more about the location of advertising...',
       rows: '3'
     });
 
@@ -2854,15 +2822,15 @@ const UI = (() => {
       class: 'report-btn submit',
       type: 'button',
       onclick: () => submitReport()
-    }, 'Gửi báo cáo');
+    }, 'Send a report');
 
     const actions = el('div', { class: 'report-actions' }, cancelBtn, submitBtn);
 
     const card = el('div', { class: 'report-card' },
       head,
-      el('div', { class: 'report-lbl' }, 'Lý do:'),
+      el('div', { class: 'report-lbl' }, 'Reason:'),
       reportReasonSelect,
-      el('div', { class: 'report-lbl' }, 'Ghi chú (tùy chọn):'),
+      el('div', { class: 'report-lbl' }, 'Notes (optional):'),
       reportNoteInput,
       actions
     );
@@ -2887,14 +2855,13 @@ const UI = (() => {
     const elapsed = Date.now() - lastTime;
     if (elapsed < 30000) {
       const waitSec = Math.ceil((30000 - elapsed) / 1000);
-      toast(`Vui lòng đợi ${waitSec}s trước khi gửi lại`);
+      toast(`Please wait ${waitSec}s before sending again`);
       return;
     }
 
-    // Lấy URL giải mã động tại thời điểm gửi
     const webhookUrl = getWebhookTarget();
     if (!webhookUrl) {
-      toast('Chưa cấu hình webhook hợp lệ trong script');
+      toast('Have not configured a valid webhook in the script');
       closeReportModal();
       return;
     }
@@ -2902,7 +2869,7 @@ const UI = (() => {
     const reason = (reportReasonSelect && reportReasonSelect.value) || 'Missed ad';
     const note = (reportNoteInput && reportNoteInput.value.trim()) || '';
     const cleanUrl = getSanitizedUrl();
-    const recentLogs = logRing.slice(-5).map(e => `[${e.level}] ${e.type}: ${e.msg} ${e.extra || ''}`).join('\n') || 'Không có log';
+    const recentLogs = logRing.slice(-5).map(e => `[${e.level}] ${e.type}: ${e.msg} ${e.extra || ''}`).join('\n') || 'There is no log';
 
     const payload = {
       username: 'Nvirya AdGuard Reporter',
@@ -2933,12 +2900,12 @@ const UI = (() => {
     const onSuccess = () => {
       lastMap[hostname] = Date.now();
       store.set(K_LAST_REP, lastMap);
-      toast('Báo cáo đã gửi thành công! Cảm ơn bạn.');
+      toast('The report has been sent successfully! Thank you.');
       closeReportModal();
     };
 
     const onError = (msg) => {
-      toast('Gửi thất bại: ' + (msg || 'Lỗi kết nối'));
+      toast('Send failed: ' + (msg || 'Connection error'));
     };
 
     const bodyStr = JSON.stringify(payload);
@@ -2966,14 +2933,12 @@ const UI = (() => {
     }
   }
 
-
-  /* ---------- Xuất / Nhập Quy tắc Tự chọn (Site Rules) ---------- */
   function exportSiteRules() {
     const rules = state.siteRules || {};
     let totalRules = 0;
     for (const h in rules) if (Array.isArray(rules[h])) totalRules += rules[h].length;
     if (totalRules === 0) {
-      toast('Chưa có quy tắc tự chọn nào để xuất');
+      toast('There are no optional rules to export yet');
       return;
     }
     const jsonStr = JSON.stringify(rules);
@@ -2984,11 +2949,11 @@ const UI = (() => {
       payload = jsonStr;
     }
 
-    const fallback = () => prompt('Sao chép mã quy tắc (Base64/JSON):', payload);
+    const fallback = () => prompt('Copy rule code (Base64/JSON):', payload);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(payload).then(() => {
-          toast(`Đã sao chép ${totalRules} quy tắc vào Clipboard!`);
+          toast(`Đã sao chép ${totalRules} Rules on Clipboard!`);
         }).catch(fallback);
       } else {
         fallback();
@@ -2997,7 +2962,7 @@ const UI = (() => {
   }
 
   function importSiteRules() {
-    const input = prompt('Dán chuỗi quy tắc (JSON hoặc Base64):');
+    const input = prompt('Paste the rule chain (JSON or Base64):');
     if (!input || !input.trim()) return;
     const raw = input.trim();
     let parsed = null;
@@ -3010,7 +2975,7 @@ const UI = (() => {
     }
 
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      toast('Định dạng quy tắc không hợp lệ');
+      toast('Invalid rule format');
       return;
     }
 
@@ -3040,10 +3005,9 @@ const UI = (() => {
     persistSiteRules();
     installSiteRulesCSS();
     initialScan();
-    toast(`Đã gộp ${mergedCount} quy tắc mới thành công!`);
+    toast(`Successfully merged ${mergedCount} new rule!`);
   }
 
-  /* ---------- Element Picker ---------- */
   function buildPicker() {
     if (pickerEl) return;
     pickerEl = document.createElement('div');
@@ -3149,7 +3113,7 @@ const UI = (() => {
 
   function selectElement(el) {
     if (!el || el.nodeType !== 1) return;
-    if (isProtectedPlayer(el) && !confirm('Phần tử này thuộc trình phát media. Chặn có thể làm hỏng phát video. Tiếp tục?')) {
+    if (isProtectedPlayer(el) && !confirm('This element belongs to the media player. Blocking can damage video playback. Continue?')) {
       exitPicker(true); return;
     }
     const sel = makeSelector(el);
