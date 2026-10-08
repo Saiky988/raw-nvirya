@@ -2,13 +2,13 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      10.4.1.8
+// @version      10.5.2
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, mobile-first userscript designed to block intrusive ads, popups, redirects, and overlays with a native-style UI and custom element picker.
 // @author       Nvirya
 // @match        *://*/*
-// @icon         https://raw.nvirya.com/assets/icon.png
+// @icon         https://raw.nvirya.com/assets/icon128x128.png
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -29,8 +29,83 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-const VERSION = '10.4.1.8';
-const CONFIG_VERSION = 4;
+const VERSION = '10.5.2';
+
+function installScriptletDefusers() {
+  try {
+    const adsQueue = [];
+    adsQueue.loaded = true;
+    adsQueue.push = function () { return this.length; };
+    try {
+      Object.defineProperty(W, 'adsbygoogle', {
+        configurable: true, enumerable: true,
+        get: function () { return adsQueue; },
+        set: function (value) {
+          if (Array.isArray(value) && value !== adsQueue) {
+            try { Array.prototype.push.apply(adsQueue, value); } catch (e) {}
+          }
+          adsQueue.loaded = true;
+        }
+      });
+    } catch (e) {
+      try { W.adsbygoogle = adsQueue; } catch (e2) {}
+    }
+    try { W.adsbygoogle.loaded = true; W.adsbygoogle.push = function () { return this.length || 0; }; } catch (e) {}
+
+    const makeDefuser = function () {
+      const api = function () {};
+      api.prototype.setOption = function () { return this; };
+      api.prototype.check = function () { return this; };
+      api.prototype.clearEvent = function () { return this; };
+      api.prototype.emitEvent = function () { return this; };
+      api.prototype.on = function () { return this; };
+      api.prototype.onDetected = function () { return this; };
+      api.prototype.onNotDetected = function () { return this; };
+      api.prototype.onDetectedOnce = function () { return this; };
+      api.prototype.onNotDetectedOnce = function () { return this; };
+      api.prototype.checkOnLoad = function () { return this; };
+      api.prototype.isDetected = function () { return false; };
+      api.prototype.detected = false;
+      api.prototype.blocked = false;
+      api.prototype.version = '3.0.0';
+      return api;
+    };
+    ['BlockAdBlock', 'FuckAdBlock', 'FairBlock', 'BabasBml'].forEach(function (name) {
+      const stub = makeDefuser();
+      try {
+        Object.defineProperty(W, name, {
+          configurable: true, enumerable: true,
+          get: function () { return stub; },
+          set: function () {}
+        });
+      } catch (e) { try { W[name] = stub; } catch (e2) {} }
+    });
+  } catch (e) {}
+}
+
+function cleanTrackingQuery() {
+  try {
+    const url = new URL(W.location.href);
+    const exact = /^(?:fbclid|gclid|dclid|gbraid|wbraid|msclkid|twclid|igshid|yclid|mc_cid|mc_eid|ref_src|ref_url|si|feature|spm|vero_id|oly_anon_id|oly_enc_id|_hsenc|_hsmi|mkt_tok|s_cid|ef_id|cmpid|campaign_id|ad_id)$/i;
+    const remove = [];
+    url.searchParams.forEach(function (_, key) {
+      if (/^utm_/i.test(key) || exact.test(key)) remove.push(key);
+    });
+    if (remove.length) {
+      remove.forEach(function (key) { url.searchParams.delete(key); });
+      W.history.replaceState(W.history.state, '', url.pathname + (url.search ? url.search : '') + url.hash);
+    }
+  } catch (e) {}
+}
+
+installScriptletDefusers();
+cleanTrackingQuery();
+installEventListenerGuard();
+installPopupGuard();
+installRedirectGuard();
+installNetworkGuard();
+
+const CONFIG_VERSION = 5;
 const K_CFG      = 'nvirya_x_config';
 const K_WL       = 'nvirya_x_whitelist';
 const K_SR       = 'nvirya_x_site_rules';
@@ -178,7 +253,7 @@ function isDisabledHere() {
 }
 
 const RE_AD_HOST =
-/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade)(?:\.|$)/i;
+/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|cloudfront|googletagmanager\.com)(?:\.|$)/i;
 
 const RE_GAMBLING_HOST =
 /(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88)(?:\.|$)/i;
@@ -193,7 +268,7 @@ const RE_SIZING =
 /\b(?:728x90|300x250|320x50|468x60|160x600|300x600|970x250|970x90|336x280|320x100|250x250|120x600|240x400|180x150|125x125|980x120|980x90|960x90|950x90|1200x628|1080x1920|300x1050|320x480|480x320|768x1024|1024x768|580x400|300x50|728x250|768x90)\b/i;
 
 const RE_TRACKER =
-/(?:^|\.)(?:google-analytics|googletagmanager|googletagservices|hotjar|mixpanel|segment\.io|amplitude|fullstory|mouseflow|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|luckyorange|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|mc\.yandex|contentsquare|optimizely|kissmetrics)(?:\.|$)/i;
+/(?:^|\.)(?:google-analytics|googletagservices|hotjar|mixpanel|segment\.io|amplitude|fullstory|mouseflow|clarity\.ms|heap-analytics|pendo|smartlook|logrocket|statcounter|histats|chartbeat|parsely|luckyorange|glassbox|adjust\.com|appsflyer|branch\.io|app\.link|mc\.yandex|contentsquare|optimizely|kissmetrics)(?:\.|$)/i;
 
 const RE_ANTIADB =
 /(?:^|[^a-z])(?:adblock|adblocker|adblock[-_]?(?:detect|warning|modal|notice|killer|check|popup|screen|wall|overlay|msg|disable|guard)|blockadblock|fuckadblock|antiadblock|ad[-_]?shield|fairblock|babasbml|detect[-_]?adblock|ads[-_]?blocker|please[-_]?disable[-_]?adblock|turn[-_]?off[-_]?adblock)(?:[^a-z]|$)/i;
@@ -447,6 +522,24 @@ function popupBlock(source, detail) {
   return makeDummyWindow();
 }
 
+function installEventListenerGuard() {
+  try {
+    const origAEL = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (type, listener, options) {
+      if (/^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend)$/i.test(type)) {
+        try {
+          const stack = new Error().stack || '';
+          if (RE_AD_HOST.test(stack) || /wingsmob|cloudfront/i.test(stack)) {
+            log('BLOCK', 'event-trap', 'Blocked ad click-listener:', type);
+            return;
+          }
+        } catch (err) {}
+      }
+      return origAEL.apply(this, arguments);
+    };
+  } catch (e) {}
+}
+
 function installPopupGuard() {
   const origOpen = W.open;
   if (typeof origOpen !== 'function') return;
@@ -470,10 +563,22 @@ function installPopupGuard() {
     }
   };
   try { Object.defineProperty(guarded, '__nvirya', { value: true }); } catch (e) {}
-  try {
-    W.open = guarded;
-    if (W.open !== guarded) log('WARN','popup','window.open hook was not installed');
-  } catch (e) { log('WARN','popup','window.open hook unavailable', e && e.message); }
+	try {
+	  Object.defineProperty(W, 'open', {
+ 	   configurable: true,
+ 	   writable: true,
+ 	   value: guarded
+	  });
+	  if (W.Window && W.Window.prototype) {
+ 	   Object.defineProperty(W.Window.prototype, 'open', {
+   	   configurable: true,
+  	   writable: true,
+   	   value: guarded
+      });
+    }
+  } catch (e) {
+    try { W.open = guarded; } catch (err) {}
+  }
 }
 
 function shouldBlockRedirectUrl(u) {
@@ -576,6 +681,73 @@ function installAnchorClickHook() {
     proto.click = guardedClick;
     try { Object.defineProperty(proto, '__nvirya_click', { value: true }); } catch (e) {}
   } catch (e) { log('WARN','anchor-click','HTMLAnchorElement.click hook unavailable', e && e.message); }
+}
+
+function installScriptElementGuard() {
+  try {
+    const origCreateElement = D.createElement;
+    D.createElement = function(tagName, options) {
+      const el = origCreateElement.apply(this, arguments);
+      if (typeof tagName === 'string' && tagName.toLowerCase() === 'script') {
+        const origSetAttribute = el.setAttribute;
+        let srcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+        if (srcDescriptor && srcDescriptor.set) {
+          const origSrcSet = srcDescriptor.set;
+          Object.defineProperty(el, 'src', {
+            configurable: true,
+            set: function(val) {
+              const u = safeUrl(val);
+              if (u && (isAdUrl(u) || isBlacklistedScriptHost(u.hostname))) {
+                log('BLOCK', 'script-src', 'Blocked dynamic script:', u.href);
+                stats.inc('requests');
+                return;
+              }
+              return origSrcSet.call(this, val);
+            },
+            get: srcDescriptor.get
+          });
+        }
+      }
+      return el;
+    };
+  } catch (e) {
+    log('WARN', 'guard', 'Cannot hook createElement for script', e && e.message);
+  }
+}
+
+function isBlacklistedScriptHost(host) {
+  if (!host) return false;
+  return /(?:^|\.)(?:googletagmanager\.com|wingsmob\.com|cloudfront\.net)(?:\.|$)/i.test(host);
+}
+
+function installIframePopupGuard() {
+  try {
+    const origAppend = Node.prototype.appendChild;
+    Node.prototype.appendChild = function(child) {
+      const res = origAppend.apply(this, arguments);
+      try {
+        if (child && child.nodeType === 1 && String(child.tagName).toLowerCase() === 'iframe') {
+          if (child.contentWindow && child.contentWindow.open) {
+            child.contentWindow.open = W.open;
+          }
+        }
+      } catch (err) {}
+      return res;
+    };
+  } catch (e) {}
+}
+
+function defuseGoogleTagManager() {
+  try {
+    Object.defineProperty(W, 'google_tag_manager', {
+      configurable: false,
+      enumerable: true,
+      get: () => new Proxy({}, {
+        get: () => () => {}
+      }),
+      set: () => {}
+    });
+  } catch (e) {}
 }
 
 function installRedirectGuard() {
@@ -979,28 +1151,7 @@ function inspectNode(el) {
 }
 
 function isSuspiciousOverlay(el) {
-  if (!el || el.nodeType !== 1) return false;
-  const tag = (el.tagName || '').toLowerCase();
-  if (tag !== 'div' && tag !== 'section' && tag !== 'iframe') return false;
-  let cs;
-  try { cs = W.getComputedStyle(el); } catch (e) { return false; }
-  if (!cs) return false;
-  if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
-  const z = parseInt(cs.zIndex, 10);
-  if (!isFinite(z) || z < 10000) return false;
-  const op = parseFloat(cs.opacity);
-  if (isFinite(op) && op > 0.15) return false;
-  const w = el.offsetWidth, h = el.offsetHeight;
-  if (w < W.innerWidth * 0.6 || h < W.innerHeight * 0.6) return false;
-  if (tag === 'iframe') {
-    const src = attr(el,'src') || '';
-    const u = safeUrl(src);
-    if (u && u.hostname && !hostMatches(u.hostname, hostname)) return true;
-    return false;
-  }
-  const txt = (el.textContent || '').trim();
-  if (txt.length > 40) return false;
-  return true;
+  return isInvisibleTrap(el);
 }
 
 function hasNviryaAncestor(el) {
@@ -1018,6 +1169,269 @@ function isNviryaNode(el) {
   try {
     return !!(el && el.querySelector && el.querySelector('[data-nvirya-ui],[data-nvirya-picker]'));
   } catch (e) { return false; }
+}
+
+const trapQueue = [];
+const trapQueued = new WeakSet();
+let trapObserver = null;
+let trapFlushScheduled = false;
+let scrollBaseline = new WeakMap();
+let scrollOverrideStyles = new WeakMap();
+let scrollUnlockTimers = [];
+
+function isProtectedTrapSurface(el) {
+  if (!el || el.nodeType !== 1 || hasNviryaAncestor(el)) return true;
+  const safeTags = /^(?:nav|header|footer|main|dialog|video|audio|iframe|canvas|svg|form|input|select|textarea|button)$/i;
+  let cur = el, depth = 0;
+  while (cur && cur.nodeType === 1 && depth++ < 10) {
+    const tag = String(cur.tagName || '');
+    if ((cur === el || !/^(?:html|body)$/i.test(tag)) && safeTags.test(tag)) return true;
+    if (attr(cur, 'data-nvirya-safe') !== null || attr(cur, 'data-nvirya-ui') !== null
+      || attr(cur, 'data-nvirya-picker') !== null || attr(cur, 'aria-modal') === 'true') return true;
+    const role = (attr(cur, 'role') || '').toLowerCase();
+    if (/^(?:dialog|alertdialog|menu|menubar|navigation|button|link|listbox|combobox|search)$/.test(role)) return true;
+    const mark = ((cur.id || '') + ' ' + classString(cur)).toLowerCase();
+    if (/(?:^|[\s_-])(?:navbar|navigation|nav-menu|drawer|sidebar|menu|modal|dialog|cookie-consent|login|signin|auth)(?:$|[\s_-])/.test(mark)) return true;
+    cur = cur.parentElement;
+  }
+  return false;
+}
+
+function isInvisibleTrap(el) {
+  if (!el || el.nodeType !== 1 || !el.isConnected || isProtectedTrapSurface(el)) return false;
+  let style, rect;
+  try {
+    style = W.getComputedStyle(el);
+    if (!style || (style.position !== 'fixed' && style.position !== 'absolute')) return false;
+    const z = parseInt(style.zIndex, 10);
+    if (!isFinite(z) || z < 10000) return false;
+    const opacity = parseFloat(style.opacity);
+    const image = String(style.backgroundImage || 'none').trim().toLowerCase();
+    if (image && image !== 'none') return false;
+    const bg = String(style.backgroundColor || '').replace(/\s+/g, '').toLowerCase();
+    const transparentBg = bg === 'transparent' || /^rgba\(\d{1,3},\d{1,3},\d{1,3},0(?:\.0+)?\)$/.test(bg);
+    if (!(isFinite(opacity) && opacity <= 0.08) && !transparentBg) return false;
+    rect = el.getBoundingClientRect();
+  } catch (e) { return false; }
+  const vw = W.innerWidth || D.documentElement.clientWidth || 0;
+  const vh = W.innerHeight || D.documentElement.clientHeight || 0;
+  if (!vw || !vh || !rect || rect.width <= 0 || rect.height <= 0) return false;
+  const width = Math.max(0, Math.min(rect.right, vw) - Math.max(rect.left, 0));
+  const height = Math.max(0, Math.min(rect.bottom, vh) - Math.max(rect.top, 0));
+  if (width * height < vw * vh * 0.8) return false;
+  if (isNviryaNode(el) || isProtectedPlayer(el)) return false;
+  try {
+    if (el.querySelector('input,form,video,audio,iframe,canvas,button,a[href],select,textarea,[contenteditable="true"],[role="button"],[role="menu"],[role="dialog"],[aria-modal="true"]')) return false;
+  } catch (e) {}
+  return meaningfulText(el).length < 5;
+}
+
+function captureScrollBaseline(el) {
+  if (!el || el.nodeType !== 1 || scrollBaseline.has(el)) return;
+  const props = ['overflow', 'overflow-x', 'overflow-y', 'position', 'top', 'right', 'bottom', 'left', 'width', 'margin-right', 'touch-action'];
+  const snapshot = { computed: {}, inline: {}, priority: {} };
+  try {
+    const computed = W.getComputedStyle(el);
+    for (const prop of props) {
+      const camel = prop.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+      snapshot.computed[prop] = computed ? computed[camel] || computed.getPropertyValue(prop) : '';
+      snapshot.inline[prop] = el.style.getPropertyValue(prop);
+      snapshot.priority[prop] = el.style.getPropertyPriority(prop);
+    }
+    scrollBaseline.set(el, snapshot);
+  } catch (e) {}
+}
+
+function hasVisibleLegitimateModal() {
+  try {
+    const nodes = D.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],[role="navigation"]');
+    for (let i = 0; i < Math.min(nodes.length, 40); i++) {
+      const el = nodes[i];
+      if (el.hasAttribute('data-nvirya-hidden') || isNviryaNode(el)) continue;
+      const style = W.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      if (!style || style.display === 'none' || style.visibility === 'hidden'
+        || parseFloat(style.opacity) === 0 || rect.width < 2 || rect.height < 2) continue;
+      if (meaningfulText(el).length >= 5 || el.querySelector('input,form,button,a[href],video,audio')) {
+        releasePageScrollOverrides();
+        return true;
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+function rememberScrollOverride(el, prop) {
+  let saved = scrollOverrideStyles.get(el);
+  if (!saved) { saved = {}; scrollOverrideStyles.set(el, saved); }
+  if (!Object.prototype.hasOwnProperty.call(saved, prop)) {
+    saved[prop] = { value: el.style.getPropertyValue(prop), priority: el.style.getPropertyPriority(prop) };
+  }
+}
+
+function releasePageScrollOverrides() {
+  for (const el of [D.documentElement, D.body]) {
+    const saved = el && scrollOverrideStyles.get(el);
+    if (!saved) continue;
+    for (const prop of Object.keys(saved)) {
+      try {
+        if (saved[prop].value) el.style.setProperty(prop, saved[prop].value, saved[prop].priority);
+        else el.style.removeProperty(prop);
+      } catch (e) {}
+    }
+    scrollOverrideStyles.delete(el);
+  }
+}
+
+function unlockPageScroll() {
+  if (hasVisibleLegitimateModal()) return false;
+  const roots = [D.documentElement, D.body];
+  let changed = false;
+  const overflowProps = ['overflow', 'overflow-x', 'overflow-y'];
+  for (const el of roots) {
+    if (!el) continue;
+    captureScrollBaseline(el);
+    const base = scrollBaseline.get(el);
+    if (!base) continue;
+    let cs;
+    try { cs = W.getComputedStyle(el); } catch (e) { continue; }
+    if (!cs) continue;
+    for (const prop of overflowProps) {
+      const camel = prop.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+      const current = String(cs[camel] || cs.getPropertyValue(prop) || '').toLowerCase();
+      const original = String(base.computed[prop] || '').toLowerCase();
+      if ((current === 'hidden' || current === 'clip') && original !== 'hidden' && original !== 'clip') {
+        const value = base.inline[prop] || base.computed[prop] || 'visible';
+        rememberScrollOverride(el, prop);
+        try { el.style.setProperty(prop, value, base.priority[prop] || 'important'); changed = true; } catch (e) {}
+      }
+    }
+    const position = String(cs.position || '').toLowerCase();
+    if (position === 'fixed' && String(base.computed.position || '').toLowerCase() !== 'fixed') {
+      try {
+        rememberScrollOverride(el, 'position');
+        el.style.setProperty('position', base.inline.position || base.computed.position || 'static', base.priority.position || 'important');
+        ['top', 'right', 'bottom', 'left', 'width', 'margin-right'].forEach(function (prop) {
+          rememberScrollOverride(el, prop);
+          const val = base.inline[prop] || base.computed[prop];
+          if (val) el.style.setProperty(prop, val, base.priority[prop] || 'important');
+          else el.style.removeProperty(prop);
+        });
+        changed = true;
+      } catch (e) {}
+    }
+  }
+  if (changed) log('INFO', 'scroll', 'restored page scrolling after overlay cleanup');
+  return changed;
+}
+
+function scheduleUnlockPageScroll() {
+  if (scrollUnlockTimers.length) return;
+  [0, 120, 420, 900].forEach(function (delay) {
+    scrollUnlockTimers.push(setTimeout(function () {
+      unlockPageScroll();
+      if (delay === 900) scrollUnlockTimers = [];
+    }, delay));
+  });
+}
+
+function queueTrapNode(node, includeDescendants) {
+  if (!node || node.nodeType !== 1 || hasNviryaAncestor(node)
+    || attr(node, 'data-nvirya-ui') !== null || attr(node, 'data-nvirya-picker') !== null) return;
+  const push = function (el) {
+    if (!el || el.nodeType !== 1 || trapQueued.has(el)) return;
+    if (trapQueue.length >= 1400) {
+      const dropped = trapQueue.shift();
+      if (dropped) trapQueued.delete(dropped);
+    }
+    trapQueued.add(el);
+    trapQueue.push(el);
+  };
+  push(node);
+  if (includeDescendants && node.querySelectorAll) {
+    try {
+      const descendants = node.querySelectorAll('*');
+      for (let i = 0; i < Math.min(descendants.length, 80); i++) push(descendants[i]);
+    } catch (e) {}
+  }
+  scheduleTrapFlush();
+}
+
+function scheduleTrapFlush() {
+  if (trapFlushScheduled) return;
+  trapFlushScheduled = true;
+  const run = function () {
+    trapFlushScheduled = false;
+    const limit = Math.min(60, trapQueue.length);
+    for (let i = 0; i < limit; i++) {
+      const el = trapQueue.shift();
+      if (!el) continue;
+      trapQueued.delete(el);
+      
+      if (!isDisabledHere() && isInvisibleTrap(el)) {
+        try {
+          if (!el.hasAttribute('data-nvirya-disarmed')) {
+            el.setAttribute('data-nvirya-disarmed', 'true');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('width', '0px', 'important');
+            el.style.setProperty('height', '0px', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('z-index', '-999999', 'important');
+            state.hiddenNodes.add(el);
+            stats.inc('hidden');
+            log('BLOCK', 'dom', 'Disarmed invisible click-trap in-place');
+          }
+        } catch (e) {}
+      }
+    }
+    if (trapQueue.length) scheduleTrapFlush();
+  };
+  if (typeof W.requestAnimationFrame === 'function') W.requestAnimationFrame(run);
+  else setTimeout(run, 16);
+}
+
+function startInvisibleTrapObserver() {
+  if (trapObserver) return;
+  const target = D.documentElement || D;
+  try {
+    trapObserver = new MutationObserver(function (mutations) {
+      for (let i = 0; i < mutations.length; i++) {
+        const mutation = mutations[i];
+        if (mutation.type === 'childList') {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === 1) {
+              if (/^(?:html|body)$/i.test(String(node.tagName))) captureScrollBaseline(node);
+              queueTrapNode(node, true);
+            }
+          }
+        } else if (mutation.type === 'attributes') {
+          queueTrapNode(mutation.target, false);
+        } else if (mutation.type === 'characterData') {
+          queueTrapNode(mutation.target.parentElement, false);
+        }
+      }
+    });
+    trapObserver.observe(target, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['style', 'class', 'id', 'role', 'aria-modal', 'aria-label', 'hidden', 'data-state'],
+      characterData: true
+    });
+    if (D.documentElement) {
+      captureScrollBaseline(D.documentElement);
+      queueTrapNode(D.documentElement, true);
+      const all = D.documentElement.querySelectorAll ? D.documentElement.querySelectorAll('*') : [];
+      let index = 0;
+      const scanBatch = function () {
+        const end = Math.min(index + 80, all.length);
+        for (; index < end; index++) queueTrapNode(all[index], false);
+        if (index < all.length) setTimeout(scanBatch, 20);
+      };
+      scanBatch();
+    }
+    if (D.body) captureScrollBaseline(D.body);
+  } catch (e) { trapObserver = null; }
 }
 
 function isCloseControl(el) {
@@ -1239,12 +1653,16 @@ function applyAction(el, action, reason) {
     if (action === 'remove') {
       const parent = el.parentNode;
       removePairedBackdrops(el);
-      if (removeTrackedAdNode(el, reason || 'remove')) pruneAdAncestors(parent);
+      if (removeTrackedAdNode(el, reason || 'remove')) {
+        pruneAdAncestors(parent);
+        if (/invisible-click-trap|anti-adblock|floating-ad-modal|suspicious-overlay/i.test(reason || '')) scheduleUnlockPageScroll();
+      }
     } else if (action === 'hide') {
       if (state.hiddenNodes.has(el)) return;
       state.hiddenNodes.add(el);
       el.setAttribute('data-nvirya-hidden', reason || '1');
       stats.inc('hidden');
+      if (/anti-adblock|floating-ad-modal|suspicious-overlay/i.test(reason || '')) scheduleUnlockPageScroll();
     }
   } catch (e) { log('ERROR','apply', e && e.message); }
 }
@@ -1426,6 +1844,104 @@ const pendingSet = new WeakSet();
 let scheduled = false;
 const MAX_QUEUE = 800;
 const handledMetaRefresh = new WeakSet();
+const trackedVideos = new WeakSet();
+const clickedSkipButtons = new WeakSet();
+const activeAdVideos = new WeakMap();
+let videoScanScheduled = false;
+let videoScanTimer = null;
+let lastVideoScan = 0;
+
+function hasAdPlayerMarker(video) {
+  let cur = video, depth = 0;
+  while (cur && cur.nodeType === 1 && depth++ < 7) {
+    const marker = ((cur.id || '') + ' ' + classString(cur) + ' ' + (attr(cur, 'aria-label') || '')).toLowerCase();
+    const dataAd = (attr(cur, 'data-ad-playing') || attr(cur, 'data-ad-showing') || '').toLowerCase();
+    if (dataAd === 'true' || /(?:ad[-_\s]?(?:showing|playing|video|container|player)|video[-_\s]?ad|ima[-_\s]?ad|preroll|midroll|advertisement|jw-flag-ads|dplayer-ad|artplayer-ad|videoadui)/i.test(marker)) return true;
+    cur = cur.parentElement;
+  }
+  const src = String(video.currentSrc || video.src || attr(video, 'src') || '').toLowerCase();
+  return /(?:googlesyndication|doubleclick|adservice|\/ads?(?:\/|[-_.])|imasdk)/i.test(src);
+}
+
+function restoreAdVideo(video) {
+  const saved = activeAdVideos.get(video);
+  if (!saved) return;
+  activeAdVideos.delete(video);
+  try { video.muted = saved.muted; } catch (e) {}
+  try { if (isFinite(saved.volume)) video.volume = saved.volume; } catch (e) {}
+  try { if (isFinite(saved.playbackRate) && saved.playbackRate > 0) video.playbackRate = saved.playbackRate; } catch (e) {}
+}
+
+function handleAdVideo(video) {
+  if (!video || !hasAdPlayerMarker(video)) return false;
+  if (!activeAdVideos.has(video)) {
+    activeAdVideos.set(video, {
+      muted: !!video.muted,
+      volume: Number(video.volume),
+      playbackRate: Number(video.playbackRate)
+    });
+  }
+  try { video.muted = true; } catch (e) {}
+  try { video.volume = 0; } catch (e) {}
+  try { video.playbackRate = 16; } catch (e) {}
+  const duration = Number(video.duration);
+  if (isFinite(duration) && duration > 0) {
+    try { video.currentTime = duration; } catch (e) {
+      try { if (typeof video.fastSeek === 'function') video.fastSeek(duration); } catch (e2) {}
+    }
+  }
+  return true;
+}
+
+function scheduleVideoAdScan() {
+  if (videoScanScheduled || isDisabledHere()) return;
+  videoScanScheduled = true;
+  const run = function () {
+    videoScanScheduled = false;
+    if (isDisabledHere() || !D.body) return;
+    const now = Date.now();
+    if (now - lastVideoScan < 180) {
+      if (!videoScanTimer) videoScanTimer = setTimeout(function () { videoScanTimer = null; scheduleVideoAdScan(); }, 180);
+      return;
+    }
+    lastVideoScan = now;
+    let hasActiveAd = false;
+    try {
+      const skip = D.querySelectorAll('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.videoAdUiSkipButton,[class*="skip-ad" i],[class*="ad-skip" i],[aria-label*="skip ad" i],[data-testid*="skip-ad" i],.jw-skip,.vjs-ad-skip-button,.dplayer-ad-skip,.artplayer-ad-skip');
+      for (let i = 0; i < Math.min(skip.length, 30); i++) {
+        const button = skip[i];
+        if (clickedSkipButtons.has(button) || isNviryaNode(button)) continue;
+        const rect = button.getBoundingClientRect();
+        const style = W.getComputedStyle(button);
+        if (!style || style.display === 'none' || style.visibility === 'hidden' || rect.width < 2 || rect.height < 2) continue;
+        if (button.disabled || attr(button, 'aria-disabled') === 'true') continue;
+        clickedSkipButtons.add(button);
+        try { button.click(); log('INFO', 'video-ad', 'clicked skip-ad control'); } catch (e) {}
+      }
+      const videos = D.querySelectorAll('video');
+      for (let i = 0; i < Math.min(videos.length, 40); i++) {
+        const video = videos[i];
+        if (!trackedVideos.has(video)) {
+          trackedVideos.add(video);
+          video.addEventListener('timeupdate', scheduleVideoAdScan, { passive: true });
+          video.addEventListener('loadedmetadata', scheduleVideoAdScan, { passive: true });
+          video.addEventListener('play', scheduleVideoAdScan, { passive: true });
+          video.addEventListener('ended', scheduleVideoAdScan, { passive: true });
+        }
+        if (handleAdVideo(video)) hasActiveAd = true;
+        else if (activeAdVideos.has(video)) restoreAdVideo(video);
+      }
+    } catch (e) {}
+    if (hasActiveAd && !videoScanTimer) {
+      videoScanTimer = setTimeout(function () { videoScanTimer = null; scheduleVideoAdScan(); }, 500);
+    } else if (!hasActiveAd && videoScanTimer) {
+      clearTimeout(videoScanTimer);
+      videoScanTimer = null;
+    }
+  };
+  if (typeof W.requestAnimationFrame === 'function') W.requestAnimationFrame(run);
+  else setTimeout(run, 32);
+}
 
 function removeMetaRefresh(root) {
   if (!config.redirectProtection || isDisabledHere() || !root) return;
@@ -1540,6 +2056,7 @@ function startObserver() {
         }
       }
       scheduleOverlayCleanup();
+      scheduleVideoAdScan();
     });
   } catch (e) { return; }
   const target = D.documentElement || D;
@@ -1556,7 +2073,16 @@ function initialScan() {
   if (!root) return;
   removeMetaRefresh(root);
   scheduleOverlayCleanup(root);
+  queueTrapNode(root, true);
+  scheduleVideoAdScan();
   const all = root.querySelectorAll ? root.querySelectorAll('*') : [];
+  let trapIndex = 0;
+  function scanTrapBatch() {
+    const end = Math.min(trapIndex + 60, all.length);
+    for (; trapIndex < end; trapIndex++) queueTrapNode(all[trapIndex], false);
+    if (trapIndex < all.length) setTimeout(scanTrapBatch, 16);
+  }
+  scanTrapBatch();
   const CHUNK = 200;
   let i = 0;
   function step() {
@@ -1601,12 +2127,13 @@ function onLocationChange() {
 }
 
 function handleAntiAdblock() {
-  if (!config.antiAdblock) return;
+  if (!config.antiAdblock || isDisabledHere()) return;
   try {
     const all = D.querySelectorAll('[class*="adblock" i],[id*="adblock" i],[class*="adblocker" i]');
     const lim = Math.min(all.length, 30);
     for (let i = 0; i < lim; i++) {
       const el = all[i];
+      if (isNviryaNode(el) || hasFormControls(el) || hasProtectedPlayerContent(el)) continue;
       const idc = ((el.id || '') + ' ' + classString(el));
       if (!RE_ANTIADB.test(idc)) continue;
       let cs;
@@ -1620,6 +2147,7 @@ function handleAntiAdblock() {
         el.setAttribute('data-nvirya-hidden','anti-adblock');
         state.hiddenNodes.add(el);
         stats.inc('hidden');
+        scheduleUnlockPageScroll();
         log('BLOCK','anti-adblock','removed overlay');
       }
     }
@@ -1788,8 +2316,8 @@ const UI = (() => {
   let themeBtn = null, segBtns = [];
   let statusEl = null, statsEl = null, toastEl = null;
   let reportModalEl = null, reportReasonSelect = null, reportNoteInput = null;
-  let pickerEl = null, pickerLabelEl = null, pickerActive = false;
-  let pickerHover = null;
+  let pickerEl = null, pickerLabelEl = null, pickerBarEl = null, pickerActive = false;
+  let pickerHover = null, pickerTarget = null, lastPickerTouchAt = 0;
   let toastTimer = null;
   let lastToast = '';
   let statsTimer = null;
@@ -3018,6 +3546,18 @@ const UI = (() => {
     pickerLabelEl.style.cssText = 'position:fixed;z-index:2147483004;pointer-events:none;background:#0b0b0d;color:#f4f4f5;font:11px system-ui,-apple-system,sans-serif;padding:3px 7px;border-radius:4px;border:1px solid rgba(255,255,255,.1);white-space:nowrap;';
     (D.body || D.documentElement).appendChild(pickerEl);
     (D.body || D.documentElement).appendChild(pickerLabelEl);
+    pickerBarEl = document.createElement('div');
+    pickerBarEl.setAttribute('data-nvirya-picker', '');
+    pickerBarEl.setAttribute('role', 'toolbar');
+    pickerBarEl.setAttribute('aria-label', 'Element picker navigation');
+    pickerBarEl.style.cssText = 'position:fixed;display:none;align-items:center;gap:5px;padding:6px;z-index:2147483005;pointer-events:auto;background:#111827;color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:12px system-ui,-apple-system,sans-serif;white-space:nowrap;';
+    const buttonStyle = 'border:0;border-radius:6px;padding:7px 9px;background:#273449;color:#fff;font:inherit;cursor:pointer;touch-action:manipulation;';
+    const parentBtn = el('button', { type: 'button', style: { cssText: buttonStyle }, onclick: () => traversePicker(-1) }, 'Parent');
+    const childBtn = el('button', { type: 'button', style: { cssText: buttonStyle }, onclick: () => traversePicker(1) }, 'Child');
+    const blockBtn = el('button', { type: 'button', style: { cssText: buttonStyle + 'background:#2563eb;', onclick: () => confirmPickerSelection() }, 'aria-label': 'Block selected element' }, 'Block');
+    const cancelBtn = el('button', { type: 'button', style: { cssText: buttonStyle + 'background:#374151;', onclick: () => exitPicker(false) } }, 'Cancel');
+    pickerBarEl.append(parentBtn, childBtn, blockBtn, cancelBtn);
+    (root || D.documentElement).appendChild(pickerBarEl);
   }
 
   function enterPicker() {
@@ -3026,6 +3566,8 @@ const UI = (() => {
     pickerActive = true;
     pickerEl.style.display = 'block';
     pickerLabelEl.style.display = 'block';
+    if (pickerBarEl) pickerBarEl.style.display = 'none';
+    pickerTarget = null;
     D.addEventListener('mousemove', pickerMove, true);
     D.addEventListener('click', pickerClick, true);
     D.addEventListener('touchmove', pickerTouchMove, true);
@@ -3037,6 +3579,8 @@ const UI = (() => {
     pickerActive = false;
     if (pickerEl) pickerEl.style.display = 'none';
     if (pickerLabelEl) pickerLabelEl.style.display = 'none';
+    if (pickerBarEl) pickerBarEl.style.display = 'none';
+    pickerTarget = null;
     D.removeEventListener('mousemove', pickerMove, true);
     D.removeEventListener('click', pickerClick, true);
     D.removeEventListener('touchmove', pickerTouchMove, true);
@@ -3047,18 +3591,46 @@ const UI = (() => {
   function describe(el) {
     if (!el) return '';
     const tag = (el.tagName || '').toLowerCase();
-    const id = el.id ? '#' + el.id : '';
-    const cls = classString(el);
-    const firstCls = cls ? '.' + cls.split(/\s+/).filter(Boolean).slice(0, 2).join('.') : '';
-    return tag + id + firstCls;
+    const id = el.id && isStableToken(el.id) ? '#' + el.id : '';
+    const stable = classString(el).split(/\s+/).filter(isStableClassToken).slice(0, 1);
+    const cls = stable.length ? '.' + stable[0] : '';
+    return tag + id + cls;
+  }
+
+  function showPickerTarget(el) {
+    if (!el || el.nodeType !== 1 || isNviryaNode(el)) return;
+    pickerTarget = el;
+    pickerHover = el;
+    const rect = el.getBoundingClientRect();
+    pickerEl.style.left = rect.left + 'px';
+    pickerEl.style.top = rect.top + 'px';
+    pickerEl.style.width = rect.width + 'px';
+    pickerEl.style.height = rect.height + 'px';
+    pickerLabelEl.textContent = describe(el);
+    pickerLabelEl.style.left = Math.max(4, rect.left) + 'px';
+    pickerLabelEl.style.top = Math.max(4, rect.top - 22) + 'px';
+    const buttons = pickerBarEl ? pickerBarEl.querySelectorAll('button') : [];
+    if (buttons.length >= 4) {
+      const tag = String(el.tagName || '').toLowerCase();
+      buttons[0].disabled = !el.parentElement || /^(?:body|html)$/.test(String(el.parentElement.tagName || '').toLowerCase());
+      buttons[1].disabled = !el.firstElementChild;
+    }
+    if (pickerBarEl) {
+      pickerBarEl.style.display = 'flex';
+      const left = Math.max(6, Math.min((W.innerWidth || 320) - 250, rect.left));
+      const top = rect.bottom + 10 + 52 < (W.innerHeight || 480) ? rect.bottom + 10 : Math.max(6, rect.top - 58);
+      pickerBarEl.style.left = left + 'px';
+      pickerBarEl.style.top = top + 'px';
+    }
   }
 
   function pickerMove(e) {
     if (!pickerActive) return;
+    if (pickerTarget) return;
     if (e.composedPath && e.composedPath().indexOf(host) !== -1) return;
     const el = D.elementFromPoint(e.clientX, e.clientY);
     if (!el || el === pickerEl || el === pickerLabelEl) return;
-    if (el === pickerHover) return;
+    if (el === pickerHover && pickerTarget) return;
     pickerHover = el;
     const r = el.getBoundingClientRect();
     pickerEl.style.left = r.left + 'px';
@@ -3076,56 +3648,104 @@ const UI = (() => {
   }
 
   function pickerTouchEnd(e) {
+    if (e.composedPath && e.composedPath().indexOf(host) !== -1) return;
     if (!e.changedTouches || !e.changedTouches.length) return;
     const t = e.changedTouches[0];
     const el = D.elementFromPoint(t.clientX, t.clientY);
-    if (el) selectElement(el);
+    if (el) {
+      e.preventDefault();
+      e.stopPropagation();
+      lastPickerTouchAt = Date.now();
+      selectElement(el);
+    }
   }
 
   function pickerClick(e) {
     if (!pickerActive) return;
     if (e.composedPath && e.composedPath().indexOf(host) !== -1) return;
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    if (Date.now() - lastPickerTouchAt < 650) return;
     const el = D.elementFromPoint(e.clientX, e.clientY);
     if (el) selectElement(el);
   }
 
-  function makeSelector(el) {
+  function isStableToken(value) {
+    const token = String(value || '');
+    if (!token || token.length > 64) return false;
+    if (/^(?:css|sc|jss|jsx|emotion|chakra|tw)[-_][a-z0-9_-]*\d[a-z0-9_-]*$/i.test(token)) return false;
+    if (/(?:^|[-_])[a-f0-9]{8,}(?:$|[-_])/i.test(token)) return false;
+    if (/^[a-z0-9_-]{20,}$/i.test(token)) return false;
+    return /^[a-zA-Z_][\w-]*$/.test(token);
+  }
+
+  function isStableClassToken(token) {
+    return isStableToken(token) && !/^(?:tw|css|sc|jss|jsx|emotion|chakra)[-_]/i.test(token);
+  }
+
+  function makeSelector(el, depth) {
     if (!el || el.nodeType !== 1) return null;
-    if (el.id && /^[a-zA-Z][\w-]*$/.test(el.id)) return '#' + el.id;
-    for (const a of ['data-testid','data-qa','data-test','data-cy','data-id']) {
-      const v = el.getAttribute(a);
-      if (v) return `${el.tagName.toLowerCase()}[${a}="${CSS.escape(v)}"]`;
+    const tag = String(el.tagName || '').toLowerCase();
+    if (/^(?:html|body)$/.test(tag)) return tag;
+    depth = depth || 0;
+    const unique = function (selector) {
+      try { return D.querySelectorAll(selector).length === 1; } catch (e) { return false; }
+    };
+    const quote = function (value) { return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); };
+    const identity = [];
+    if (el.id && isStableToken(el.id)) identity.push('#' + (W.CSS && W.CSS.escape ? W.CSS.escape(el.id) : el.id));
+    for (const name of ['data-testid', 'data-test', 'data-qa', 'data-cy', 'data-id', 'role', 'aria-label', 'name', 'title']) {
+      const value = el.getAttribute(name);
+      if (value && value.length <= 100) identity.push(tag + '[' + name + '="' + quote(value) + '"]');
     }
-    const cls = classString(el).split(/\s+/).filter(c => c && c.length < 40);
-    if (cls.length) {
-      const combo = cls.slice(0, 2).map(c => '.' + CSS.escape(c)).join('');
-      try {
-        const matches = D.querySelectorAll(el.tagName.toLowerCase() + combo);
-        if (matches.length === 1) return el.tagName.toLowerCase() + combo;
-      } catch (e) {}
-      return el.tagName.toLowerCase() + combo;
+    for (const selector of identity) if (unique(selector)) return selector;
+    const stableClasses = classString(el).split(/\s+/).filter(isStableClassToken).slice(0, 2);
+    for (let count = stableClasses.length; count > 0; count--) {
+      const selector = tag + stableClasses.slice(0, count).map(function (token) {
+        return '.' + (W.CSS && W.CSS.escape ? W.CSS.escape(token) : token.replace(/[^a-zA-Z0-9_-]/g, '\\$&'));
+      }).join('');
+      if (unique(selector)) return selector;
     }
+
     const parent = el.parentElement;
-    if (!parent) return el.tagName.toLowerCase();
-    const idx = Array.prototype.indexOf.call(parent.children, el) + 1;
-    return `${makeSelector(parent) || parent.tagName.toLowerCase()} > ${el.tagName.toLowerCase()}:nth-child(${idx})`;
+    if (!parent || depth >= 6) return tag;
+    let index = 0;
+    for (const sibling of parent.children) {
+      if (String(sibling.tagName).toLowerCase() === tag) index++;
+      if (sibling === el) break;
+    }
+    const local = tag + ':nth-of-type(' + Math.max(1, index) + ')';
+    const parentSelector = makeSelector(parent, depth + 1) || String(parent.tagName || 'body').toLowerCase();
+    const path = parentSelector + ' > ' + local;
+    return unique(path) ? path : path;
   }
 
   function selectElement(el) {
-    if (!el || el.nodeType !== 1) return;
-    if (isProtectedPlayer(el) && !confirm('This element belongs to the media player. Blocking can damage video playback. Continue?')) {
+    if (!el || el.nodeType !== 1 || isNviryaNode(el)) return;
+    showPickerTarget(el);
+  }
+
+  function traversePicker(direction) {
+    if (!pickerTarget) return;
+    const next = direction < 0 ? pickerTarget.parentElement : pickerTarget.firstElementChild;
+    if (!next || /^(?:body|html)$/i.test(String(next.tagName || '')) || isNviryaNode(next)) return;
+    showPickerTarget(next);
+  }
+
+  function confirmPickerSelection() {
+    const selected = pickerTarget;
+    if (!selected || !selected.isConnected) { toast('Element is no longer on the page'); return; }
+    if (isProtectedPlayer(selected) && !confirm('This element belongs to the media player. Blocking can damage video playback. Continue?')) {
       exitPicker(true); return;
     }
-    const sel = makeSelector(el);
+    const sel = makeSelector(selected);
     if (!sel) { toast('Không thể tạo selector'); exitPicker(true); return; }
     if (!confirm('Chặn phần tử này trên trang?\n\n' + sel)) { exitPicker(true); return; }
     if (!state.siteRules[hostname]) state.siteRules[hostname] = [];
     state.siteRules[hostname].push({ selector: sel, action: 'hide', created: Date.now() });
     persistSiteRules();
     try {
-      el.setAttribute('data-nvirya-hidden','manual');
-      state.hiddenNodes.add(el);
+      selected.setAttribute('data-nvirya-hidden','manual');
+      state.hiddenNodes.add(selected);
       stats.inc('hidden');
     } catch (e) {}
     installSiteRulesCSS();
@@ -3228,6 +3848,7 @@ function registerMenuCommands() {
 }
 
 function init() {
+  startInvisibleTrapObserver();
   if (!D.documentElement) {
     if (D.readyState === 'loading') {
       D.addEventListener('DOMContentLoaded', init, { once: true });
@@ -3239,7 +3860,10 @@ function init() {
 
   if (state.initialized) return;
   state.initialized = true;
-
+	
+	installScriptElementGuard();
+  installIframePopupGuard();
+  defuseGoogleTagManager();
   installPopupGuard();
   installRedirectGuard();
   installNetworkGuard();
@@ -3253,6 +3877,7 @@ function init() {
     installSiteRulesCSS();
     startObserver();
     initialScan();
+    scheduleVideoAdScan();
 
     setTimeout(handleAntiAdblock, 1500);
     setTimeout(handleAntiAdblock, 4000);
