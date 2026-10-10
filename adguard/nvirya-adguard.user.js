@@ -2,10 +2,10 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      10.5.2
+// @version      11.1.1
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
-// @description  A lightweight, mobile-first userscript designed to block intrusive ads, popups, redirects, and overlays with a native-style UI and custom element picker.
+// @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop with native UI.
 // @author       Nvirya
 // @match        *://*/*
 // @icon         https://raw.nvirya.com/assets/icon128x128.png
@@ -15,7 +15,6 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
-// @connect      raw.nvirya.com
 // @connect      raw.nvirya.com
 // @connect      discord.com
 // @connect      discordapp.com
@@ -29,7 +28,286 @@ const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 const D = W.document;
 if (W.__NVIRYA_ADGUARD_X__) return;
 try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-const VERSION = '10.5.2';
+const VERSION = '11.1.1';
+const SCRIPT_START_TIME = Date.now();
+
+function mainWorldShield() {
+  if (window.__NVIRYA_MAIN_SHIELD__) return;
+  try { Object.defineProperty(window, '__NVIRYA_MAIN_SHIELD__', { value: true }); } catch (e) { window.__NVIRYA_MAIN_SHIELD__ = true; }
+
+  const W = window;
+  const D = document;
+
+  // 1. Defuse Adsterra Function('_vrx', ...)
+  try {
+    const origFunction = W.Function;
+    const patchedFunction = function () {
+      if (arguments.length >= 1 && (arguments[0] === '_vrx' || String(arguments[0]).includes('_vrx') || (typeof arguments[1] === 'string' && arguments[1].includes('_vrx')))) {
+        return function () {};
+      }
+      return origFunction.apply(this, arguments);
+    };
+    patchedFunction.prototype = origFunction.prototype;
+    try {
+      Object.defineProperty(W, 'Function', {
+        configurable: true,
+        writable: true,
+        value: patchedFunction
+      });
+    } catch (e) {
+      W.Function = patchedFunction;
+    }
+  } catch (e) {}
+
+  // 2. Purge & intercept Adsterra cached steganography (mqc*) in localStorage and document.cookie
+  try {
+    const purgeMqc = () => {
+      try {
+        if (W.localStorage) {
+          for (let i = W.localStorage.length - 1; i >= 0; i--) {
+            const k = W.localStorage.key(i);
+            if (k && /^mqc/i.test(k)) W.localStorage.removeItem(k);
+          }
+        }
+      } catch (e) {}
+      try {
+        const cookies = (D.cookie || '').split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const name = cookies[i].split('=')[0].trim();
+          if (/^mqc/i.test(name)) {
+            D.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + location.hostname;
+            D.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;';
+          }
+        }
+      } catch (e) {}
+    };
+    purgeMqc();
+    if (W.Storage && W.Storage.prototype) {
+      const origGetItem = W.Storage.prototype.getItem;
+      W.Storage.prototype.getItem = function (key) {
+        if (typeof key === 'string' && /^mqc/i.test(key)) return null;
+        return origGetItem.apply(this, arguments);
+      };
+      const origSetItem = W.Storage.prototype.setItem;
+      W.Storage.prototype.setItem = function (key, val) {
+        if (typeof key === 'string' && /^mqc/i.test(key)) return;
+        return origSetItem.apply(this, arguments);
+      };
+    }
+  } catch (e) {}
+
+  // 3. Block Image loading from cloudiniry & Adsterra stego CDNs
+  try {
+    const imgProto = W.HTMLImageElement && W.HTMLImageElement.prototype;
+    if (imgProto) {
+      const origSrcDesc = Object.getOwnPropertyDescriptor(imgProto, 'src');
+      if (origSrcDesc && origSrcDesc.set) {
+        const origSet = origSrcDesc.set;
+        Object.defineProperty(imgProto, 'src', {
+          configurable: true,
+          enumerable: origSrcDesc.enumerable,
+          set: function (val) {
+            if (typeof val === 'string' && /cloudiniry|highrevenueformat|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate/i.test(val)) {
+              return;
+            }
+            return origSet.call(this, val);
+          },
+          get: origSrcDesc.get
+        });
+      }
+    }
+  } catch (e) {}
+
+  // 4. Defuse atOptions banner and popunder loader
+  try {
+    const dummyAt = { key: '', format: '', height: 0, width: 0, params: {} };
+    Object.defineProperty(W, 'atOptions', {
+      configurable: true,
+      enumerable: true,
+      get: () => dummyAt,
+      set: () => {}
+    });
+  } catch (e) {
+    try { W.atOptions = { key: '', format: '', height: 0, width: 0, params: {} }; } catch (e2) {}
+  }
+
+  // 5. Main-World Native window.open Hook & 2-Click Gateway Auto-Advance
+  try {
+    const origOpen = W.open;
+    const RE_AD_URL = /(?:^|\.)(?:highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm)(?:\.|$)|(?:^|\/)(?:cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
+
+    let lastClickTarget = null;
+    let lastClickTime = 0;
+
+    const trackClick = (e) => {
+      if (e.isTrusted) {
+        lastClickTarget = e.target;
+        lastClickTime = Date.now();
+      }
+    };
+    ['click', 'pointerdown', 'touchstart', 'mousedown'].forEach(evt => {
+      D.addEventListener(evt, trackClick, true);
+    });
+
+    const triggerAdvance = () => {
+      try {
+        let active = D.activeElement;
+        if (!active || active === D.body || active === D.documentElement) {
+          if (Date.now() - lastClickTime < 1500 && lastClickTarget) active = lastClickTarget;
+        }
+        if (!active) return;
+        const target = active.closest ? active.closest('button, a, input[type="submit"], input[type="button"]') : active;
+        if (!target || target.__nvirya_retrying) return;
+        target.__nvirya_retrying = true;
+        setTimeout(() => {
+          try {
+            target.__nvirya_retrying = false;
+            target.click();
+          } catch (e) {}
+        }, 60);
+      } catch (e) {}
+    };
+
+    const makeDummy = () => ({
+      closed: true,
+      location: { href: 'about:blank', assign: () => {}, replace: () => {} },
+      close: () => {},
+      focus: () => {},
+      blur: () => {},
+      postMessage: () => {}
+    });
+
+    W.open = function (url, name, features) {
+      const urlStr = String(url || '');
+      if (RE_AD_URL.test(urlStr)) {
+        triggerAdvance();
+        return makeDummy();
+      }
+      return origOpen.apply(this, arguments);
+    };
+    if (W.Window && W.Window.prototype) {
+      W.Window.prototype.open = W.open;
+    }
+  } catch (e) {}
+}
+
+function injectMainWorldShield() {
+  try {
+    const code = `(${mainWorldShield.toString()})();`;
+    const doInject = () => {
+      try {
+        const container = D.head || D.documentElement || D.body;
+        if (!container) return false;
+        const script = D.createElement('script');
+        script.textContent = code;
+        script.setAttribute('data-nvirya-shield', 'true');
+        container.insertBefore(script, container.firstChild);
+        script.remove();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
+
+    if (!doInject()) {
+      const observer = new MutationObserver(() => {
+        if (doInject()) observer.disconnect();
+      });
+      observer.observe(D, { childList: true, subtree: true });
+      if (D.readyState === 'loading') {
+        D.addEventListener('DOMContentLoaded', () => { doInject(); observer.disconnect(); }, { once: true });
+      }
+    }
+  } catch (e) {}
+}
+
+injectMainWorldShield();
+
+function isEarlyPageLoad(thresholdMs) {
+  return (Date.now() - SCRIPT_START_TIME) < (thresholdMs || 6000);
+}
+
+function neutralizeMetaRefresh(node) {
+  if (!node) return;
+  try {
+    const isMeta = node.nodeType === 1 && String(node.tagName || '').toLowerCase() === 'meta';
+    const metas = isMeta ? [node] : (node.querySelectorAll ? node.querySelectorAll('meta[http-equiv]') : []);
+    for (let i = 0; i < metas.length; i++) {
+      const m = metas[i];
+      const equiv = (attr(m, 'http-equiv') || m.httpEquiv || '').trim().toLowerCase();
+      if (equiv === 'refresh') {
+        m.removeAttribute('http-equiv');
+        m.setAttribute('content', '');
+        if (m.parentNode) {
+          try { m.parentNode.removeChild(m); } catch (err) {}
+        }
+        recordBlocked('redirect', 'meta-refresh', 'neutralized');
+      }
+    }
+  } catch (e) {}
+}
+
+function installEarlyMetaRefreshGuard() {
+  try {
+    const metaProto = W.HTMLMetaElement && W.HTMLMetaElement.prototype;
+    if (metaProto && !metaProto.__nvirya_hooked) {
+      const origSetAttribute = metaProto.setAttribute;
+      metaProto.setAttribute = function (name, val) {
+        if (typeof name === 'string' && name.toLowerCase() === 'http-equiv' && typeof val === 'string' && val.toLowerCase() === 'refresh') {
+          recordBlocked('redirect', 'meta.setAttribute(refresh)', String(val));
+          return;
+        }
+        return origSetAttribute.apply(this, arguments);
+      };
+      const desc = Object.getOwnPropertyDescriptor(metaProto, 'httpEquiv');
+      if (desc && desc.configurable && desc.set) {
+        const origSet = desc.set;
+        Object.defineProperty(metaProto, 'httpEquiv', {
+          configurable: true,
+          set: function (val) {
+            if (typeof val === 'string' && val.toLowerCase() === 'refresh') {
+              recordBlocked('redirect', 'meta.httpEquiv=refresh', String(val));
+              return;
+            }
+            return origSet.call(this, val);
+          },
+          get: desc.get
+        });
+      }
+      metaProto.__nvirya_hooked = true;
+    }
+  } catch (e) {}
+
+  if (D.documentElement) neutralizeMetaRefresh(D.documentElement);
+}
+
+function installDocWriteGuard() {
+  try {
+    const origWrite = D.write;
+    const origWriteln = D.writeln;
+    if (typeof origWrite !== 'function') return;
+    const sanitizeHTML = function (str) {
+      if (typeof str !== 'string') return str;
+      if (/<meta[^>]+http-equiv\s*=\s*["']?refresh/i.test(str)) {
+        log('BLOCK', 'doc-write', 'Blocked meta-refresh in document.write');
+        return str.replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh[^>]*>/gi, '');
+      }
+      if (/<script[^>]+src\s*=\s*["'][^"']*(?:doubleclick|googlesyndication|popads|propellerads|adsterra|exoclick|monetag|onclickmax)/i.test(str)) {
+        log('BLOCK', 'doc-write', 'Blocked ad script in document.write');
+        return '';
+      }
+      return str;
+    };
+    D.write = function () {
+      const args = Array.prototype.map.call(arguments, sanitizeHTML);
+      return origWrite.apply(this, args);
+    };
+    D.writeln = function () {
+      const args = Array.prototype.map.call(arguments, sanitizeHTML);
+      return origWriteln.apply(this, args);
+    };
+  } catch (e) {}
+}
 
 function installScriptletDefusers() {
   try {
@@ -51,6 +329,30 @@ function installScriptletDefusers() {
       try { W.adsbygoogle = adsQueue; } catch (e2) {}
     }
     try { W.adsbygoogle.loaded = true; W.adsbygoogle.push = function () { return this.length || 0; }; } catch (e) {}
+
+    // Defuse Adsterra atOptions
+    try {
+      let _atOptions = {};
+      Object.defineProperty(W, 'atOptions', {
+        configurable: true, enumerable: true,
+        get: () => _atOptions,
+        set: (v) => { _atOptions = v || {}; }
+      });
+    } catch (e) {}
+
+    // Defuse Adsterra steganography loader Function('_vrx', ...)
+    try {
+      const origFunction = W.Function;
+      const patchedFunction = function () {
+        if (arguments.length >= 1 && arguments[0] === '_vrx') {
+          log('BLOCK', 'adsterra', 'Defused _vrx Adsterra steganography loader');
+          return function () {};
+        }
+        return origFunction.apply(this, arguments);
+      };
+      patchedFunction.prototype = origFunction.prototype;
+      W.Function = patchedFunction;
+    } catch (e) {}
 
     const makeDefuser = function () {
       const api = function () {};
@@ -86,7 +388,7 @@ function installScriptletDefusers() {
 function cleanTrackingQuery() {
   try {
     const url = new URL(W.location.href);
-    const exact = /^(?:fbclid|gclid|dclid|gbraid|wbraid|msclkid|twclid|igshid|yclid|mc_cid|mc_eid|ref_src|ref_url|si|feature|spm|vero_id|oly_anon_id|oly_enc_id|_hsenc|_hsmi|mkt_tok|s_cid|ef_id|cmpid|campaign_id|ad_id)$/i;
+    const exact = /^(?:fbclid|gclid|dclid|gbraid|wbraid|msclkid|twclid|igshid|yclid|mc_cid|mc_eid|ref_src|ref_url|si|feature|spm|vero_id|oly_anon_id|oly_enc_id|_hsenc|_hsmi|mkt_tok|s_cid|ef_id|cmpid|campaign_id|ad_id|click_id|clk_id|aff_id|aff_sub|sub_id|s2s_id|trk)$/i;
     const remove = [];
     url.searchParams.forEach(function (_, key) {
       if (/^utm_/i.test(key) || exact.test(key)) remove.push(key);
@@ -98,12 +400,10 @@ function cleanTrackingQuery() {
   } catch (e) {}
 }
 
+installEarlyMetaRefreshGuard();
+installDocWriteGuard();
 installScriptletDefusers();
 cleanTrackingQuery();
-installEventListenerGuard();
-installPopupGuard();
-installRedirectGuard();
-installNetworkGuard();
 
 const CONFIG_VERSION = 5;
 const K_CFG      = 'nvirya_x_config';
@@ -253,13 +553,13 @@ function isDisabledHere() {
 }
 
 const RE_AD_HOST =
-/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|cloudfront|googletagmanager\.com)(?:\.|$)/i;
+/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|galaksion|richads|rollerads|evadav|pushub|coinhive|crypto-loot|adsco\.re|directrev|yllix|bidvertiser|trafficstars|ero-advertising|adxprt|creativecdn|exdynsrv|adkeeper|yektanet|popmyads|adreactor|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|googletagmanager\.com|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm)(?:\.|$)/i;
 
 const RE_GAMBLING_HOST =
-/(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88)(?:\.|$)/i;
+/(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88|ok9|go99|hb88|vip52|rik789|dabet|may88|sky88|uk88|bong99|88online|kubet77|kubet88|hi88vip|f8bet0|shbet0|789bet0|jun880|new880)(?:\.|$)/i;
 
 const RE_AD_PATH =
-/(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?)(?:\/|\.|$)/i;
+/(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?|cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
 
 const RE_AD_TOKEN =
 /(?:^|[^a-z0-9])(?:ads?|advert|advertis(?:e|ing|ement)|sponsor(?:ed)?[-_](?:ad|box|slot|block|content|unit)|banner[-_]?ads?|ad[-_]?banner|popunder|popup[-_]ad|sticky[-_]ad|interstitial[-_]ad|ad[-_](?:box|slot|unit|zone|block|wrap|holder|container|banner|area|space|placeholder|overlay|loader|placement|wrapper)|adsbygoogle|taboola[-_]|outbrain[-_]|mgid[-_]|carbonads|dfp[-_]?ad)(?=[^a-z0-9]|$)/i;
@@ -379,6 +679,10 @@ const stats = {
   }
 };
 stats.load();
+installEventListenerGuard();
+installPopupGuard();
+installRedirectGuard();
+installNetworkGuard();
 
 try {
   const syncFlush = () => { stats.saveImmediate(); };
@@ -435,6 +739,7 @@ function sameRootDomain(a, b) {
 }
 function isAllowedPopupDestination(url) {
   if (!url) return false;
+  if (isAdUrl(url)) return false;
   if (url.protocol === 'blob:' && url.origin === location.origin) return true;
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
   return isTrustedPopupHost(url.hostname) || sameRootDomain(url.hostname, hostname);
@@ -517,8 +822,59 @@ function makeDummyWindow() {
   };
 }
 
+let lastUserTarget = null;
+let lastUserTargetTime = 0;
+
+function trackUserTarget(target) {
+  if (target && target.nodeType === 1) {
+    lastUserTarget = target;
+    lastUserTargetTime = Date.now();
+  }
+}
+
+function triggerAdInterceptedAction() {
+  try {
+    let active = D.activeElement;
+    if (!active || active === D.body || active === D.documentElement) {
+      if (Date.now() - lastUserTargetTime < 1500 && lastUserTarget) {
+        active = lastUserTarget;
+      }
+    }
+    if (!active || active.nodeType !== 1) return;
+
+    const interactive = active.closest ? active.closest('button, a, input[type="submit"], input[type="button"]') : null;
+    const targetEl = interactive || active;
+
+    if (targetEl.__nvirya_retrying) return;
+
+    const tag = (targetEl.tagName || '').toLowerCase();
+    const id = (targetEl.id || '').toLowerCase();
+    const cls = classString(targetEl).toLowerCase();
+    const text = (targetEl.textContent || '').trim().toLowerCase();
+    const type = (attr(targetEl, 'type') || '').toLowerCase();
+
+    const isActionEl = tag === 'button'
+      || (tag === 'input' && (type === 'submit' || type === 'button'))
+      || (tag === 'a' && (/btn|button/i.test(cls) || /btn|button/i.test(id) || /download|continue|tải|xem/i.test(text)))
+      || /download|continue|direct|original|submit|next/i.test(id + ' ' + cls)
+      || /download|continue|tải|xem|tiếp tục/i.test(text);
+
+    if (isActionEl) {
+      targetEl.__nvirya_retrying = true;
+      setTimeout(() => {
+        try {
+          targetEl.__nvirya_retrying = false;
+          log('INFO', 'ad-gate', 'Auto-advancing intercepted download button:', targetEl.id || targetEl.tagName);
+          targetEl.click();
+        } catch (e) {}
+      }, 60);
+    }
+  } catch (e) {}
+}
+
 function popupBlock(source, detail) {
   recordBlocked('popup', source, detail);
+  triggerAdInterceptedAction();
   return makeDummyWindow();
 }
 
@@ -527,13 +883,15 @@ function installEventListenerGuard() {
     const origAEL = EventTarget.prototype.addEventListener;
     EventTarget.prototype.addEventListener = function (type, listener, options) {
       if (/^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend)$/i.test(type)) {
-        try {
-          const stack = new Error().stack || '';
-          if (RE_AD_HOST.test(stack) || /wingsmob|cloudfront/i.test(stack)) {
-            log('BLOCK', 'event-trap', 'Blocked ad click-listener:', type);
-            return;
-          }
-        } catch (err) {}
+        if (this === W || this === D || this === D.body || this === D.documentElement) {
+          try {
+            const fnStr = typeof listener === 'function' ? String(listener).slice(0, 320) : '';
+            if (/popunder|pop_under|_openWindow|openPopup|tabunder|puShow|puLoad|adClick/i.test(fnStr)) {
+              log('BLOCK', 'event-trap', 'Defused ad popup listener:', type);
+              return;
+            }
+          } catch (err) {}
+        }
       }
       return origAEL.apply(this, arguments);
     };
@@ -549,12 +907,47 @@ function installPopupGuard() {
     try {
       if (!config.popupProtection || isDisabledHere()) return origOpen.apply(this, arguments);
       const rawStr = url == null ? '' : String(url).trim();
-      if (!rawStr || /^about:blank(?:[#?].*)?$/i.test(rawStr))
-        return popupBlock('empty-or-blank-url', rawStr || '(empty)');
+      const hasGesture = !!(W.navigator.userActivation && W.navigator.userActivation.isActive);
+      if (!rawStr || /^about:blank(?:[#?].*)?$/i.test(rawStr)) {
+        if (!hasGesture) return popupBlock('empty-or-blank-url', rawStr || '(empty)');
+        const win = origOpen.apply(this, arguments);
+        if (win) {
+          try {
+            const origLoc = win.location;
+            if (origLoc) {
+              const guardDest = function (dest) {
+                const destU = safeUrl(dest);
+                if (destU && (isAdUrl(destU) || shouldBlockRedirectUrl(destU))) {
+                  recordBlocked('popup', 'blank-window-location', destU.href);
+                  triggerAdInterceptedAction();
+                  try { win.close(); } catch (e) {}
+                  return true;
+                }
+                return false;
+              };
+              ['assign', 'replace'].forEach(fn => {
+                if (typeof origLoc[fn] === 'function') {
+                  const origFn = origLoc[fn];
+                  origLoc[fn] = function (v) {
+                    if (guardDest(v)) return;
+                    return origFn.apply(this, arguments);
+                  };
+                }
+              });
+            }
+          } catch (e) {}
+        }
+        return win;
+      }
       const u = safeUrl(rawStr);
       if (!u) return popupBlock('unparseable-url', rawStr);
       if (isAdUrl(u)) return popupBlock('ad-url', u.href);
-      if (!isAllowedPopupDestination(u)) return popupBlock('untrusted-cross-site', u.href);
+      if (!isAllowedPopupDestination(u)) {
+        if (!hasGesture) return popupBlock('untrusted-cross-site-auto', u.href);
+        if (RE_TRACKING_QUERY.test(u.search) || RE_AD_TOKEN.test(u.pathname)) {
+          return popupBlock('untrusted-cross-site-tracking', u.href);
+        }
+      }
       return origOpen.apply(this, arguments);
     } catch (e) {
       log('ERROR','popup', e && e.message);
@@ -581,11 +974,17 @@ function installPopupGuard() {
   }
 }
 
-function shouldBlockRedirectUrl(u) {
+function shouldBlockRedirectUrl(u, isAutomated) {
   if (!u) return false;
   if (isAdUrl(u)) return true;
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-  return !isTrustedPopupHost(u.hostname) && !sameRootDomain(u.hostname, hostname);
+  if (sameRootDomain(u.hostname, hostname)) return false;
+  if (isTrustedPopupHost(u.hostname)) return false;
+  if (RE_TRACKING_QUERY.test(u.search)) return true;
+
+  const hasGesture = !!(W.navigator.userActivation && W.navigator.userActivation.isActive);
+  const isAuto = isAutomated !== undefined ? isAutomated : (!hasGesture && isEarlyPageLoad(6000));
+  return isAuto;
 }
 
 function isUntrustedCrossSiteUrl(u) {
@@ -717,7 +1116,7 @@ function installScriptElementGuard() {
 
 function isBlacklistedScriptHost(host) {
   if (!host) return false;
-  return /(?:^|\.)(?:googletagmanager\.com|wingsmob\.com|cloudfront\.net)(?:\.|$)/i.test(host);
+  return /(?:^|\.)(?:googletagmanager\.com|wingsmob\.com|monetag\.com|propu\.com|propellerads\.com|adsterra\.com|exoclick\.com|highrevenueformat\.com|cloudiniry\.net|p7jeusk9n\.shop)(?:\.|$)/i.test(host);
 }
 
 function installIframePopupGuard() {
@@ -753,8 +1152,95 @@ function defuseGoogleTagManager() {
 function installRedirectGuard() {
   installAnchorClickHook();
 
+  // 1. Form submit hijacking guard
+  try {
+    const formProto = W.HTMLFormElement && W.HTMLFormElement.prototype;
+    if (formProto && !formProto.__nvirya_submit) {
+      const origSubmit = formProto.submit;
+      formProto.submit = function () {
+        try {
+          if (config.redirectProtection && !isDisabledHere()) {
+            const action = this.action || attr(this, 'action') || '';
+            const u = safeUrl(action);
+            if (u && (isAdUrl(u) || shouldBlockRedirectUrl(u, true))) {
+              recordBlocked('redirect', 'form.submit()', u.href);
+              log('BLOCK', 'redirect', 'Blocked form.submit auto-redirect:', u.href);
+              return;
+            }
+          }
+        } catch (err) {}
+        return origSubmit.apply(this, arguments);
+      };
+      try { Object.defineProperty(formProto, '__nvirya_submit', { value: true }); } catch (e) {}
+    }
+  } catch (e) {}
+
+  // 2. Synthetic dispatchEvent hijacking guard
+  try {
+    const origDispatch = EventTarget.prototype.dispatchEvent;
+    if (!EventTarget.prototype.__nvirya_dispatch) {
+      EventTarget.prototype.dispatchEvent = function (event) {
+        try {
+          if (config.redirectProtection && !isDisabledHere() && event && /^(?:click|submit)$/i.test(event.type)) {
+            const target = this;
+            if (target && target.nodeType === 1) {
+              const tag = (target.tagName || '').toLowerCase();
+              if (tag === 'a') {
+                const u = safeUrl(target.href || attr(target, 'href'));
+                if (u && (isAdUrl(u) || shouldBlockRedirectUrl(u, true))) {
+                  recordBlocked('redirect', 'synthetic.dispatchEvent(click)', u.href);
+                  log('BLOCK', 'redirect', 'Blocked synthetic anchor click:', u.href);
+                  return false;
+                }
+              } else if (tag === 'form') {
+                const u = safeUrl(target.action || attr(target, 'action'));
+                if (u && (isAdUrl(u) || shouldBlockRedirectUrl(u, true))) {
+                  recordBlocked('redirect', 'synthetic.dispatchEvent(submit)', u.href);
+                  log('BLOCK', 'redirect', 'Blocked synthetic form submit:', u.href);
+                  return false;
+                }
+              }
+            }
+          }
+        } catch (err) {}
+        return origDispatch.apply(this, arguments);
+      };
+      try { Object.defineProperty(EventTarget.prototype, '__nvirya_dispatch', { value: true }); } catch (e) {}
+    }
+  } catch (e) {}
+
+  // 3. Modern Navigation API Shield (PC extension / Chromium / Kiwi / Orion)
+  try {
+    if (typeof W.navigation === 'object' && W.navigation && typeof W.navigation.addEventListener === 'function' && !W.navigation.__nvirya_guard) {
+      W.navigation.addEventListener('navigate', function (event) {
+        if (!config.redirectProtection || isDisabledHere()) return;
+        try {
+          const destUrl = event.destination ? event.destination.url : '';
+          if (!destUrl) return;
+          const u = safeUrl(destUrl);
+          if (!u) return;
+          const hasGesture = event.userInitiated || !!(W.navigator.userActivation && W.navigator.userActivation.isActive);
+          const isAd = isAdUrl(u);
+          const isCross = isUntrustedCrossSiteUrl(u);
+          const early = isEarlyPageLoad(6000);
+
+          if (isAd || (!hasGesture && early && isCross && !isTrustedPopupHost(u.hostname))) {
+            if (event.canIntercept || typeof event.preventDefault === 'function') {
+              event.preventDefault();
+              recordBlocked('redirect', 'navigation.navigate', destUrl);
+              log('BLOCK', 'redirect', 'Blocked auto navigation.navigate:', destUrl);
+            }
+          }
+        } catch (err) {}
+      });
+      W.navigation.__nvirya_guard = true;
+    }
+  } catch (e) {}
+
+  // 4. Click Capture Hook
   try {
     D.addEventListener('click', function (e) {
+      if (e.isTrusted) trackUserTarget(e.target);
       if (!config.redirectProtection || isDisabledHere()) return;
       const path = eventPath(e);
       if (isExtensionUiPath(path)) return;
@@ -766,8 +1252,10 @@ function installRedirectGuard() {
       const crossRoot = isUntrustedCrossSiteUrl(u);
       const opensNew = targetOpensNewContext(anchor);
       const syntheticExternal = e.isTrusted === false && crossRoot;
-      const blockedNewContext = opensNew && !isAllowedPopupDestination(u);
       const hijack = crossRoot && isSuspiciousPlayerOverlayClick(e.target, path);
+      // Only block target="_blank" if it's an ad, or synthetic bot click, or overlay hijack
+      const blockedNewContext = opensNew && !isAllowedPopupDestination(u) && (e.isTrusted === false || hijack);
+
       if (adLink || blockedNewContext || syntheticExternal || hijack) {
         const kind = opensNew ? 'popup' : 'redirect';
         const reason = adLink ? 'ad-anchor-click'
@@ -779,6 +1267,7 @@ function installRedirectGuard() {
     }, true);
   } catch (e) { log('WARN','redirect','capture click hook unavailable', e && e.message); }
 
+  // 5. Location Setter Interception
   try {
     const LocProto = W.Location && W.Location.prototype;
     if (LocProto) {
@@ -1155,17 +1644,29 @@ function isSuspiciousOverlay(el) {
 }
 
 function hasNviryaAncestor(el) {
+  if (!el) return false;
   let cur = el, depth = 0;
-  while (cur && cur.nodeType === 1 && depth < 12) {
-    if (attr(cur, 'data-nvirya-ui') !== null || attr(cur, 'data-nvirya-picker') !== null) return true;
-    cur = cur.parentElement;
+  while (cur && depth < 20) {
+    if (cur.nodeType === 1) {
+      if (attr(cur, 'data-nvirya-ui') !== null || attr(cur, 'data-nvirya-picker') !== null) return true;
+    }
+    if (cur.host && cur.host.nodeType === 1) {
+      cur = cur.host;
+    } else {
+      cur = cur.parentElement || cur.parentNode;
+    }
     depth++;
   }
   return false;
 }
 
 function isNviryaNode(el) {
+  if (!el) return false;
   if (hasNviryaAncestor(el)) return true;
+  try {
+    const rootNode = el.getRootNode && el.getRootNode();
+    if (rootNode && rootNode.host && attr(rootNode.host, 'data-nvirya-ui') !== null) return true;
+  } catch (e) {}
   try {
     return !!(el && el.querySelector && el.querySelector('[data-nvirya-ui],[data-nvirya-picker]'));
   } catch (e) { return false; }
@@ -1181,49 +1682,163 @@ let scrollUnlockTimers = [];
 
 function isProtectedTrapSurface(el) {
   if (!el || el.nodeType !== 1 || hasNviryaAncestor(el)) return true;
-  const safeTags = /^(?:nav|header|footer|main|dialog|video|audio|iframe|canvas|svg|form|input|select|textarea|button)$/i;
+  const tag = String(el.tagName || '').toLowerCase();
+  if (tag === 'iframe') return false; // Transparent or ad iframes are never protected
+
+  const safeTags = /^(?:nav|header|footer|main|dialog|video|audio|canvas|svg|form|input|select|textarea|button)$/i;
   let cur = el, depth = 0;
   while (cur && cur.nodeType === 1 && depth++ < 10) {
-    const tag = String(cur.tagName || '');
-    if ((cur === el || !/^(?:html|body)$/i.test(tag)) && safeTags.test(tag)) return true;
+    const curTag = String(cur.tagName || '').toLowerCase();
+    if ((cur === el || !/^(?:html|body)$/i.test(curTag)) && safeTags.test(curTag)) return true;
     if (attr(cur, 'data-nvirya-safe') !== null || attr(cur, 'data-nvirya-ui') !== null
-      || attr(cur, 'data-nvirya-picker') !== null || attr(cur, 'aria-modal') === 'true') return true;
+      || attr(cur, 'data-nvirya-picker') !== null) return true;
     const role = (attr(cur, 'role') || '').toLowerCase();
-    if (/^(?:dialog|alertdialog|menu|menubar|navigation|button|link|listbox|combobox|search)$/.test(role)) return true;
+    if (/^(?:dialog|alertdialog|menu|menubar|navigation|button|link|listbox|combobox|search)$/.test(role)) {
+      if (!isAdEvidence(cur)) return true;
+    }
     const mark = ((cur.id || '') + ' ' + classString(cur)).toLowerCase();
-    if (/(?:^|[\s_-])(?:navbar|navigation|nav-menu|drawer|sidebar|menu|modal|dialog|cookie-consent|login|signin|auth)(?:$|[\s_-])/.test(mark)) return true;
+    if (/(?:^|[\s_-])(?:navbar|navigation|nav-menu|drawer|sidebar|menu|cookie-consent|login|signin|auth)(?:$|[\s_-])/.test(mark)) return true;
     cur = cur.parentElement;
   }
   return false;
 }
 
+function isAdEvidence(el) {
+  if (!el || el.nodeType !== 1) return false;
+  const mark = ((el.id || '') + ' ' + classString(el)).trim();
+  if (RE_AD_TOKEN.test(mark)) return true;
+  const src = attr(el, 'src') || attr(el, 'data-src') || '';
+  if (src && isAdUrl(safeUrl(src))) return true;
+  const href = attr(el, 'href') || '';
+  if (href && isAdUrl(safeUrl(href))) return true;
+  return false;
+}
+
 function isInvisibleTrap(el) {
-  if (!el || el.nodeType !== 1 || !el.isConnected || isProtectedTrapSurface(el)) return false;
+  if (!el || el.nodeType !== 1 || !el.isConnected) return false;
+  if (isNviryaNode(el) || isProtectedPlayer(el)) return false;
+  if (isProtectedTrapSurface(el)) return false;
+
+  const tag = String(el.tagName || '').toLowerCase();
   let style, rect;
   try {
     style = W.getComputedStyle(el);
     if (!style || (style.position !== 'fixed' && style.position !== 'absolute')) return false;
+    if (style.pointerEvents === 'none') return false;
+
     const z = parseInt(style.zIndex, 10);
-    if (!isFinite(z) || z < 10000) return false;
+    const hasZ = isFinite(z) ? z >= 8 : (style.position === 'fixed');
+    if (!hasZ) return false;
+
     const opacity = parseFloat(style.opacity);
-    const image = String(style.backgroundImage || 'none').trim().toLowerCase();
-    if (image && image !== 'none') return false;
     const bg = String(style.backgroundColor || '').replace(/\s+/g, '').toLowerCase();
     const transparentBg = bg === 'transparent' || /^rgba\(\d{1,3},\d{1,3},\d{1,3},0(?:\.0+)?\)$/.test(bg);
-    if (!(isFinite(opacity) && opacity <= 0.08) && !transparentBg) return false;
+    const isFilterZero = /opacity\(\s*0(?:\.0+)?\s*\)/i.test(style.filter || '');
+    const isTransparent = (isFinite(opacity) && opacity <= 0.08) || transparentBg || isFilterZero;
+    if (!isTransparent) return false;
+
+    const image = String(style.backgroundImage || 'none').trim().toLowerCase();
+    if (image && image !== 'none') return false;
+
     rect = el.getBoundingClientRect();
   } catch (e) { return false; }
+
   const vw = W.innerWidth || D.documentElement.clientWidth || 0;
   const vh = W.innerHeight || D.documentElement.clientHeight || 0;
-  if (!vw || !vh || !rect || rect.width <= 0 || rect.height <= 0) return false;
+  if (!vw || !vh || !rect || rect.width <= 2 || rect.height <= 2) return false;
+
   const width = Math.max(0, Math.min(rect.right, vw) - Math.max(rect.left, 0));
   const height = Math.max(0, Math.min(rect.bottom, vh) - Math.max(rect.top, 0));
-  if (width * height < vw * vh * 0.8) return false;
-  if (isNviryaNode(el) || isProtectedPlayer(el)) return false;
+  const coveredArea = width * height;
+  const viewportArea = vw * vh;
+
+  const isLargeOverlay = coveredArea >= viewportArea * 0.25;
+
+  let coversPlayer = false;
+  if (!isLargeOverlay) {
+    try {
+      const videos = D.querySelectorAll('video, audio');
+      for (let i = 0; i < Math.min(videos.length, 6); i++) {
+        const v = videos[i];
+        const vr = v.getBoundingClientRect();
+        if (vr.width > 60 && vr.height > 60) {
+          const iw = Math.max(0, Math.min(rect.right, vr.right) - Math.max(rect.left, vr.left));
+          const ih = Math.max(0, Math.min(rect.bottom, vr.bottom) - Math.max(rect.top, vr.top));
+          if (iw * ih >= vr.width * vr.height * 0.45) {
+            coversPlayer = true;
+            break;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!isLargeOverlay && !coversPlayer) return false;
+
+  if (meaningfulText(el).length > 12) return false;
+
   try {
-    if (el.querySelector('input,form,video,audio,iframe,canvas,button,a[href],select,textarea,[contenteditable="true"],[role="button"],[role="menu"],[role="dialog"],[aria-modal="true"]')) return false;
+    if (el.querySelector('input:not([type="hidden"]),textarea,select,button:not([class*="close" i])')) return false;
   } catch (e) {}
-  return meaningfulText(el).length < 5;
+
+  if (tag === 'iframe') return true;
+
+  const links = el.querySelectorAll ? el.querySelectorAll('a[href]') : (tag === 'a' ? [el] : []);
+  if (links.length > 0) {
+    for (let i = 0; i < Math.min(links.length, 5); i++) {
+      const u = safeUrl(links[i].href || attr(links[i], 'href'));
+      if (u && (isAdUrl(u) || isUntrustedCrossSiteUrl(u))) return true;
+    }
+  }
+
+  return true;
+}
+
+function installInvisibleTrapInterception() {
+  const interceptTrap = function (e) {
+    try {
+      if (!config.enabled || isDisabledHere()) return;
+      if (e.composedPath) {
+        const path = e.composedPath();
+        for (let i = 0; i < path.length; i++) {
+          if (isNviryaNode(path[i])) return;
+        }
+      }
+      const target = e.target;
+      if (!target || target.nodeType !== 1 || isNviryaNode(target)) return;
+      if (e.isTrusted) trackUserTarget(target);
+
+      if (isInvisibleTrap(target)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        log('BLOCK', 'invisible-trap', 'Neutralized tap on invisible trap:', target.tagName);
+        applyAction(target, 'remove', 'invisible-click-trap');
+        scheduleUnlockPageScroll();
+        return;
+      }
+
+      let cur = target.parentElement, depth = 0;
+      while (cur && cur.nodeType === 1 && depth++ < 5) {
+        if (isInvisibleTrap(cur)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          log('BLOCK', 'invisible-trap', 'Neutralized tap inside invisible trap ancestor:', cur.tagName);
+          applyAction(cur, 'remove', 'invisible-click-trap');
+          scheduleUnlockPageScroll();
+          return;
+        }
+        cur = cur.parentElement;
+      }
+    } catch (err) {}
+  };
+
+  try {
+    ['pointerdown', 'touchstart', 'mousedown'].forEach(function (evt) {
+      D.addEventListener(evt, interceptTrap, true);
+    });
+  } catch (e) {}
 }
 
 function captureScrollBaseline(el) {
@@ -1393,45 +2008,7 @@ function scheduleTrapFlush() {
 }
 
 function startInvisibleTrapObserver() {
-  if (trapObserver) return;
-  const target = D.documentElement || D;
-  try {
-    trapObserver = new MutationObserver(function (mutations) {
-      for (let i = 0; i < mutations.length; i++) {
-        const mutation = mutations[i];
-        if (mutation.type === 'childList') {
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === 1) {
-              if (/^(?:html|body)$/i.test(String(node.tagName))) captureScrollBaseline(node);
-              queueTrapNode(node, true);
-            }
-          }
-        } else if (mutation.type === 'attributes') {
-          queueTrapNode(mutation.target, false);
-        } else if (mutation.type === 'characterData') {
-          queueTrapNode(mutation.target.parentElement, false);
-        }
-      }
-    });
-    trapObserver.observe(target, {
-      childList: true, subtree: true, attributes: true,
-      attributeFilter: ['style', 'class', 'id', 'role', 'aria-modal', 'aria-label', 'hidden', 'data-state'],
-      characterData: true
-    });
-    if (D.documentElement) {
-      captureScrollBaseline(D.documentElement);
-      queueTrapNode(D.documentElement, true);
-      const all = D.documentElement.querySelectorAll ? D.documentElement.querySelectorAll('*') : [];
-      let index = 0;
-      const scanBatch = function () {
-        const end = Math.min(index + 80, all.length);
-        for (; index < end; index++) queueTrapNode(all[index], false);
-        if (index < all.length) setTimeout(scanBatch, 20);
-      };
-      scanBatch();
-    }
-    if (D.body) captureScrollBaseline(D.body);
-  } catch (e) { trapObserver = null; }
+  startObserver();
 }
 
 function isCloseControl(el) {
@@ -2030,42 +2607,59 @@ function enqueue(el) {
 
 function startObserver() {
   if (observer) return;
+  const target = D.documentElement || D;
+  if (!target) return;
   try {
     observer = new MutationObserver((mutations) => {
+      if (isDisabledHere()) return;
+      let hasMutations = false;
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
         if (m.type === 'childList') {
-          scheduleOverlayCleanup(m.target);
-          for (const n of m.addedNodes) {
+          for (let j = 0; j < m.addedNodes.length; j++) {
+            const n = m.addedNodes[j];
             if (n.nodeType === 1) {
-              scheduleOverlayCleanup(n);
-              removeMetaRefresh(n);
-              if (String(n.tagName).toLowerCase() === 'meta'
-                && (attr(n, 'http-equiv') || '').trim().toLowerCase() === 'refresh') continue;
+              if (/^(?:html|body)$/i.test(String(n.tagName))) captureScrollBaseline(n);
+              neutralizeMetaRefresh(n);
+              queueTrapNode(n, true);
               enqueue(n);
               if (n.children && n.children.length) {
                 const lim = Math.min(n.children.length, 30);
                 for (let k = 0; k < lim; k++) enqueue(n.children[k]);
               }
+              hasMutations = true;
             }
           }
         } else if (m.type === 'attributes') {
-          scheduleOverlayCleanup(m.target);
-          removeMetaRefresh(m.target);
-          enqueue(m.target);
+          const targetNode = m.target;
+          if (targetNode && targetNode.nodeType === 1) {
+            neutralizeMetaRefresh(targetNode);
+            queueTrapNode(targetNode, false);
+            enqueue(targetNode);
+            hasMutations = true;
+          }
         }
       }
-      scheduleOverlayCleanup();
-      scheduleVideoAdScan();
+      if (hasMutations) {
+        scheduleOverlayCleanup();
+        scheduleVideoAdScan();
+      }
     });
-  } catch (e) { return; }
-  const target = D.documentElement || D;
-  observer.observe(target, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['src','href','style','class','id','data-src','srcset','data-srcset','http-equiv','aria-label','title']
-  });
+    observer.observe(target, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src','href','style','class','id','data-src','srcset','data-srcset','http-equiv','aria-label','title','role','aria-modal']
+    });
+    if (D.documentElement) {
+      captureScrollBaseline(D.documentElement);
+      neutralizeMetaRefresh(D.documentElement);
+      queueTrapNode(D.documentElement, true);
+    }
+    if (D.body) captureScrollBaseline(D.body);
+  } catch (e) {
+    observer = null;
+  }
 }
 
 function initialScan() {
@@ -2443,7 +3037,8 @@ const UI = (() => {
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, "Helvetica Neue", Arial, sans-serif;
       -webkit-tap-highlight-color: transparent;
     }
-    button { font: inherit; color: inherit; margin: 0; }
+    button { font: inherit; color: inherit; margin: 0; pointer-events: auto; }
+    input, select, textarea, label, a { pointer-events: auto; }
     svg { display: block; }
 
     .handle {
@@ -2461,6 +3056,7 @@ const UI = (() => {
       cursor: grab;
       user-select: none; -webkit-user-select: none;
       touch-action: none;
+      pointer-events: auto;
       z-index: 2147482999;
       transition: left .28s cubic-bezier(.32,.72,0,1), top .28s cubic-bezier(.32,.72,0,1), opacity .18s ease, transform .18s ease;
     }
@@ -2487,10 +3083,11 @@ const UI = (() => {
       backdrop-filter: blur(8px);
       opacity: 0; visibility: hidden;
       touch-action: none;
+      pointer-events: none;
       transition: opacity .3s ease, visibility 0s linear .3s;
       z-index: 2147483000;
     }
-    .backdrop.open { opacity: 1; visibility: visible; transition-delay: 0s; }
+    .backdrop.open { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
 
     .sheet {
       position: fixed; left: 0; right: 0; bottom: 0;
@@ -2508,24 +3105,27 @@ const UI = (() => {
       overflow: hidden;
       transform: translateY(105%);
       visibility: hidden;
+      pointer-events: none;
       transition: transform .4s cubic-bezier(.32,.72,0,1), opacity .25s ease, visibility 0s linear .4s;
       will-change: transform;
       z-index: 2147483001;
     }
-    .sheet.open { transform: translateY(0); visibility: visible; transition-delay: 0s; }
+    .sheet.open { transform: translateY(0); visibility: visible; pointer-events: auto; transition-delay: 0s; }
     .sheet:focus { outline: none; }
 
     @media (min-width: 641px) {
       .sheet {
         left: 50%; right: auto; top: 50%; bottom: auto;
-        width: 390px; max-height: 85vh;
+        width: 420px; max-width: min(420px, calc(100vw - 32px));
+        max-height: 85vh; max-height: 85dvh;
         border: 1px solid var(--border);
         border-radius: 20px;
         box-shadow: 0 24px 70px rgba(0,0,0,.35);
         opacity: 0;
         transform: translate(-50%, -46%) scale(.96);
+        pointer-events: none;
       }
-      .sheet.open { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      .sheet.open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
       .pill { display: none; }
     }
 
@@ -2554,6 +3154,7 @@ const UI = (() => {
       display: grid; place-items: center;
       background: var(--card); color: var(--muted);
       border: none; cursor: pointer; padding: 0;
+      pointer-events: auto;
       transition: background .15s ease, color .15s ease;
     }
     .icon-btn svg { width: 16px; height: 16px; }
@@ -2562,10 +3163,15 @@ const UI = (() => {
     @media (hover: hover) { .icon-btn:hover { background: var(--card-hover); color: var(--text); } }
 
     .body {
-      flex: 1; min-height: 0;
+      flex: 1 1 auto; min-height: 0;
       overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
       padding: 14px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+      pointer-events: auto;
     }
+    .body::-webkit-scrollbar { width: 6px; }
+    .body::-webkit-scrollbar-track { background: transparent; }
+    .body::-webkit-scrollbar-thumb { background: var(--pill); border-radius: 999px; }
+    .body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
     .sec-title { margin: 20px 4px 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 
     .status {
@@ -2727,10 +3333,11 @@ const UI = (() => {
       -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
       display: flex; align-items: center; justify-content: center;
       padding: 16px; opacity: 0; visibility: hidden;
+      pointer-events: none;
       transition: opacity .25s ease, visibility 0s linear .25s;
       z-index: 2147483010;
     }
-    .report-modal.open { opacity: 1; visibility: visible; transition-delay: 0s; }
+    .report-modal.open { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
     .report-card {
       background: var(--sheet); color: var(--text);
       width: 100%; max-width: 360px;
@@ -2738,6 +3345,7 @@ const UI = (() => {
       padding: 18px; box-shadow: var(--shadow);
       display: flex; flex-direction: column; gap: 10px;
       box-sizing: border-box;
+      pointer-events: auto;
     }
     .report-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .report-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
@@ -2815,7 +3423,7 @@ const UI = (() => {
     if (uiReady && host && host.isConnected) return;
     host = document.createElement('div');
     host.setAttribute('data-nvirya-ui', '');
-    host.style.cssText = 'all:initial;';
+    host.style.cssText = 'all:initial; display:block; position:fixed; z-index:2147483647; top:0; left:0; width:0; height:0; pointer-events:none;';
     root = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -2828,12 +3436,17 @@ const UI = (() => {
     }, icon('shield'), el('span', { class: 'fab-dot' }));
     root.appendChild(handleEl);
 
-    backdropEl = el('div', { class: 'backdrop', onclick: () => setMenu(false) });
+    backdropEl = el('div', { class: 'backdrop' });
+    backdropEl.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMenu(false);
+    });
     root.appendChild(backdropEl);
 
     sheetEl = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Nvirya AdGuard X', 'aria-hidden': 'true', tabindex: '-1' });
-    themeBtn = el('button', { class: 'icon-btn', type: 'button', onclick: () => setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark') });
-    const closeBtn = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => setMenu(false) }, icon('close'));
+    themeBtn = el('button', { class: 'icon-btn', type: 'button', onclick: (e) => { if (e) e.stopPropagation(); setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark'); } });
+    const closeBtn = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } setMenu(false); } }, icon('close'));
     const head = el('div', { class: 'head' },
       el('div', { class: 'titles' },
         el('h1', null, 'Nvirya AdGuard X',
@@ -2870,7 +3483,7 @@ const UI = (() => {
     );
     root.appendChild(updateEl);
 
-    (D.documentElement || D.body).appendChild(host);
+    (D.body || D.documentElement).appendChild(host);
 
     loadFab();
     updateAvailable = Updater.getAvailable();
@@ -3173,6 +3786,9 @@ const UI = (() => {
     menuOpen = !!open;
     sheetEl.classList.toggle('open', menuOpen);
     backdropEl.classList.toggle('open', menuOpen);
+    if (host) {
+      host.style.pointerEvents = menuOpen ? 'auto' : 'none';
+    }
     if (handleEl) {
       handleEl.classList.toggle('away', menuOpen);
       handleEl.setAttribute('aria-expanded', String(menuOpen));
@@ -3234,6 +3850,9 @@ const UI = (() => {
         if (pickerActive) exitPicker(true);
         else if (reportModalEl && reportModalEl.classList.contains('open')) closeReportModal();
         else if (menuOpen) setMenu(false);
+      } else if (e.altKey && (e.key === 'a' || e.key === 'A' || e.code === 'KeyA')) {
+        e.preventDefault();
+        setMenu(!menuOpen);
       }
     }, true);
   }
@@ -3372,10 +3991,12 @@ const UI = (() => {
     if (!reportModalEl) buildReportModal();
     if (reportNoteInput) reportNoteInput.value = '';
     reportModalEl.classList.add('open');
+    if (host) host.style.pointerEvents = 'auto';
   }
 
   function closeReportModal() {
     if (reportModalEl) reportModalEl.classList.remove('open');
+    if (host && !menuOpen) host.style.pointerEvents = 'none';
   }
 
   function submitReport() {
@@ -3832,23 +4453,24 @@ function refreshProtection() {
 function registerMenuCommands() {
   if (typeof GM_registerMenuCommand !== 'function') return;
   try {
-    GM_registerMenuCommand('Open Nvirya AdGuard X', () => UI.setMenu(true));
-    GM_registerMenuCommand('Disable on this site (session)', () => {
-      state.sessionDisabled[hostname] = true; persistSession(); refreshProtection(); UI.toast('Disabled for session');
+    GM_registerMenuCommand('🛡️ Mở Bảng Điều Khiển (Alt+A)', () => UI.setMenu(true));
+    GM_registerMenuCommand('🎯 Chọn phần tử để chặn (Picker)', () => UI.enterPicker());
+    GM_registerMenuCommand('⏸️ Tắt trên trang này (Tạm thời)', () => {
+      state.sessionDisabled[hostname] = true; persistSession(); refreshProtection(); UI.toast('Đã tắt tạm thời');
     });
-    GM_registerMenuCommand('Enable on this site', () => {
-      delete state.sessionDisabled[hostname]; persistSession(); refreshProtection(); UI.toast('Enabled');
+    GM_registerMenuCommand('▶️ Bật lại trên trang này', () => {
+      delete state.sessionDisabled[hostname]; persistSession(); refreshProtection(); UI.toast('Đã bật');
     });
-    GM_registerMenuCommand('Block element on this page', () => UI.enterPicker());
-    GM_registerMenuCommand('Check for updates', () => Updater.check(true));
-    GM_registerMenuCommand('Toggle debug', () => {
+    GM_registerMenuCommand('🔄 Kiểm tra cập nhật', () => Updater.check(true));
+    GM_registerMenuCommand('🛠️ Bật/Tắt Debug', () => {
       config.debug = !config.debug; saveConfig(); UI.toast('Debug ' + (config.debug ? 'on' : 'off'));
     });
   } catch (e) {}
 }
 
 function init() {
-  startInvisibleTrapObserver();
+  installInvisibleTrapInterception();
+  startObserver();
   if (!D.documentElement) {
     if (D.readyState === 'loading') {
       D.addEventListener('DOMContentLoaded', init, { once: true });
