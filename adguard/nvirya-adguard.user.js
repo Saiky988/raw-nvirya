@@ -2,10 +2,10 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.1.2
+// @version      11.1.3
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
-// @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop with native UI.
+// @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
 // @author       Nvirya
 // @match        *://*/*
 // @icon         https://raw.nvirya.com/assets/icon128x128.png
@@ -28,7 +28,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.1.2';
+	const VERSION = '11.1.3';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -210,8 +210,10 @@
 				});
 				observer.observe(D, { childList: true, subtree: true });
 				if (D.readyState === 'loading') {
-					D.addEventListener('DOMContentLoaded', () => { doInject();
-						observer.disconnect(); }, { once: true });
+					D.addEventListener('DOMContentLoaded', () => {
+						doInject();
+						observer.disconnect();
+					}, { once: true });
 				}
 			}
 		} catch (e) {}
@@ -325,8 +327,10 @@
 			} catch (e) {
 				try { W.adsbygoogle = adsQueue; } catch (e2) {}
 			}
-			try { W.adsbygoogle.loaded = true;
-				W.adsbygoogle.push = function() { return this.length || 0; }; } catch (e) {}
+			try {
+				W.adsbygoogle.loaded = true;
+				W.adsbygoogle.push = function() { return this.length || 0; };
+			} catch (e) {}
 
 			try {
 				let _atOptions = {};
@@ -623,35 +627,47 @@
 		lifetime: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
 
 		get ads() { return this.session.ads; },
-		set ads(v) { const d = v - this.session.ads;
+		set ads(v) {
+			const d = v - this.session.ads;
 			this.session.ads = v;
 			this.lifetime.ads += d;
-			this.scheduleSave(); },
+			this.scheduleSave();
+		},
 		get popups() { return this.session.popups; },
-		set popups(v) { const d = v - this.session.popups;
+		set popups(v) {
+			const d = v - this.session.popups;
 			this.session.popups = v;
 			this.lifetime.popups += d;
-			this.scheduleSave(); },
+			this.scheduleSave();
+		},
 		get redirects() { return this.session.redirects; },
-		set redirects(v) { const d = v - this.session.redirects;
+		set redirects(v) {
+			const d = v - this.session.redirects;
 			this.session.redirects = v;
 			this.lifetime.redirects += d;
-			this.scheduleSave(); },
+			this.scheduleSave();
+		},
 		get hidden() { return this.session.hidden; },
-		set hidden(v) { const d = v - this.session.hidden;
+		set hidden(v) {
+			const d = v - this.session.hidden;
 			this.session.hidden = v;
 			this.lifetime.hidden += d;
-			this.scheduleSave(); },
+			this.scheduleSave();
+		},
 		get removed() { return this.session.removed; },
-		set removed(v) { const d = v - this.session.removed;
+		set removed(v) {
+			const d = v - this.session.removed;
 			this.session.removed = v;
 			this.lifetime.removed += d;
-			this.scheduleSave(); },
+			this.scheduleSave();
+		},
 		get requests() { return this.session.requests; },
-		set requests(v) { const d = v - this.session.requests;
+		set requests(v) {
+			const d = v - this.session.requests;
 			this.session.requests = v;
 			this.lifetime.requests += d;
-			this.scheduleSave(); },
+			this.scheduleSave();
+		},
 
 		load() {
 			const s = store.get(K_ST, null) || {};
@@ -914,18 +930,17 @@
 			const origAEL = EventTarget.prototype.addEventListener;
 			EventTarget.prototype.addEventListener = function(type, listener, options) {
 				if (/^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend)$/i.test(type)) {
-					if (this === W || this === D || this === D.body || this === D.documentElement) {
-						try {
-							const fnStr = typeof listener === 'function' ? String(listener).slice(0, 320) : '';
-							if (/popunder|pop_under|_openWindow|openPopup|tabunder|puShow|puLoad|adClick/i.test(fnStr)) {
-								log('BLOCK', 'event-trap', 'Defused ad popup listener:', type);
-								return;
-							}
-						} catch (err) {}
-					}
+					try {
+						const stack = new Error().stack || '';
+						if (RE_AD_HOST.test(stack) || /wingsmob|cloudfront/i.test(stack)) {
+							log('BLOCK', 'event-trap', 'Defused ad listener via stack:', type);
+							return;
+						}
+					} catch (err) {}
 				}
 				return origAEL.apply(this, arguments);
 			};
+
 		} catch (e) {}
 	}
 
@@ -938,47 +953,19 @@
 			try {
 				if (!config.popupProtection || isDisabledHere()) return origOpen.apply(this, arguments);
 				const rawStr = url == null ? '' : String(url).trim();
-				const hasGesture = !!(W.navigator.userActivation && W.navigator.userActivation.isActive);
+
 				if (!rawStr || /^about:blank(?:[#?].*)?$/i.test(rawStr)) {
-					if (!hasGesture) return popupBlock('empty-or-blank-url', rawStr || '(empty)');
-					const win = origOpen.apply(this, arguments);
-					if (win) {
-						try {
-							const origLoc = win.location;
-							if (origLoc) {
-								const guardDest = function(dest) {
-									const destU = safeUrl(dest);
-									if (destU && (isAdUrl(destU) || shouldBlockRedirectUrl(destU))) {
-										recordBlocked('popup', 'blank-window-location', destU.href);
-										triggerAdInterceptedAction();
-										try { win.close(); } catch (e) {}
-										return true;
-									}
-									return false;
-								};
-								['assign', 'replace'].forEach(fn => {
-									if (typeof origLoc[fn] === 'function') {
-										const origFn = origLoc[fn];
-										origLoc[fn] = function(v) {
-											if (guardDest(v)) return;
-											return origFn.apply(this, arguments);
-										};
-									}
-								});
-							}
-						} catch (e) {}
-					}
-					return win;
+					return popupBlock('empty-or-blank-url', rawStr || '(empty)');
 				}
+
 				const u = safeUrl(rawStr);
 				if (!u) return popupBlock('unparseable-url', rawStr);
 				if (isAdUrl(u)) return popupBlock('ad-url', u.href);
+
 				if (!isAllowedPopupDestination(u)) {
-					if (!hasGesture) return popupBlock('untrusted-cross-site-auto', u.href);
-					if (RE_TRACKING_QUERY.test(u.search) || RE_AD_TOKEN.test(u.pathname)) {
-						return popupBlock('untrusted-cross-site-tracking', u.href);
-					}
+					return popupBlock('untrusted-cross-site', u.href);
 				}
+
 				return origOpen.apply(this, arguments);
 			} catch (e) {
 				log('ERROR', 'popup', e && e.message);
@@ -986,6 +973,7 @@
 				return makeDummyWindow();
 			}
 		};
+
 		try { Object.defineProperty(guarded, '__nvirya', { value: true }); } catch (e) {}
 		try {
 			Object.defineProperty(W, 'open', {
@@ -1034,8 +1022,10 @@
 		try { if (e.composedPath) return e.composedPath(); } catch (err) {}
 		const path = [];
 		let node = e.target;
-		while (node) { path.push(node);
-			node = node.parentNode || node.host || null; }
+		while (node) {
+			path.push(node);
+			node = node.parentNode || node.host || null;
+		}
 		return path;
 	}
 
@@ -1058,8 +1048,10 @@
 		const tag = String(target.tagName || '').toLowerCase();
 		if (tag !== 'a' && tag !== 'div' && tag !== 'section' && tag !== 'iframe') return false;
 		let style, rect;
-		try { style = W.getComputedStyle(target);
-			rect = target.getBoundingClientRect(); } catch (e) { return false; }
+		try {
+			style = W.getComputedStyle(target);
+			rect = target.getBoundingClientRect();
+		} catch (e) { return false; }
 		if (!style || (style.position !== 'fixed' && style.position !== 'absolute')) return false;
 		const z = parseInt(style.zIndex, 10);
 		if (!isFinite(z) || z < 10) return false;
@@ -1085,8 +1077,10 @@
 			e.preventDefault();
 			if (e.defaultPrevented === false) return false;
 		} catch (err) { return false; }
-		try { e.stopPropagation();
-			e.stopImmediatePropagation(); } catch (err) {}
+		try {
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+		} catch (err) {}
 		recordBlocked(kind, source, url);
 		return true;
 	}
@@ -1283,8 +1277,7 @@
 				const opensNew = targetOpensNewContext(anchor);
 				const syntheticExternal = e.isTrusted === false && crossRoot;
 				const hijack = crossRoot && isSuspiciousPlayerOverlayClick(e.target, path);
-				// Only block target="_blank" if it's an ad, or synthetic bot click, or overlay hijack
-				const blockedNewContext = opensNew && !isAllowedPopupDestination(u) && (e.isTrusted === false || hijack);
+				const blockedNewContext = opensNew && !isAllowedPopupDestination(u);
 
 				if (adLink || blockedNewContext || syntheticExternal || hijack) {
 					const kind = opensNew ? 'popup' : 'redirect';
@@ -1430,8 +1423,11 @@
 					try {
 						if (config.enabled && !isDisabledHere() && config.strictMode) {
 							const u = safeUrl(url);
-							if (u && isAdUrl(u)) { stats.inc('requests');
-								log('BLOCK', 'beacon', u.href); return false; }
+							if (u && isAdUrl(u)) {
+								stats.inc('requests');
+								log('BLOCK', 'beacon', u.href);
+								return false;
+							}
 						}
 					} catch (e) {}
 					return orig.apply(this, arguments);
@@ -1659,16 +1655,22 @@
 
 		let signals = 0;
 		let reason = '';
-		if (idc && RE_AD_TOKEN.test(idc)) { signals++;
-			reason = reason || 'ad-token'; }
-		if (RE_SIZING.test(src) || RE_SIZING.test(idc) || RE_SIZING.test(style)) { signals++;
-			reason = reason || 'ad-sizing'; }
+		if (idc && RE_AD_TOKEN.test(idc)) {
+			signals++;
+			reason = reason || 'ad-token';
+		}
+		if (RE_SIZING.test(src) || RE_SIZING.test(idc) || RE_SIZING.test(style)) {
+			signals++;
+			reason = reason || 'ad-sizing';
+		}
 
 		if (tag === 'img') {
 			const w = el.naturalWidth || el.width || 0;
 			const h = el.naturalHeight || el.height || 0;
-			if (w === 1 && h === 1) { signals++;
-				reason = reason || 'tracking-pixel'; }
+			if (w === 1 && h === 1) {
+				signals++;
+				reason = reason || 'tracking-pixel';
+			}
 		}
 
 		if (signals >= 2) return { action: 'remove', reason };
@@ -1876,7 +1878,7 @@
 		};
 
 		try {
-			['pointerdown', 'touchstart', 'mousedown'].forEach(function(evt) {
+			['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(function(evt) {
 				D.addEventListener(evt, interceptTrap, true);
 			});
 		} catch (e) {}
@@ -1919,8 +1921,10 @@
 
 	function rememberScrollOverride(el, prop) {
 		let saved = scrollOverrideStyles.get(el);
-		if (!saved) { saved = {};
-			scrollOverrideStyles.set(el, saved); }
+		if (!saved) {
+			saved = {};
+			scrollOverrideStyles.set(el, saved);
+		}
 		if (!Object.prototype.hasOwnProperty.call(saved, prop)) {
 			saved[prop] = { value: el.style.getPropertyValue(prop), priority: el.style.getPropertyPriority(prop) };
 		}
@@ -1960,8 +1964,10 @@
 				if ((current === 'hidden' || current === 'clip') && original !== 'hidden' && original !== 'clip') {
 					const value = base.inline[prop] || base.computed[prop] || 'visible';
 					rememberScrollOverride(el, prop);
-					try { el.style.setProperty(prop, value, base.priority[prop] || 'important');
-						changed = true; } catch (e) {}
+					try {
+						el.style.setProperty(prop, value, base.priority[prop] || 'important');
+						changed = true;
+					} catch (e) {}
 				}
 			}
 			const position = String(cs.position || '').toLowerCase();
@@ -2155,8 +2161,10 @@
 		if (tag !== 'div' && tag !== 'section' && tag !== 'dialog') return false;
 
 		let style, rect;
-		try { style = W.getComputedStyle(el);
-			rect = el.getBoundingClientRect(); } catch (e) { return false; }
+		try {
+			style = W.getComputedStyle(el);
+			rect = el.getBoundingClientRect();
+		} catch (e) { return false; }
 		if (!style || (style.position !== 'fixed' && style.position !== 'absolute')) return false;
 		const z = parseInt(style.zIndex, 10);
 		if (!isFinite(z) || z < 100) return false;
@@ -2349,8 +2357,10 @@
 		const parent = el.parentElement;
 		if (!parent || hasFormControls(parent) || hasProtectedPlayerContent(parent)) return false;
 		let style, rect;
-		try { style = W.getComputedStyle(el);
-			rect = el.getBoundingClientRect(); } catch (e) { return false; }
+		try {
+			style = W.getComputedStyle(el);
+			rect = el.getBoundingClientRect();
+		} catch (e) { return false; }
 		if (!style || (style.position !== 'fixed' && style.position !== 'absolute')) return false;
 		const z = parseInt(style.zIndex, 10);
 		if (!isFinite(z) || z < 50) return false;
@@ -2536,8 +2546,10 @@
 			if (isDisabledHere() || !D.body) return;
 			const now = Date.now();
 			if (now - lastVideoScan < 180) {
-				if (!videoScanTimer) videoScanTimer = setTimeout(function() { videoScanTimer = null;
-					scheduleVideoAdScan(); }, 180);
+				if (!videoScanTimer) videoScanTimer = setTimeout(function() {
+					videoScanTimer = null;
+					scheduleVideoAdScan();
+				}, 180);
 				return;
 			}
 			lastVideoScan = now;
@@ -2552,8 +2564,10 @@
 					if (!style || style.display === 'none' || style.visibility === 'hidden' || rect.width < 2 || rect.height < 2) continue;
 					if (button.disabled || attr(button, 'aria-disabled') === 'true') continue;
 					clickedSkipButtons.add(button);
-					try { button.click();
-						log('INFO', 'video-ad', 'clicked skip-ad control'); } catch (e) {}
+					try {
+						button.click();
+						log('INFO', 'video-ad', 'clicked skip-ad control');
+					} catch (e) {}
 				}
 				const videos = D.querySelectorAll('video');
 				for (let i = 0; i < Math.min(videos.length, 40); i++) {
@@ -2570,8 +2584,10 @@
 				}
 			} catch (e) {}
 			if (hasActiveAd && !videoScanTimer) {
-				videoScanTimer = setTimeout(function() { videoScanTimer = null;
-					scheduleVideoAdScan(); }, 500);
+				videoScanTimer = setTimeout(function() {
+					videoScanTimer = null;
+					scheduleVideoAdScan();
+				}, 500);
 			} else if (!hasActiveAd && videoScanTimer) {
 				clearTimeout(videoScanTimer);
 				videoScanTimer = null;
@@ -2869,9 +2885,11 @@
 
 		function fetchRemoteVersion(done) {
 			let finished = false;
-			const finish = (err, ver) => { if (finished) return;
+			const finish = (err, ver) => {
+				if (finished) return;
 				finished = true;
-				done(err, ver); };
+				done(err, ver);
+			};
 			const parse = (text) => {
 				const head = String(text || '').slice(0, 8192);
 				const m = head.match(/\/\/\s*@version\s+([0-9.]+)/i);
@@ -2905,10 +2923,14 @@
 				const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (e) {} finish(new Error('timeout')); }, UPDATE_TIMEOUT);
 				fetch(UPDATE_URL, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
 					.then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
-					.then(text => { clearTimeout(timer);
-						parse(text); })
-					.catch(err => { clearTimeout(timer);
-						finish(err || new Error('network error')); });
+					.then(text => {
+						clearTimeout(timer);
+						parse(text);
+					})
+					.catch(err => {
+						clearTimeout(timer);
+						finish(err || new Error('network error'));
+					});
 			} catch (e) { finish(e); }
 		}
 
@@ -3566,10 +3588,26 @@
 			root.appendChild(backdropEl);
 
 			sheetEl = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Nvirya AdGuard X', 'aria-hidden': 'true', tabindex: '-1' });
-			themeBtn = el('button', { class: 'icon-btn', type: 'button', onclick: (e) => { if (e) e.stopPropagation();
-					setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark'); } });
-			const closeBtn = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: (e) => { if (e) { e.preventDefault();
-						e.stopPropagation(); } setMenu(false); } }, icon('close'));
+			themeBtn = el('button', {
+				class: 'icon-btn',
+				type: 'button',
+				onclick: (e) => {
+					if (e) e.stopPropagation();
+					setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark');
+				}
+			});
+			const closeBtn = el('button', {
+				class: 'icon-btn',
+				type: 'button',
+				'aria-label': 'Close',
+				onclick: (e) => {
+					if (e) {
+						e.preventDefault();
+						e.stopPropagation();
+					}
+					setMenu(false);
+				}
+			}, icon('close'));
 			const head = el('div', { class: 'head' },
 				el('div', { class: 'titles' },
 					el('h1', null, 'Nvirya AdGuard X',
@@ -3683,9 +3721,13 @@
 				icon: 'allow',
 				chevron: true,
 				onclick: () => {
-					if (isWhitelisted(hostname)) { removeWhitelist(hostname);
-						toast('Removed from whitelist'); } else { addWhitelist(hostname);
-						toast('Whitelisted for this site'); }
+					if (isWhitelisted(hostname)) {
+						removeWhitelist(hostname);
+						toast('Removed from whitelist');
+					} else {
+						addWhitelist(hostname);
+						toast('Whitelisted for this site');
+					}
 					renderStatus();
 					refreshProtection();
 				}
@@ -3696,11 +3738,15 @@
 				icon: 'pause',
 				chevron: true,
 				onclick: () => {
-					if (state.sessionDisabled[hostname]) { delete state.sessionDisabled[hostname];
+					if (state.sessionDisabled[hostname]) {
+						delete state.sessionDisabled[hostname];
 						persistSession();
-						toast('Protection enabled for this session'); } else { state.sessionDisabled[hostname] = true;
+						toast('Protection enabled for this session');
+					} else {
+						state.sessionDisabled[hostname] = true;
 						persistSession();
-						toast('Disabled for this session'); }
+						toast('Disabled for this session');
+					}
 					renderStatus();
 					refreshProtection();
 				}
@@ -3711,8 +3757,10 @@
 				tone: 'blue',
 				icon: 'target',
 				chevron: true,
-				onclick: () => { setMenu(false);
-					enterPicker(); }
+				onclick: () => {
+					setMenu(false);
+					enterPicker();
+				}
 			}));
 			actions.appendChild(item({
 				label: 'Clean page',
@@ -3720,8 +3768,10 @@
 				tone: 'purple',
 				icon: 'wand',
 				chevron: true,
-				onclick: () => { cleanPage();
-					toast('Page cleaned'); }
+				onclick: () => {
+					cleanPage();
+					toast('Page cleaned');
+				}
 			}));
 			actions.appendChild(item({
 				label: 'Report broken / Missed ad',
@@ -3868,9 +3918,13 @@
 				icon: 'copy',
 				onclick: () => {
 					const info = collectDebugInfo();
-					try { navigator.clipboard.writeText(info);
-						toast('Debug info copied'); } catch (e) { console.log(info);
-						toast('Logged to console'); }
+					try {
+						navigator.clipboard.writeText(info);
+						toast('Debug info copied');
+					} catch (e) {
+						console.log(info);
+						toast('Logged to console');
+					}
 				}
 			}));
 			bodyEl.appendChild(dbg);
@@ -3933,13 +3987,19 @@
 			let tone = 'ok',
 				label = 'Protected',
 				sub = 'Blocking ads, popups and redirects';
-			if (!config.enabled) { tone = 'off';
+			if (!config.enabled) {
+				tone = 'off';
 				label = 'Disabled (global)';
-				sub = 'Turn on Protection in Settings to resume'; } else if (state.sessionDisabled[hostname]) { tone = 'warn';
+				sub = 'Turn on Protection in Settings to resume';
+			} else if (state.sessionDisabled[hostname]) {
+				tone = 'warn';
 				label = 'Disabled for this session';
-				sub = 'Blocking is paused on this site'; } else if (isWhitelisted(hostname)) { tone = 'warn';
+				sub = 'Blocking is paused on this site';
+			} else if (isWhitelisted(hostname)) {
+				tone = 'warn';
 				label = 'Whitelisted';
-				sub = 'This site is allowed to show ads'; }
+				sub = 'This site is allowed to show ads';
+			}
 
 			if (handleEl) handleEl.setAttribute('data-state', tone);
 			if (!statusEl || !bodyEl) return;
@@ -4019,8 +4079,10 @@
 				handleEl.setAttribute('aria-expanded', String(menuOpen));
 			}
 			sheetEl.setAttribute('aria-hidden', String(!menuOpen));
-			if (statsTimer) { clearInterval(statsTimer);
-				statsTimer = null; }
+			if (statsTimer) {
+				clearInterval(statsTimer);
+				statsTimer = null;
+			}
 			if (menuOpen) {
 				renderStatus();
 				renderStats();
@@ -4072,8 +4134,10 @@
 			handleEl.addEventListener('pointerup', (e) => endDrag(e, false));
 			handleEl.addEventListener('pointercancel', (e) => endDrag(e, true));
 			handleEl.addEventListener('keydown', (e) => {
-				if (e.key === 'Enter' || e.key === ' ') { e.preventDefault();
-					setMenu(!menuOpen); }
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					setMenu(!menuOpen);
+				}
 			});
 
 			D.addEventListener('keydown', (e) => {
@@ -4166,13 +4230,17 @@
 				'calc(' + (updateEl.offsetHeight + 22) + 'px + env(safe-area-inset-top, 0px))' : '';
 			toastEl.classList.add('show');
 			if (toastTimer) clearTimeout(toastTimer);
-			toastTimer = setTimeout(() => { toastEl.classList.remove('show');
+			toastTimer = setTimeout(() => {
+				toastEl.classList.remove('show');
 				toastTimer = null;
-				lastToast = ''; }, 2200);
+				lastToast = '';
+			}, 2200);
 		}
 
-		function updateUIStatus() { renderStatus();
-			renderStats(); }
+		function updateUIStatus() {
+			renderStatus();
+			renderStats();
+		}
 
 		function buildReportModal() {
 			if (reportModalEl) return;
@@ -4607,8 +4675,11 @@
 				return;
 			}
 			const sel = makeSelector(selected);
-			if (!sel) { toast('Không thể tạo selector');
-				exitPicker(true); return; }
+			if (!sel) {
+				toast('Không thể tạo selector');
+				exitPicker(true);
+				return;
+			}
 			if (!confirm('Block this element on the page?\n\n' + sel)) { exitPicker(true); return; }
 			if (!state.siteRules[hostname]) state.siteRules[hostname] = [];
 			state.siteRules[hostname].push({ selector: sel, action: 'hide', created: Date.now() });
