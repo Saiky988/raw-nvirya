@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.2.0
+// @version      11.2.1
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -28,7 +28,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.2.0';
+	const VERSION = '11.2.1';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -4408,14 +4408,14 @@
 				),
 				closeBtn
 			);
-
+			
 			reportReasonSelect = el('select', { class: 'report-select' },
-				el('option', { value: 'Feature request' }, 'Đề xuất tính năng'),
-				el('option', { value: 'Missed ad' }, 'Lọt quảng cáo (Missed ad)'),
-				el('option', { value: 'Broken layout' }, 'Lỗi giao diện (Broken layout)'),
-				el('option', { value: 'Player issue' }, 'Lỗi phát video (Player issue)'),
-				el('option', { value: 'Other' }, 'Khác (Other)')
-			);
+    		el('option', { value: 'Missed ad' }, 'Ad not blocked'),
+  		  el('option', { value: 'Broken layout' }, 'Page layout issue'),
+ 	      el('option', { value: 'Player issue' }, 'Video player issue'),
+        el('option', { value: 'Feature request' }, 'Feature request'),
+        el('option', { value: 'Other' }, 'Other')
+      );
 
 			reportNoteInput = el('textarea', {
 				class: 'report-textarea',
