@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.1.4-beta
+// @version      11.2.0
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -28,7 +28,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.1.4-beta';
+	const VERSION = '11.2.0';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -420,6 +420,7 @@
 	const K_SR = 'nvirya_x_site_rules';
 	const K_ST = 'nvirya_x_stats';
 	const K_SESS = 'nvirya_x_session';
+  const K_WEEKLY = 'nvirya_x_weekly_history';
 	const K_LAST_REP = 'nvirya_x_last_report';
 	const UPDATE_URL = 'https://raw.nvirya.com/adguard/nvirya-adguard.user.js';
 	const STAY_INSTALL_URL = 'stay://x-callback-url/install?scriptURL=' + encodeURIComponent(UPDATE_URL);
@@ -428,11 +429,11 @@
 	const K_UPD_REMOTE = 'nvirya_x_update_remote';
 	const K_UPD_SNOOZE = 'nvirya_x_update_snooze';
 
-	const UPDATE_CHECK_INTERVAL = 1 * 60 * 60 * 1000;
-	const UPDATE_RETRY_AFTER = 15 * 60 * 1000;
-	const UPDATE_SNOOZE_MS = 12 * 60 * 60 * 1000;
+	const UPDATE_CHECK_INTERVAL = 30 * 60 * 1000;
+	const UPDATE_RETRY_AFTER = 10 * 60 * 1000;
+	const UPDATE_SNOOZE_MS = 2 * 60 * 60 * 1000;
 	const UPDATE_START_DELAY = 1500;
-	const UPDATE_TIMEOUT = 4000;
+	const UPDATE_TIMEOUT = 5000;
 
 	// Feedback/Bug report Discord webhook 
 	const WEBHOOK_PAYLOAD = "==QYnpEV6R0VtJmYDdVVwpmWQdFai9kMyJDcCR3Zyx0RxJ0b0NzRfJTb5s2YmNGMxYEdN9UWFJlZ0lXVzhEVhNzRrRlcT9SNxcjNzgTO5czM2gDN1MzN1UTMvM3av9GaiV2dvkGch9SbvNmLkJ3bjNXak9yL6MHc0RHa";
@@ -493,7 +494,6 @@
 			return '';
 		}
 	}
-
 
 	function loadConfig() {
 		let cfg = store.get(K_CFG, null);
@@ -570,7 +570,7 @@
 	}
 
 	const RE_AD_HOST =
-		/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|trafficjunky|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|galaksion|richads|rollerads|evadav|pushub|coinhive|crypto-loot|adsco\.re|directrev|yllix|bidvertiser|trafficstars|ero-advertising|adxprt|creativecdn|exdynsrv|adkeeper|yektanet|popmyads|adreactor|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|googletagmanager\.com|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm)(?:\.|$)/i;
+		/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|galaksion|richads|rollerads|evadav|pushub|coinhive|crypto-loot|adsco\.re|directrev|yllix|bidvertiser|trafficstars|ero-advertising|adxprt|creativecdn|exdynsrv|adkeeper|yektanet|popmyads|adreactor|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|googletagmanager\.com|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm)(?:\.|$)/i;
 
 	const RE_GAMBLING_HOST =
 		/(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88|ok9|go99|hb88|vip52|rik789|dabet|may88|sky88|uk88|bong99|88online|kubet77|kubet88|hi88vip|f8bet0|shbet0|789bet0|jun880|new880)(?:\.|$)/i;
@@ -629,6 +629,22 @@
 	}
 
 	let statsSaveTimeout = null;
+
+	const getTodayKey = () => new Date().toISOString().slice(0, 10);
+
+	function recordWeeklyStat(delta = 1) {
+		try {
+			const data = store.get(K_WEEKLY, {}) || {};
+			const today = getTodayKey();
+			data[today] = (data[today] || 0) + delta;
+
+			const keys = Object.keys(data).sort();
+			if (keys.length > 14) {
+				delete data[keys[0]];
+			}
+			store.set(K_WEEKLY, data);
+		} catch (e) {}
+	}
 
 	const stats = {
 		session: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
@@ -713,6 +729,7 @@
 		inc(key, delta = 1) {
 			if (this.session[key] !== undefined) this.session[key] += delta;
 			if (this.lifetime[key] !== undefined) this.lifetime[key] += delta;
+			if (key === 'ads' || key === 'hidden') recordWeeklyStat(delta);
 			this.scheduleSave();
 			if (typeof UI !== 'undefined' && UI.isMenuOpen && UI.isMenuOpen()) {
 				UI.renderStats();
@@ -2960,17 +2977,24 @@
 					if (err) {
 						log('WARN', 'update', 'check failed', err && err.message);
 						store.set(K_UPD_LAST, Date.now() - UPDATE_CHECK_INTERVAL + UPDATE_RETRY_AFTER);
-						if (manual) UI.toast('Không thể kiểm tra cập nhật');
+						if (manual) UI.toast('Unable to check for updates');
 						return;
 					}
 					if (compareVersions(VERSION, remote) < 0) {
+						const prevRemote = store.get(K_UPD_REMOTE, null);
+
+						if (prevRemote !== remote || manual) {
+							store.del(K_UPD_SNOOZE);
+						}
+
 						store.set(K_UPD_REMOTE, remote);
-						if (manual) store.del(K_UPD_SNOOZE);
 						UI.setUpdateAvailable(remote);
+
 						if (manual || !isSnoozed()) UI.showUpdateBanner(remote);
 						log('INFO', 'update', 'new version available', remote);
 					} else {
 						store.del(K_UPD_REMOTE);
+						store.del(K_UPD_SNOOZE);
 						UI.setUpdateAvailable(null);
 						UI.hideUpdateBanner();
 						if (manual) UI.toast('You are using the latest version!');
@@ -3489,6 +3513,45 @@
       .update-banner { transition: none !important; }
       .handle, .backdrop, .sheet, .toast, .track, .track::after, .item, .seg button, .report-modal { transition: none !important; }
     }
+    .chart-card {
+      grid-column: 1 / -1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px 14px;
+      margin-top: 4px;
+    }
+    .chart-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .chart-title { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .chart-detail { font-size: 11.5px; font-weight: 600; color: var(--accent); }
+    .chart-bars {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      height: 80px; gap: 6px;
+    }
+    .chart-col {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
+      height: 100%; justify-content: flex-end; cursor: pointer;
+    }
+    .chart-bar-bg {
+      width: 100%; max-width: 26px; height: 100%;
+      background: var(--seg-bg); border-radius: 6px;
+      display: flex; align-items: flex-end; overflow: hidden;
+    }
+    .chart-bar-fill {
+      width: 100%; background: var(--muted); opacity: .4;
+      border-radius: 6px; transition: height .25s ease, background .2s ease;
+    }
+    .chart-col.active .chart-bar-fill {
+      background: var(--accent); opacity: 1;
+    }
+    .chart-col.future {
+      opacity: .25; cursor: default; pointer-events: none;
+    }
+    .chart-day { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+    .chart-col.active .chart-day { color: var(--text); font-weight: 700; }
   `;
 
 		function themeSetting() { return THEMES.indexOf(config.theme) !== -1 ? config.theme : 'auto'; }
@@ -3769,6 +3832,30 @@
 				chevron: true,
 				onclick: () => undoLast()
 			}));
+			actions.appendChild(item({
+				label: 'Rules of this page',
+				sub: 'View and delete each blocked element',
+				tone: 'blue',
+				icon: 'copy',
+				chevron: true,
+				onclick: () => openRulesModal()
+			}));
+			actions.appendChild(item({
+				label: 'See the original page',
+				sub: 'Temporarily show hidden blocks for 3 seconds',
+				tone: 'orange',
+				icon: 'wand',
+				chevron: true,
+				onclick: () => peekOriginal()
+			}));
+			actions.appendChild(item({
+				label: 'Unlock the page scroll',
+				sub: 'Fix the device freeze due to blocking popup/modal',
+				tone: 'green',
+				icon: 'undo',
+				chevron: true,
+				onclick: () => forceUnlockScroll()
+			}));
 			bodyEl.appendChild(actions);
 
 			bodyEl.appendChild(sectionTitle('Settings'));
@@ -3788,37 +3875,74 @@
 			themeGroup.appendChild(seg);
 			bodyEl.appendChild(themeGroup);
 
-			const toggles = [
-				['enabled', 'Protection'],
-				['popupProtection', 'Popup blocking'],
-				['redirectProtection', 'Redirect protection'],
-				['cosmeticFiltering', 'Cosmetic filtering'],
-				['playerProtection', 'Player protection'],
-				['antiAdblock', 'Anti-adblock cleanup'],
-				['strictMode', 'Strict mode'],
-				['showFloatingButton', 'Show floating button'],
-				['debug', 'Debug logging'],
-			];
 			const swGroup = el('div', { class: 'group' });
-			for (const [k, label] of toggles) {
+
+			const createToggleRow = (title, subtitle, isChecked, onChange) => {
 				const row = el('label', { class: 'item' });
-				row.appendChild(el('span', { class: 'txt' }, el('span', { class: 'lbl' }, label)));
+				const txt = el('span', { class: 'txt' },
+					el('span', { class: 'lbl' }, title),
+					el('span', { class: 'sub' }, subtitle)
+				);
+				row.appendChild(txt);
+
 				const inp = el('input', { type: 'checkbox', role: 'switch' });
-				inp.checked = !!config[k];
-				inp.addEventListener('change', () => {
-					config[k] = inp.checked;
-					if (k === 'showFloatingButton') {
-						config.edgeHandle = inp.checked;
-						if (handleEl) handleEl.classList.toggle('hidden', !inp.checked);
-					}
+				inp.checked = isChecked;
+				inp.addEventListener('change', () => onChange(inp.checked));
+
+				row.appendChild(el('span', { class: 'switch' }, inp, el('span', { class: 'track' })));
+				return row;
+			};
+
+			const isSmartShieldActive = config.enabled && config.popupProtection && config.redirectProtection && config.cosmeticFiltering;
+			swGroup.appendChild(createToggleRow(
+				'Smart Shield',
+				'Block popups, instant redirects & stealth ad frames',
+				isSmartShieldActive,
+				(val) => {
+					config.enabled = val;
+					config.popupProtection = val;
+					config.redirectProtection = val;
+					config.cosmeticFiltering = val;
+					config.antiAdblock = val;
 					saveConfig();
-					if (k === 'enabled' || k === 'cosmeticFiltering' || k === 'redirectProtection') refreshProtection();
+					refreshProtection();
 					renderStatus();
 					renderStats();
-				});
-				row.appendChild(el('span', { class: 'switch' }, inp, el('span', { class: 'track' })));
-				swGroup.appendChild(row);
-			}
+				}
+			));
+
+			swGroup.appendChild(createToggleRow(
+				'Media Guard',
+				'Defend video players',
+				!!config.playerProtection,
+				(val) => {
+					config.playerProtection = val;
+					saveConfig();
+				}
+			));
+
+			swGroup.appendChild(createToggleRow(
+				'Strict Network Filter',
+				'Deep network inspection (may break rare websites)',
+				!!config.strictMode,
+				(val) => {
+					config.strictMode = val;
+					saveConfig();
+				}
+			));
+
+			swGroup.appendChild(createToggleRow(
+				'Floating Button',
+				'Show quick access widget on the edge of screen',
+				!!config.showFloatingButton,
+				(val) => {
+					config.showFloatingButton = val;
+					config.edgeHandle = val;
+					if (handleEl) handleEl.classList.toggle('hidden', !val);
+					saveConfig();
+				}
+			));
+
 			bodyEl.appendChild(swGroup);
 
 			bodyEl.appendChild(sectionTitle('Backup & Share Rules'));
@@ -4002,33 +4126,86 @@
 				['Ads removed', currentData.ads, secondaryData.ads],
 				['Elements hidden', currentData.hidden, secondaryData.hidden],
 				['Popups blocked', currentData.popups, secondaryData.popups],
-				['Redirects blocked', currentData.redirects, secondaryData.redirects],
 				['Requests blocked', currentData.requests, secondaryData.requests],
 			];
 
-			if (statsEl.childNodes.length !== rows.length) {
-				clear(statsEl);
-				for (const r of rows) {
-					const statCard = el('div', { class: 'stat' },
-						el('b', null, fmt(r[1])),
-						el('span', null, r[0]),
-						el('small', { class: 'stat-sub' }, secLabel + fmt(r[2]))
-					);
-					statsEl.appendChild(statCard);
-				}
-			} else {
-				rows.forEach((r, i) => {
-					const card = statsEl.childNodes[i];
-					const b = card.childNodes[0];
-					const span = card.childNodes[1];
-					const sub = card.childNodes[2];
-					const valStr = fmt(r[1]);
-					const subStr = secLabel + fmt(r[2]);
-					if (b.textContent !== valStr) b.textContent = valStr;
-					if (span.textContent !== r[0]) span.textContent = r[0];
-					if (sub && sub.textContent !== subStr) sub.textContent = subStr;
-				});
+			clear(statsEl);
+
+			for (const r of rows) {
+				const statCard = el('div', { class: 'stat' },
+					el('b', null, fmt(r[1])),
+					el('span', null, r[0]),
+					el('small', { class: 'stat-sub' }, secLabel + fmt(r[2]))
+				);
+				statsEl.appendChild(statCard);
 			}
+
+			const weeklyData = store.get(K_WEEKLY, {}) || {};
+			const now = new Date();
+			
+			const dayOfWeek = now.getDay();
+			const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+			const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMon);
+
+			const dayNames = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+			const weekDays = [];
+			let maxVal = 10;
+			let todayCount = 0;
+
+			const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+			const todayKey = toKey(now);
+
+			for (let i = 0; i < 7; i++) {
+				const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+				const key = toKey(d);
+				const count = weeklyData[key] || 0;
+				const isToday = key === todayKey;
+				const isFuture = d.setHours(0,0,0,0) > now.setHours(0,0,0,0);
+
+				if (count > maxVal) maxVal = count;
+				if (isToday) todayCount = count;
+
+				weekDays.push({ key, label: dayNames[i], count, isToday, isFuture });
+			}
+
+			const detailTextEl = el('span', { class: 'chart-detail' }, `Today: ${fmt(todayCount)} ads`);
+			const chartHead = el('div', { class: 'chart-head' },
+				el('span', { class: 'chart-title' }, "This week's activity"),
+				detailTextEl
+			);
+
+			const barsContainer = el('div', { class: 'chart-bars' });
+
+			weekDays.forEach(day => {
+				const pct = day.count > 0 ? Math.max(16, Math.round((day.count / maxVal) * 100)) : 0;
+				const fill = el('div', { 
+					class: 'chart-bar-fill', 
+					style: { height: pct + '%' } 
+				});
+				const barBg = el('div', { class: 'chart-bar-bg' }, fill);
+				const dayLabel = el('span', { class: 'chart-day' }, day.label);
+				
+				let colClass = 'chart-col';
+				if (day.isToday) colClass += ' active';
+				if (day.isFuture) colClass += ' future';
+
+				const col = el('div', { 
+					class: colClass,
+					onclick: (e) => {
+						if (day.isFuture) return;
+						e.stopPropagation();
+						barsContainer.querySelectorAll('.chart-col').forEach(c => c.classList.remove('active'));
+						col.classList.add('active');
+						const prefix = day.isToday ? 'Today' : day.label;
+						detailTextEl.textContent = `${prefix} (${day.key.slice(5)}): ${fmt(day.count)} ads`;
+					}
+				}, barBg, dayLabel);
+
+				barsContainer.appendChild(col);
+			});
+
+			const chartCard = el('div', { class: 'chart-card' }, chartHead, barsContainer);
+			statsEl.appendChild(chartCard);
 		}
 
 		function setMenu(open) {
@@ -4106,13 +4283,20 @@
 			});
 
 			D.addEventListener('keydown', (e) => {
+				const activeTag = (D.activeElement && D.activeElement.tagName) || '';
+				const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || (D.activeElement && D.activeElement.isContentEditable);
+
 				if (e.key === 'Escape') {
 					if (pickerActive) exitPicker(true);
+					else if (rulesModalEl && rulesModalEl.classList.contains('open')) closeRulesModal();
 					else if (reportModalEl && reportModalEl.classList.contains('open')) closeReportModal();
 					else if (menuOpen) setMenu(false);
 				} else if (e.altKey && (e.key === 'a' || e.key === 'A' || e.code === 'KeyA')) {
 					e.preventDefault();
 					setMenu(!menuOpen);
+				} else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !menuOpen && !pickerActive && !isTyping) {
+					e.preventDefault();
+					undoLast();
 				}
 			}, true);
 		}
@@ -4226,10 +4410,11 @@
 			);
 
 			reportReasonSelect = el('select', { class: 'report-select' },
-				el('option', { value: 'Lọt quảng cáo (Missed ad)' }, 'Lọt quảng cáo (Missed ad)'),
-				el('option', { value: 'Lỗi giao diện (Broken layout)' }, 'Lỗi giao diện (Broken layout)'),
-				el('option', { value: 'Lỗi phát video (Player issue)' }, 'Lỗi phát video (Player issue)'),
-				el('option', { value: 'Khác (Other)' }, 'Khác (Other)')
+				el('option', { value: 'Feature request' }, 'Đề xuất tính năng'),
+				el('option', { value: 'Missed ad' }, 'Lọt quảng cáo (Missed ad)'),
+				el('option', { value: 'Broken layout' }, 'Lỗi giao diện (Broken layout)'),
+				el('option', { value: 'Player issue' }, 'Lỗi phát video (Player issue)'),
+				el('option', { value: 'Other' }, 'Khác (Other)')
 			);
 
 			reportNoteInput = el('textarea', {
@@ -4362,47 +4547,57 @@
 		function exportSiteRules() {
 			const rules = state.siteRules || {};
 			let totalRules = 0;
-			for (const h in rules)
+			for (const h in rules) {
 				if (Array.isArray(rules[h])) totalRules += rules[h].length;
+			}
 			if (totalRules === 0) {
-				toast('There are no optional rules to export yet');
+				toast('There are no custom rules to export yet');
 				return;
 			}
-			const jsonStr = JSON.stringify(rules);
-			let payload = jsonStr;
-			try {
-				payload = btoa(unescape(encodeURIComponent(jsonStr)));
-			} catch (e) {
-				payload = jsonStr;
-			}
+			const jsonStr = JSON.stringify(rules, null, 2);
 
-			const fallback = () => prompt('Copy rule code (Base64/JSON):', payload);
+			const fallback = () => prompt('Copy JSON rules:', jsonStr);
 			try {
 				if (navigator.clipboard && navigator.clipboard.writeText) {
-					navigator.clipboard.writeText(payload).then(() => {
-						toast(`Đã sao chép ${totalRules} Rules on Clipboard!`);
+					navigator.clipboard.writeText(jsonStr).then(() => {
+						toast(`Copied ${totalRules} rules as JSON!`);
 					}).catch(fallback);
 				} else {
 					fallback();
 				}
-			} catch (e) { fallback(); }
+			} catch (e) {
+				fallback();
+			}
 		}
 
 		function importSiteRules() {
-			const input = prompt('Paste the rule chain (JSON or Base64):');
+			const input = prompt('Paste your rules (JSON or Base64):');
 			if (!input || !input.trim()) return;
 			const raw = input.trim();
 			let parsed = null;
 
 			try {
-				const decoded = decodeURIComponent(escape(atob(raw)));
-				parsed = JSON.parse(decoded);
+				parsed = JSON.parse(raw);
 			} catch (e) {
-				try { parsed = JSON.parse(raw); } catch (e2) {}
+				try {
+					const decoded = decodeURIComponent(escape(atob(raw)));
+					parsed = JSON.parse(decoded);
+				} catch (e2) {}
 			}
 
-			if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-				toast('Invalid rule format');
+			if (Array.isArray(parsed)) {
+				const currentHost = hostname.toLowerCase();
+				const formattedList = parsed.map(item => {
+					if (typeof item === 'string') return { selector: item, action: 'hide', created: Date.now() };
+					return item;
+				}).filter(item => item && item.selector);
+				parsed = {
+					[currentHost]: formattedList
+				};
+			}
+
+			if (!parsed || typeof parsed !== 'object') {
+				toast('Invalid rules format');
 				return;
 			}
 
@@ -4417,13 +4612,14 @@
 
 				const existingSelectors = new Set(state.siteRules[normHost].map(r => r.selector));
 				for (const rule of hostRules) {
-					if (rule && rule.selector && !existingSelectors.has(rule.selector)) {
+					const sel = typeof rule === 'string' ? rule : (rule && rule.selector);
+					if (sel && !existingSelectors.has(sel)) {
 						state.siteRules[normHost].push({
-							selector: rule.selector,
-							action: rule.action || 'hide',
-							created: rule.created || Date.now()
+							selector: sel,
+							action: (rule && rule.action) || 'hide',
+							created: (rule && rule.created) || Date.now()
 						});
-						existingSelectors.add(rule.selector);
+						existingSelectors.add(sel);
 						mergedCount++;
 					}
 				}
@@ -4432,8 +4628,11 @@
 			persistSiteRules();
 			installSiteRulesCSS();
 			initialScan();
-			toast(`Successfully merged ${mergedCount} new rule!`);
+			toast(`Successfully merged ${mergedCount} new rule(s)!`);
 		}
+
+		let blockBtn = null,
+			blockAllBtn = null;
 
 		function buildPicker() {
 			if (pickerEl) return;
@@ -4450,68 +4649,41 @@
 			pickerBarEl.setAttribute('data-nvirya-picker', '');
 			pickerBarEl.setAttribute('role', 'toolbar');
 			pickerBarEl.setAttribute('aria-label', 'Element picker navigation');
-			pickerBarEl.style.cssText = 'position:fixed; display:none; align-items:center; gap:6px; padding:6px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(20px) saturate(1.5); backdrop-filter:blur(20px) saturate(1.5); font-size:12.5px; white-space:nowrap; user-select:none;';
+			pickerBarEl.style.cssText = 'position:fixed; display:none; align-items:center; gap:5px; padding:6px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(20px) saturate(1.5); backdrop-filter:blur(20px) saturate(1.5); font-size:12px; white-space:nowrap; user-select:none;';
 
 			const pickerStyle = document.createElement('style');
 			pickerStyle.textContent = `
 				.p-btn {
 					border: 1px solid var(--border);
 					border-radius: 8px;
-					padding: 6px 11px;
+					padding: 6px 9px;
 					background: var(--card);
 					color: var(--text);
-					font: 500 12.5px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+					font: 500 12px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 					cursor: pointer;
 					touch-action: manipulation;
 					transition: background .15s ease, opacity .15s ease, transform .1s ease;
 				}
 				.p-btn:active:not(:disabled) { transform: scale(0.96); }
 				.p-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-				.p-btn-block {
-					background: var(--accent);
-					color: #ffffff;
-					border-color: transparent;
-					font-weight: 600;
-				}
-				.p-btn-block:active:not(:disabled) { opacity: 0.85; }
-				.p-btn-cancel {
-					background: transparent;
-					border-color: var(--border);
-					color: var(--muted);
-				}
+				.p-btn-action { background: var(--accent); color: #ffffff; border-color: transparent; font-weight: 600; }
+				.p-btn-action:active:not(:disabled) { opacity: 0.85; }
+				.p-btn-cancel { background: transparent; border-color: var(--border); color: var(--muted); }
 				@media (hover: hover) {
 					.p-btn:hover:not(:disabled) { background: var(--card-hover); }
-					.p-btn-block:hover:not(:disabled) { opacity: 0.92; }
+					.p-btn-action:hover:not(:disabled) { opacity: 0.92; }
 					.p-btn-cancel:hover:not(:disabled) { background: var(--card); color: var(--text); }
 				}
 			`;
 
-			const parentBtn = el('button', {
-				type: 'button',
-				class: 'p-btn',
-				onclick: () => traversePicker(-1)
-			}, 'Parent');
+			const parentBtn = el('button', { type: 'button', class: 'p-btn', onclick: () => traversePicker(-1) }, 'Parent');
+			const childBtn = el('button', { type: 'button', class: 'p-btn', onclick: () => traversePicker(1) }, 'Child');
+			blockBtn = el('button', { type: 'button', class: 'p-btn p-btn-action', onclick: () => confirmPickerSelection(false) }, 'Block');
+			blockAllBtn = el('button', { type: 'button', class: 'p-btn p-btn-action', style: { background: '#8b5cf6' }, onclick: () => confirmPickerSelection(true) }, 'All');
+			const cancelBtn = el('button', { type: 'button', class: 'p-btn p-btn-cancel', onclick: () => exitPicker(false) }, 'Cancel');
 
-			const childBtn = el('button', {
-				type: 'button',
-				class: 'p-btn',
-				onclick: () => traversePicker(1)
-			}, 'Child');
+			pickerBarEl.append(pickerStyle, parentBtn, childBtn, blockBtn, blockAllBtn, cancelBtn);
 
-			const blockBtn = el('button', {
-				type: 'button',
-				class: 'p-btn p-btn-block',
-				onclick: () => confirmPickerSelection(),
-				'aria-label': 'Block selected element'
-			}, 'Block');
-
-			const cancelBtn = el('button', {
-				type: 'button',
-				class: 'p-btn p-btn-cancel',
-				onclick: () => exitPicker(false)
-			}, 'Cancel');
-
-			pickerBarEl.append(pickerStyle, parentBtn, childBtn, blockBtn, cancelBtn);
 			const targetRoot = root || D.body || D.documentElement;
 			targetRoot.appendChild(pickerEl);
 			targetRoot.appendChild(pickerLabelEl);
@@ -4567,15 +4739,27 @@
 			pickerLabelEl.textContent = describe(el);
 			pickerLabelEl.style.left = Math.max(4, rect.left) + 'px';
 			pickerLabelEl.style.top = Math.max(4, rect.top - 22) + 'px';
+
 			const buttons = pickerBarEl ? pickerBarEl.querySelectorAll('button') : [];
-			if (buttons.length >= 4) {
-				const tag = String(el.tagName || '').toLowerCase();
+			if (buttons.length >= 2) {
 				buttons[0].disabled = !el.parentElement || /^(?:body|html)$/.test(String(el.parentElement.tagName || '').toLowerCase());
 				buttons[1].disabled = !el.firstElementChild;
 			}
+
+			const simSel = makeSimilarSelector(el);
+			let simCount = 1;
+			if (simSel) {
+				try { simCount = D.querySelectorAll(simSel).length; } catch (e) {}
+			}
+			if (blockAllBtn) {
+				blockAllBtn.textContent = simCount > 1 ? `All (${simCount})` : 'All';
+				blockAllBtn.style.display = simCount > 1 ? 'inline-block' : 'none';
+			}
+
 			if (pickerBarEl) {
 				pickerBarEl.style.display = 'flex';
-				const left = Math.max(6, Math.min((W.innerWidth || 320) - 250, rect.left));
+				const barW = simCount > 1 ? 290 : 230;
+				const left = Math.max(6, Math.min((W.innerWidth || 320) - barW, rect.left));
 				const top = rect.bottom + 10 + 52 < (W.innerHeight || 480) ? rect.bottom + 10 : Math.max(6, rect.top - 58);
 				pickerBarEl.style.left = left + 'px';
 				pickerBarEl.style.top = top + 'px';
@@ -4680,6 +4864,24 @@
 			return unique(path) ? path : path;
 		}
 
+		function makeSimilarSelector(el) {
+			if (!el || el.nodeType !== 1) return null;
+			const tag = String(el.tagName || '').toLowerCase();
+			if (/^(?:html|body)$/.test(tag)) return null;
+
+			const stableClasses = classString(el).split(/\s+/).filter(isStableClassToken);
+			if (stableClasses.length > 0) {
+				return tag + stableClasses.map(c => '.' + (W.CSS && W.CSS.escape ? W.CSS.escape(c) : c.replace(/[^a-zA-Z0-9_-]/g, '\\$&'))).join('');
+			}
+
+			const parent = el.parentElement;
+			if (parent && !/^(?:html|body)$/i.test(String(parent.tagName || ''))) {
+				const pSel = makeSimilarSelector(parent);
+				if (pSel) return pSel + ' > ' + tag;
+			}
+			return tag;
+		}
+
 		function selectElement(el) {
 			if (!el || el.nodeType !== 1 || isNviryaNode(el)) return;
 			showPickerTarget(el);
@@ -4692,30 +4894,39 @@
 			showPickerTarget(next);
 		}
 
-		function confirmPickerSelection() {
+		function confirmPickerSelection(isAll) {
 			const selected = pickerTarget;
 			if (!selected || !selected.isConnected) { toast('Element is no longer on the page'); return; }
 			if (isProtectedPlayer(selected) && !confirm('This element belongs to the media player. Blocking can damage video playback. Continue?')) {
 				exitPicker(true);
 				return;
 			}
-			const sel = makeSelector(selected);
+
+			const sel = isAll ? makeSimilarSelector(selected) : makeSelector(selected);
 			if (!sel) {
-				toast('Không thể tạo selector');
+				toast('Unable to create selector');
 				exitPicker(true);
 				return;
 			}
-			if (!confirm('Block this element on the page?\n\n' + sel)) { exitPicker(true); return; }
+
+			const promptMsg = isAll ? `Block ALL similar elements (${sel})? ` : `Block this element on the page? \N\n${sel}`;
+			if (!confirm(promptMsg)) { exitPicker(true); return; }
+
 			if (!state.siteRules[hostname]) state.siteRules[hostname] = [];
 			state.siteRules[hostname].push({ selector: sel, action: 'hide', created: Date.now() });
 			persistSiteRules();
+
 			try {
-				selected.setAttribute('data-nvirya-hidden', 'manual');
-				state.hiddenNodes.add(selected);
-				stats.inc('hidden');
+				const targets = isAll ? D.querySelectorAll(sel) : [selected];
+				targets.forEach(node => {
+					node.setAttribute('data-nvirya-hidden', 'manual');
+					state.hiddenNodes.add(node);
+					stats.inc('hidden');
+				});
 			} catch (e) {}
+
 			installSiteRulesCSS();
-			toast('Đã chặn phần tử');
+			toast(isAll ? 'Blocked all similar elements' : 'Blocked elements');
 			exitPicker(true);
 		}
 
@@ -4736,6 +4947,150 @@
 			const tail = logRing.slice(-15);
 			for (const e of tail) lines.push('  ' + e.level + ' ' + e.type + ' ' + e.msg + (e.extra ? ' ' + e.extra : ''));
 			return lines.join('\n');
+		}
+
+		function forceUnlockScroll() {
+			const changed = unlockPageScroll();
+			try {
+				[D.documentElement, D.body].forEach(el => {
+					if (!el) return;
+					el.style.setProperty('overflow', 'auto', 'important');
+					el.style.setProperty('overflow-y', 'auto', 'important');
+					if (W.getComputedStyle(el).position === 'fixed') {
+						el.style.setProperty('position', 'static', 'important');
+					}
+				});
+			} catch (e) {}
+			toast('Unlocked page scroll');
+		}
+
+		let peekTimer = null;
+
+		function peekOriginal() {
+			if (peekTimer) return;
+			const siteStyle = D.querySelector('style[data-nvirya-site-rules]');
+			if (siteStyle) siteStyle.disabled = true;
+			if (cosmeticStyleEl) cosmeticStyleEl.disabled = true;
+
+			setMenu(false);
+			toast('Temporarily see the original page (3s)...');
+
+			peekTimer = setTimeout(() => {
+				if (siteStyle) siteStyle.disabled = false;
+				if (cosmeticStyleEl) cosmeticStyleEl.disabled = false;
+				peekTimer = null;
+				toast('Restored the filter');
+			}, 3000);
+		}
+
+		function forceUnlockScroll() {
+			const changed = unlockPageScroll();
+			try {
+				[D.documentElement, D.body].forEach(el => {
+					if (!el) return;
+					el.style.setProperty('overflow', 'auto', 'important');
+					el.style.setProperty('overflow-y', 'auto', 'important');
+					if (W.getComputedStyle(el).position === 'fixed') {
+						el.style.setProperty('position', 'static', 'important');
+					}
+				});
+			} catch (e) {}
+			toast('Unlocked page scroll');
+		}
+
+		let rulesModalEl = null;
+
+		function buildRulesModal() {
+			if (rulesModalEl) return;
+			const card = el('div', { class: 'report-card', style: { maxHeight: '80vh', display: 'flex', flexDirection: 'column' } });
+			const head = el('div', { class: 'report-head' },
+				el('div', { class: 'titles' },
+					el('h2', null, 'Rules of this page'),
+					el('div', { class: 'badge', style: { marginTop: '2px' } }, hostname || '(unknown)')
+				),
+				el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => closeRulesModal() }, icon('close'))
+			);
+			const listContainer = el('div', { class: 'rules-list', style: { overflowY: 'auto', flex: '1 1 auto', margin: '10px 0', display: 'flex', flexDirection: 'column', gap: '6px' } });
+			card.append(head, listContainer);
+			rulesModalEl = el('div', { class: 'report-modal' }, card);
+			root.appendChild(rulesModalEl);
+		}
+
+		function openRulesModal() {
+			buildRulesModal();
+			renderRulesList();
+			rulesModalEl.classList.add('open');
+			if (host) host.style.pointerEvents = 'auto';
+		}
+
+		function closeRulesModal() {
+			if (rulesModalEl) rulesModalEl.classList.remove('open');
+			if (host && !menuOpen) host.style.pointerEvents = 'none';
+		}
+
+		function removeSingleRule(selector) {
+			const list = state.siteRules[hostname] || [];
+			state.siteRules[hostname] = list.filter(r => r.selector !== selector);
+			if (state.siteRules[hostname].length === 0) delete state.siteRules[hostname];
+			persistSiteRules();
+
+			installSiteRulesCSS();
+			try {
+				D.querySelectorAll(selector).forEach(el => {
+					el.removeAttribute('data-nvirya-hidden');
+					state.hiddenNodes.delete(el);
+				});
+			} catch (e) {}
+
+			renderRulesList();
+			toast(`Đã gỡ: ${selector}`);
+		}
+
+		function renderRulesList() {
+			if (!rulesModalEl) return;
+			const listContainer = rulesModalEl.querySelector('.rules-list');
+			clear(listContainer);
+			const rules = state.siteRules[hostname] || [];
+
+			if (rules.length === 0) {
+				listContainer.appendChild(el('div', { style: { textAlign: 'center', padding: '16px', color: 'var(--muted)', fontSize: '13px' } }, 'There are no rules for this page'));
+				return;
+			}
+
+			rules.forEach(r => {
+				const row = el('div', {
+					style: {
+						display: 'flex',
+						alignItems: 'center',
+						justifyContent: 'space-between',
+						background: 'var(--card)',
+						border: '1px solid var(--border)',
+						borderRadius: '10px',
+						padding: '8px 12px',
+						gap: '8px'
+					}
+				});
+				const code = el('code', {
+					style: {
+						fontFamily: 'monospace',
+						fontSize: '12px',
+						flex: '1',
+						overflow: 'hidden',
+						textOverflow: 'ellipsis',
+						whiteSpace: 'nowrap'
+					}
+				}, r.selector);
+
+				const delBtn = el('button', {
+					class: 'icon-btn',
+					type: 'button',
+					style: { width: '26px', height: '26px', flex: 'none', color: 'var(--danger)' },
+					onclick: () => removeSingleRule(r.selector)
+				}, icon('close'));
+
+				row.append(code, delBtn);
+				listContainer.appendChild(row);
+			});
 		}
 
 		return {
@@ -4774,14 +5129,40 @@
 	}
 
 	function undoLast() {
-		const last = state.removedNodes.pop();
-		if (!last || !last.parent) { UI.toast('Nothing to undo'); return; }
-		try {
-			if (last.next && last.next.parentNode === last.parent) last.parent.insertBefore(last.el, last.next);
-			else last.parent.appendChild(last.el);
-			UI.toast('Restored');
-		} catch (e) { UI.toast('Could not restore'); }
+		const rules = state.siteRules[hostname];
+		if (rules && rules.length > 0) {
+			const popped = rules.pop();
+			if (rules.length === 0) delete state.siteRules[hostname];
+			persistSiteRules();
+			installSiteRulesCSS();
+			try {
+				const hiddenEls = D.querySelectorAll(popped.selector);
+				hiddenEls.forEach(el => {
+					el.removeAttribute('data-nvirya-hidden');
+					state.hiddenNodes.delete(el);
+				});
+			} catch (e) {}
+
+			UI.toast(`Redone: ${popped.selector}`);
+			return;
+		}
+
+		const lastNode = state.removedNodes.pop();
+		if (lastNode && lastNode.parent) {
+			try {
+				if (lastNode.next && lastNode.next.parentNode === lastNode.parent) {
+					lastNode.parent.insertBefore(lastNode.el, lastNode.next);
+				} else {
+					lastNode.parent.appendChild(lastNode.el);
+				}
+				UI.toast('Restored the element');
+				return;
+			} catch (e) {}
+		}
+
+		UI.toast('There is no action to undo');
 	}
+
 
 	function refreshProtection() {
 		if (isDisabledHere()) {
