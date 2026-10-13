@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.1.3
+// @version      11.1.4-beta
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -28,7 +28,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.1.3';
+	const VERSION = '11.1.4-beta';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -407,6 +407,13 @@
 	installScriptletDefusers();
 	cleanTrackingQuery();
 
+	const isAppleDevice = () => {
+		const ua = navigator.userAgent || '';
+		const isIOS = /iPad|iPhone|iPod/i.test(ua);
+		const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+		return isIOS || isIPadOS;
+	};
+
 	const CONFIG_VERSION = 5;
 	const K_CFG = 'nvirya_x_config';
 	const K_WL = 'nvirya_x_whitelist';
@@ -416,6 +423,7 @@
 	const K_LAST_REP = 'nvirya_x_last_report';
 	const UPDATE_URL = 'https://raw.nvirya.com/adguard/nvirya-adguard.user.js';
 	const STAY_INSTALL_URL = 'stay://x-callback-url/install?scriptURL=' + encodeURIComponent(UPDATE_URL);
+	const INSTALL_URL = isAppleDevice() ? STAY_INSTALL_URL : UPDATE_URL;
 	const K_UPD_LAST = 'nvirya_x_last_update_check';
 	const K_UPD_REMOTE = 'nvirya_x_update_remote';
 	const K_UPD_SNOOZE = 'nvirya_x_update_snooze';
@@ -3007,8 +3015,7 @@
 			bodyEl = null;
 		let themeBtn = null,
 			segBtns = [];
-		let statusEl = null,
-			statsEl = null,
+		let statsEl = null,
 			toastEl = null;
 		let reportModalEl = null,
 			reportReasonSelect = null,
@@ -3306,30 +3313,6 @@
     .body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
     .sec-title { margin: 20px 4px 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 
-    .status {
-      display: flex; align-items: center; gap: 12px;
-      padding: 14px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-    }
-    .led {
-      --lc: 34,197,94;
-      flex: none; width: 10px; height: 10px; border-radius: 50%;
-      background: rgb(var(--lc));
-      box-shadow: 0 0 8px rgba(var(--lc), .7);
-      animation: pulse 2.2s ease-out infinite;
-    }
-    .led.warn { --lc: 245,158,11; }
-    .led.off { --lc: 113,113,122; animation: none; box-shadow: none; }
-    @keyframes pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(var(--lc), .55), 0 0 8px rgba(var(--lc), .6); }
-      70%  { box-shadow: 0 0 0 10px rgba(var(--lc), 0), 0 0 8px rgba(var(--lc), .6); }
-      100% { box-shadow: 0 0 0 0 rgba(var(--lc), 0), 0 0 8px rgba(var(--lc), .6); }
-    }
-    .status .t { font-size: 15px; font-weight: 600; }
-    .status .s { font-size: 12px; color: var(--muted); margin-top: 1px; }
-
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; min-width: 0; }
     .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
@@ -3505,7 +3488,6 @@
     @media (prefers-reduced-motion: reduce) {
       .update-banner { transition: none !important; }
       .handle, .backdrop, .sheet, .toast, .track, .track::after, .item, .seg button, .report-modal { transition: none !important; }
-      .led { animation: none !important; }
     }
   `;
 
@@ -3632,18 +3614,19 @@
 						ubTitleEl = el('div', { class: 'ub-title' }, 'There is a new update!'),
 						el('div', { class: 'ub-desc' }, 'The update helps improve the ability to block ads.')
 					),
-					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': 'Để sau', onclick: () => dismissUpdateBanner() }, icon('close'))
+					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': 'Later', onclick: () => dismissUpdateBanner() }, icon('close'))
 				),
 				el('div', { class: 'ub-actions' },
-					el('button', { class: 'ub-btn later', type: 'button', onclick: () => dismissUpdateBanner() }, 'Để sau'),
+					el('button', { class: 'ub-btn later', type: 'button', onclick: () => dismissUpdateBanner() }, 'Later'),
 					el('a', {
 						class: 'ub-btn go',
-						href: STAY_INSTALL_URL,
+						href: INSTALL_URL,
+						target: isAppleDevice() ? '_self' : '_blank',
 						onclick: () => {
 							Updater.snooze();
 							hideUpdateBanner();
 						}
-					}, 'Cập nhật ngay')
+					}, 'Update Now')
 				)
 			);
 			root.appendChild(updateEl);
@@ -3697,9 +3680,6 @@
 
 		function buildBody() {
 			clear(bodyEl);
-
-			statusEl = el('div', { class: 'status' });
-			bodyEl.appendChild(statusEl);
 
 			bodyEl.appendChild(sectionTitle('Blocked Stats'));
 			const statSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Stats Mode', style: { marginBottom: '8px' } });
@@ -3984,32 +3964,17 @@
 		}
 
 		function renderStatus() {
-			let tone = 'ok',
-				label = 'Protected',
-				sub = 'Blocking ads, popups and redirects';
+			let tone = 'ok';
 			if (!config.enabled) {
 				tone = 'off';
-				label = 'Disabled (global)';
-				sub = 'Turn on Protection in Settings to resume';
 			} else if (state.sessionDisabled[hostname]) {
 				tone = 'warn';
-				label = 'Disabled for this session';
-				sub = 'Blocking is paused on this site';
 			} else if (isWhitelisted(hostname)) {
 				tone = 'warn';
-				label = 'Whitelisted';
-				sub = 'This site is allowed to show ads';
 			}
 
 			if (handleEl) handleEl.setAttribute('data-state', tone);
-			if (!statusEl || !bodyEl) return;
-
-			clear(statusEl);
-			statusEl.appendChild(el('span', { class: 'led' + (tone === 'ok' ? '' : ' ' + tone) }));
-			statusEl.appendChild(el('div', null,
-				el('div', { class: 't' }, label),
-				el('div', { class: 's' }, sub)
-			));
+			if (!bodyEl) return;
 
 			const setItem = (role, label2, sub2) => {
 				const b = bodyEl.querySelector('[data-role="' + role + '"]');
@@ -4472,25 +4437,85 @@
 
 		function buildPicker() {
 			if (pickerEl) return;
+
 			pickerEl = document.createElement('div');
 			pickerEl.setAttribute('data-nvirya-picker', '');
-			pickerEl.style.cssText = 'position:fixed;z-index:2147483003;pointer-events:none;border:2px solid #3b82f6;background:rgba(59,130,246,.1);border-radius:3px;transition:all .05s linear;box-sizing:border-box;';
+			pickerEl.style.cssText = 'position:fixed; z-index:2147483003; pointer-events:none; border:2px solid var(--accent); background:rgba(59,130,246,.15); border-radius:6px; transition:all .06s ease; box-sizing:border-box; box-shadow:0 0 0 1px rgba(255,255,255,.2);';
+
 			pickerLabelEl = document.createElement('div');
-			pickerLabelEl.style.cssText = 'position:fixed;z-index:2147483004;pointer-events:none;background:#0b0b0d;color:#f4f4f5;font:11px system-ui,-apple-system,sans-serif;padding:3px 7px;border-radius:4px;border:1px solid rgba(255,255,255,.1);white-space:nowrap;';
-			(D.body || D.documentElement).appendChild(pickerEl);
-			(D.body || D.documentElement).appendChild(pickerLabelEl);
+			pickerLabelEl.setAttribute('data-nvirya-picker', '');
+			pickerLabelEl.style.cssText = 'position:fixed; z-index:2147483004; pointer-events:none; background:var(--card); color:var(--text); font:600 11.5px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; padding:3px 9px; border-radius:6px; border:1px solid var(--border); box-shadow:0 4px 12px rgba(0,0,0,.15); white-space:nowrap; -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);';
+
 			pickerBarEl = document.createElement('div');
 			pickerBarEl.setAttribute('data-nvirya-picker', '');
 			pickerBarEl.setAttribute('role', 'toolbar');
 			pickerBarEl.setAttribute('aria-label', 'Element picker navigation');
-			pickerBarEl.style.cssText = 'position:fixed;display:none;align-items:center;gap:5px;padding:6px;z-index:2147483005;pointer-events:auto;background:#111827;color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:12px system-ui,-apple-system,sans-serif;white-space:nowrap;';
-			const buttonStyle = 'border:0;border-radius:6px;padding:7px 9px;background:#273449;color:#fff;font:inherit;cursor:pointer;touch-action:manipulation;';
-			const parentBtn = el('button', { type: 'button', style: { cssText: buttonStyle }, onclick: () => traversePicker(-1) }, 'Parent');
-			const childBtn = el('button', { type: 'button', style: { cssText: buttonStyle }, onclick: () => traversePicker(1) }, 'Child');
-			const blockBtn = el('button', { type: 'button', style: { cssText: buttonStyle + 'background:#2563eb;', onclick: () => confirmPickerSelection() }, 'aria-label': 'Block selected element' }, 'Block');
-			const cancelBtn = el('button', { type: 'button', style: { cssText: buttonStyle + 'background:#374151;', onclick: () => exitPicker(false) } }, 'Cancel');
-			pickerBarEl.append(parentBtn, childBtn, blockBtn, cancelBtn);
-			(root || D.documentElement).appendChild(pickerBarEl);
+			pickerBarEl.style.cssText = 'position:fixed; display:none; align-items:center; gap:6px; padding:6px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(20px) saturate(1.5); backdrop-filter:blur(20px) saturate(1.5); font-size:12.5px; white-space:nowrap; user-select:none;';
+
+			const pickerStyle = document.createElement('style');
+			pickerStyle.textContent = `
+				.p-btn {
+					border: 1px solid var(--border);
+					border-radius: 8px;
+					padding: 6px 11px;
+					background: var(--card);
+					color: var(--text);
+					font: 500 12.5px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+					cursor: pointer;
+					touch-action: manipulation;
+					transition: background .15s ease, opacity .15s ease, transform .1s ease;
+				}
+				.p-btn:active:not(:disabled) { transform: scale(0.96); }
+				.p-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+				.p-btn-block {
+					background: var(--accent);
+					color: #ffffff;
+					border-color: transparent;
+					font-weight: 600;
+				}
+				.p-btn-block:active:not(:disabled) { opacity: 0.85; }
+				.p-btn-cancel {
+					background: transparent;
+					border-color: var(--border);
+					color: var(--muted);
+				}
+				@media (hover: hover) {
+					.p-btn:hover:not(:disabled) { background: var(--card-hover); }
+					.p-btn-block:hover:not(:disabled) { opacity: 0.92; }
+					.p-btn-cancel:hover:not(:disabled) { background: var(--card); color: var(--text); }
+				}
+			`;
+
+			const parentBtn = el('button', {
+				type: 'button',
+				class: 'p-btn',
+				onclick: () => traversePicker(-1)
+			}, 'Parent');
+
+			const childBtn = el('button', {
+				type: 'button',
+				class: 'p-btn',
+				onclick: () => traversePicker(1)
+			}, 'Child');
+
+			const blockBtn = el('button', {
+				type: 'button',
+				class: 'p-btn p-btn-block',
+				onclick: () => confirmPickerSelection(),
+				'aria-label': 'Block selected element'
+			}, 'Block');
+
+			const cancelBtn = el('button', {
+				type: 'button',
+				class: 'p-btn p-btn-cancel',
+				onclick: () => exitPicker(false)
+			}, 'Cancel');
+
+			pickerBarEl.append(pickerStyle, parentBtn, childBtn, blockBtn, cancelBtn);
+			const targetRoot = root || D.body || D.documentElement;
+			targetRoot.appendChild(pickerEl);
+			targetRoot.appendChild(pickerLabelEl);
+			targetRoot.appendChild(pickerBarEl);
 		}
 
 		function enterPicker() {
