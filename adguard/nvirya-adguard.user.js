@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.2.1
+// @version      11.3.0
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -28,7 +28,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.2.1';
+	const VERSION = '11.3.0';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -191,11 +191,10 @@
 			const code = `(${mainWorldShield.toString()})();`;
 			const doInject = () => {
 				try {
-					const container = D.head || D.documentElement || D.body;
+					const container = D.documentElement || D.head || D.body;
 					if (!container) return false;
 					const script = D.createElement('script');
 					script.textContent = code;
-					script.setAttribute('data-nvirya-shield', 'true');
 					container.insertBefore(script, container.firstChild);
 					script.remove();
 					return true;
@@ -205,16 +204,10 @@
 			};
 
 			if (!doInject()) {
-				const observer = new MutationObserver(() => {
-					if (doInject()) observer.disconnect();
+				const obs = new MutationObserver(() => {
+					if (doInject()) obs.disconnect();
 				});
-				observer.observe(D, { childList: true, subtree: true });
-				if (D.readyState === 'loading') {
-					D.addEventListener('DOMContentLoaded', () => {
-						doInject();
-						observer.disconnect();
-					}, { once: true });
-				}
+				obs.observe(D, { childList: true });
 			}
 		} catch (e) {}
 	}
@@ -418,6 +411,7 @@
 	const K_CFG = 'nvirya_x_config';
 	const K_WL = 'nvirya_x_whitelist';
 	const K_SR = 'nvirya_x_site_rules';
+	const K_BLOCKED = 'nvirya_x_custom_blocked';
 	const K_ST = 'nvirya_x_stats';
 	const K_SESS = 'nvirya_x_session';
   const K_WEEKLY = 'nvirya_x_weekly_history';
@@ -451,7 +445,137 @@
 		showFloatingButton: true,
 		edgeHandle: true,
 		theme: 'auto', // 'auto' | 'light' | 'dark'
+		lang: 'auto', // 'auto' | 'en' | 'vi' | 'zh-CN'
 		debug: false
+	};
+
+	const TRANSLATIONS = {
+		en: {
+			s_stats: 'Blocked Stats', s_week: "This week's activity", s_act: 'Actions', s_set: 'Settings', s_bak: 'Backup & Share Rules', s_data: 'Data', s_dbg: 'Debug',
+			this_page: 'This Page', all_time: 'All Time', ads_rem: 'Ads removed', el_hid: 'Elements hidden', pop_blk: 'Popups blocked', req_blk: 'Requests blocked',
+			all_pre: 'All-time: ', page_pre: 'This page: ', today: 'Today', ads_u: 'ads', days: 'Mon|Tue|Wed|Thu|Fri|Sat|Sun',
+			wl_add: 'Do not block this site', wl_add_s: 'Always allow this site to run unfiltered', wl_rem: 'Remove from whitelist', wl_rem_s: 'Resume blocking on this site',
+			td_off: 'Disable for this session', td_off_s: 'Pause blocking on this site', td_on: 'Enable for this session', td_on_s: 'Turn blocking back on',
+			pick: 'Block element', pick_s: 'Pick an element to hide on this site', clean: 'Clean page', clean_s: 'Hide leftover ad frames now',
+			rep: 'Report broken / Missed ad', rep_s: 'Report missed ads or page breakage', undo: 'Undo last block', undo_s: 'Restore the last removed element',
+			rules: 'Rules of this page', rules_s: 'View and delete each blocked element', peek: 'See the original page', peek_s: 'Temporarily show hidden blocks for 3 seconds',
+			unlock: 'Unlock the page scroll', unlock_s: 'Fix the device freeze due to blocking popup/modal',
+			t_auto: 'Auto', t_light: 'Light', t_dark: 'Dark',
+			shield: 'Smart Shield', shield_s: 'Block popups, instant redirects & stealth ad frames', media: 'Media Guard', media_s: 'Defend video players',
+			strict: 'Strict Network Filter', strict_s: 'Deep network inspection (may break rare websites)', fab: 'Floating Button', fab_s: 'Show quick access widget on the edge of screen',
+			exp: 'Export Rules', exp_s: 'Copy custom site rules to clipboard', imp: 'Import Rules', imp_s: 'Merge rules from JSON or Base64',
+			upd: 'Check for updates', upd_cur: 'Current version v{ver}', upd_new: 'New version v{remote} (now v{ver})', upd_chk: 'Checking...',
+			rst_cfg: 'Reset settings', rst_cfg_s: 'Restore the default options', clr_st: 'Clear statistics', clr_st_s: 'Set all counters back to zero',
+			rst_rl: 'Reset site rules', rst_rl_s: 'Remove all blocked elements on this site', dbg_cp: 'Copy debug info', dbg_cp_s: 'Copy diagnostics to the clipboard',
+			ub_ttl: 'There is a new update! (v{ver})', ub_dsc: 'The update helps improve the ability to block ads.', ub_ltr: 'Later', ub_now: 'Update Now',
+			rp_ttl: 'Report an incident', rp_rsn: 'Reason:', rp_m1: 'Ad not blocked', rp_m2: 'Page layout issue', rp_m3: 'Video player issue', rp_m4: 'Feature request', rp_m5: 'Other',
+			rp_nt: 'Notes (optional):', rp_ph: 'Note more about the location of advertising...', cancel: 'Cancel', rp_send: 'Send a report', rl_empty: 'There are no rules for this page',
+			p_depth: 'Depth', p_par: 'Parent', p_chd: 'Child', p_blk: 'Block', p_all: 'All',
+			ts_pick: 'Tap an element to block', ts_pclose: 'Picker closed', ts_gone: 'Element is no longer on the page', ts_nosel: 'Unable to create selector',
+			ts_ball: 'Blocked all similar elements', ts_bone: 'Blocked element', ts_wla: 'Whitelisted for this site', ts_wlr: 'Removed from whitelist',
+			ts_tdo: 'Protection enabled for this session', ts_tdf: 'Disabled for this session', ts_cln: 'Page cleaned', ts_rst: 'Settings reset',
+			ts_clr: 'Stats cleared', ts_rlc: 'Site rules cleared', ts_dbg: 'Debug info copied', ts_con: 'Logged to console', ts_ulk: 'Unlocked page scroll',
+			ts_pkon: 'Temporarily viewing original page (3s)...', ts_pkoff: 'Restored filter', ts_rm: 'Removed: {sel}', ts_udo: 'Undone: {sel}',
+			ts_udn: 'Restored the element', ts_ud0: 'There is no action to undo', ts_ufail: 'Unable to check for updates', ts_ulat: 'You are using the latest version!',
+			ts_wait: 'Please wait {sec}s before sending again', ts_nohk: 'Webhook is not configured in script', ts_rpok: 'Report sent! Thank you.', ts_rperr: 'Send failed: {msg}',
+			ts_noexp: 'No custom rules to export yet', ts_exp: 'Copied {count} rules as JSON!', ts_ibad: 'Invalid rules format', ts_imp: 'Merged {count} new rule(s)!',
+			pr_json: 'Copy JSON rules:', pr_imp: 'Paste your rules (JSON or Base64):',
+			cf_rst: 'Reset all settings to defaults?', cf_clr: 'Clear all statistics?', cf_rl: 'Clear all manual rules for this site?',
+			cf_plr: 'Element belongs to media player. Blocking may break video. Continue?', cf_ball: 'Block ALL similar elements ({sel})?', cf_bone: 'Block this element?\n\n{sel}',
+			networkRequests: 'Network Requests', networkRequestsSub: 'Inspect and manually block suspicious domains',
+			blockDomain: 'Block', unblockDomain: 'Unblock', blockedBadge: 'Blocked', allowedBadge: 'Allowed',
+			searchDomainPlaceholder: 'Search domains...', noRequestsYet: 'No requests recorded yet',
+			toastDomainBlocked: 'Blocked domain: {domain}', toastDomainUnblocked: 'Unblocked domain: {domain}',
+			netFilterAll: 'All', netClearLog: 'Clear session log',
+			rep_feat_lbl: 'Description:',
+			placeholderFeature: "Describe the feature or improvement you'd like to suggest...",
+			placeholderBug: 'Describe the issue or ad location...',
+			toastEmptyNote: 'Please describe your feature request'
+		},
+		vi: {
+			s_stats: 'Thống kê chặn', s_week: 'Hoạt động tuần này', s_act: 'Tác vụ nhanh', s_set: 'Cài đặt', s_bak: 'Sao lưu & Chia sẻ luật', s_data: 'Dữ liệu', s_dbg: 'Gỡ lỗi',
+			this_page: 'Trang này', all_time: 'Toàn thời gian', ads_rem: 'Quảng cáo đã gỡ', el_hid: 'Phần tử đã ẩn', pop_blk: 'Popup đã chặn', req_blk: 'Truy vấn đã chặn',
+			all_pre: 'Tổng: ', page_pre: 'Trang này: ', today: 'Hôm nay', ads_u: 'QC', days: 'T2|T3|T4|T5|T6|T7|CN',
+			wl_add: 'Không chặn trang này', wl_add_s: 'Luôn cho phép trang chạy không lọc', wl_rem: 'Gỡ khỏi danh sách trắng', wl_rem_s: 'Bật lại bảo vệ trên trang này',
+			td_off: 'Tắt trong phiên này', td_off_s: 'Tạm dừng chặn trên trang này', td_on: 'Bật lại trong phiên này', td_on_s: 'Kích hoạt lại chế độ chặn',
+			pick: 'Chặn phần tử (Picker)', pick_s: 'Chạm chọn phần tử muốn ẩn trên trang', clean: 'Dọn sạch trang', clean_s: 'Ẩn ngay các khung quảng cáo sót',
+			rep: 'Báo lỗi / Lọt quảng cáo', rep_s: 'Báo quảng cáo lọt hoặc vỡ giao diện', undo: 'Hoàn tác lần chặn cuối', undo_s: 'Khôi phục phần tử vừa ẩn/xóa',
+			rules: 'Luật chặn của trang này', rules_s: 'Xem và xóa từng bộ chọn đã chặn', peek: 'Xem trang gốc (3 giây)', peek_s: 'Tạm hiện khối đã ẩn trong 3 giây',
+			unlock: 'Mở khóa cuộn trang', unlock_s: 'Sửa lỗi đơ cuộn trang do popup/modal',
+			t_auto: 'Tự động', t_light: 'Sáng', t_dark: 'Tối',
+			shield: 'Khiên Thông Minh', shield_s: 'Chặn popup, chuyển hướng & khung QC ẩn', media: 'Bảo vệ Trình phát', media_s: 'Bảo vệ trình phát video',
+			strict: 'Lọc mạng nghiêm ngặt', strict_s: 'Kiểm tra sâu request mạng', fab: 'Nút nổi nhanh (FAB)', fab_s: 'Hiện nút điều khiển ở mép màn hình',
+			exp: 'Xuất luật chặn', exp_s: 'Sao chép luật tùy chỉnh vào clipboard', imp: 'Nhập luật chặn', imp_s: 'Gộp luật từ JSON hoặc Base64',
+			upd: 'Kiểm tra cập nhật', upd_cur: 'Phiên bản hiện tại v{ver}', upd_new: 'Có bản mới v{remote} (nay v{ver})', upd_chk: 'Đang kiểm tra...',
+			rst_cfg: 'Đặt lại cài đặt', rst_cfg_s: 'Khôi phục tùy chọn mặc định', clr_st: 'Xóa thống kê', clr_st_s: 'Đặt lại toàn bộ bộ đếm về 0',
+			rst_rl: 'Xóa luật trang này', rst_rl_s: 'Gỡ mọi phần tử chặn trên trang', dbg_cp: 'Chép thông tin gỡ lỗi', dbg_cp_s: 'Sao chép chẩn đoán vào clipboard',
+			ub_ttl: 'Có bản cập nhật mới! (v{ver})', ub_dsc: 'Bản cập nhật giúp tăng khả năng chặn QC.', ub_ltr: 'Để sau', ub_now: 'Cập nhật ngay',
+			rp_ttl: 'Báo cáo sự cố', rp_rsn: 'Lý do:', rp_m1: 'Lọt quảng cáo', rp_m2: 'Vỡ giao diện', rp_m3: 'Lỗi trình phát video', rp_m4: 'Đề xuất tính năng', rp_m5: 'Khác',
+			rp_nt: 'Ghi chú (tùy chọn):', rp_ph: 'Mô tả thêm về vị trí quảng cáo...', cancel: 'Hủy', rp_send: 'Gửi báo cáo', rl_empty: 'Chưa có luật chặn cho trang này',
+			p_depth: 'Cấp độ', p_par: 'Thẻ cha', p_chd: 'Thẻ con', p_blk: 'Chặn', p_all: 'Tất cả',
+			ts_pick: 'Chạm vào phần tử muốn chặn', ts_pclose: 'Đã đóng trình chọn', ts_gone: 'Phần tử không còn trên trang', ts_nosel: 'Không thể tạo bộ chọn',
+			ts_ball: 'Đã chặn mọi phần tử tương tự', ts_bone: 'Đã chặn phần tử', ts_wla: 'Đã thêm vào danh sách trắng', ts_wlr: 'Đã gỡ khỏi danh sách trắng',
+			ts_tdo: 'Đã bật bảo vệ cho phiên này', ts_tdf: 'Đã tạm tắt trong phiên này', ts_cln: 'Đã dọn sạch trang', ts_rst: 'Đã đặt lại cài đặt',
+			ts_clr: 'Đã xóa thống kê', ts_rlc: 'Đã xóa luật của trang', ts_dbg: 'Đã chép thông tin gỡ lỗi', ts_con: 'Đã in ra Console', ts_ulk: 'Đã mở khóa cuộn trang',
+			ts_pkon: 'Đang tạm hiện trang gốc (3s)...', ts_pkoff: 'Đã khôi phục bộ lọc', ts_rm: 'Đã gỡ: {sel}', ts_udo: 'Đã hoàn tác: {sel}',
+			ts_udn: 'Đã khôi phục phần tử', ts_ud0: 'Không có thao tác để hoàn tác', ts_ufail: 'Không thể kiểm tra cập nhật', ts_ulat: 'Bạn đang ở bản mới nhất!',
+			ts_wait: 'Đợi {sec}s trước khi gửi tiếp', ts_nohk: 'Chưa cấu hình webhook', ts_rpok: 'Gửi báo cáo thành công! Cảm ơn bạn.', ts_rperr: 'Gửi lỗi: {msg}',
+			ts_noexp: 'Chưa có luật tùy chỉnh để xuất', ts_exp: 'Đã chép {count} luật JSON!', ts_ibad: 'Định dạng luật không hợp lệ', ts_imp: 'Đã gộp {count} luật mới!',
+			pr_json: 'Sao chép chuỗi JSON:', pr_imp: 'Dán luật (JSON hoặc Base64):',
+			cf_rst: 'Đặt lại cài đặt về mặc định?', cf_clr: 'Xóa toàn bộ thống kê?', cf_rl: 'Xóa mọi luật thủ công của trang này?',
+			cf_plr: 'Phần tử thuộc trình phát video. Chặn có thể gây lỗi phát. Tiếp tục?', cf_ball: 'Chặn TẤT CẢ phần tử tương tự ({sel})?', cf_bone: 'Chặn phần tử này?\n\n{sel}',
+			networkRequests: 'Nhật ký mạng', networkRequestsSub: 'Soi và tự chặn các tên miền quảng cáo bị lọt',
+			blockDomain: 'Chặn', unblockDomain: 'Bỏ chặn', blockedBadge: 'Đã chặn', allowedBadge: 'Cho phép',
+			searchDomainPlaceholder: 'Tìm tên miền...', noRequestsYet: 'Chưa có request nào',
+			toastDomainBlocked: 'Đã chặn tên miền: {domain}', toastDomainUnblocked: 'Đã bỏ chặn: {domain}',
+			netFilterAll: 'Tất cả', netClearLog: 'Xóa nhật ký phiên',
+			rep_feat_lbl: 'Ý tưởng / Tính năng:',
+			placeholderFeature: 'Mô tả chi tiết tính năng bạn muốn đề xuất...',
+			placeholderBug: 'Mô tả vị trí quảng cáo hoặc lỗi gặp phải...',
+			toastEmptyNote: 'Vui lòng nhập nội dung đề xuất'
+		},
+		'zh-CN': {
+			s_stats: '拦截统计', s_week: '本周活动趋势', s_act: '快捷操作', s_set: '设置', s_bak: '备份与分享规则', s_data: '数据管理', s_dbg: '调试',
+			this_page: '当前页面', all_time: '累计总计', ads_rem: '已移除广告', el_hid: '已隐藏元素', pop_blk: '已拦截弹窗', req_blk: '已拦截请求',
+			all_pre: '累计: ', page_pre: '本页: ', today: '今天', ads_u: '条广告', days: '一|二|三|四|五|六|日',
+			wl_add: '在此网站上停用', wl_add_s: '将该域名加入白名单并放行', wl_rem: '从白名单移除', wl_rem_s: '恢复在此网站上的拦截保护',
+			td_off: '当前会话暂停', td_off_s: '临时暂停本页拦截', td_on: '恢复当前会话保护', td_on_s: '重新开启本页广告拦截',
+			pick: '手动点选拦截', pick_s: '点选页面元素将其隐藏', clean: '立即清理页面', clean_s: '立即隐藏残留广告框架',
+			rep: '反馈漏拦 / 页面错位', rep_s: '报告漏拦广告或显示异常', undo: '撤销上次拦截', undo_s: '恢复最近移除或隐藏的元素',
+			rules: '本页自定义规则', rules_s: '查看并管理本页拦截规则', peek: '预览原始页面 (3秒)', peek_s: '临时显示被隐藏元素3秒钟',
+			unlock: '解除页面滚动锁定', unlock_s: '修复因弹窗拦截导致的无法滚动',
+			t_auto: '自动', t_light: '浅色', t_dark: '深色',
+			shield: '智能护盾', shield_s: '拦截弹窗、自动跳转与隐形广告层', media: '媒体播放器保护', media_s: '保护视频播放器',
+			strict: '严格网络过滤', strict_s: '深度拦截广告请求', fab: '悬浮快捷按钮', fab_s: '在屏幕边缘显示快捷按钮',
+			exp: '导出规则', exp_s: '复制自定义规则到剪贴板', imp: '导入规则', imp_s: '从 JSON 或 Base64 合并规则',
+			upd: '检查更新', upd_cur: '当前版本 v{ver}', upd_new: '发现新版 v{remote} (当前 v{ver})', upd_chk: '正在检查...',
+			rst_cfg: '重置设置', rst_cfg_s: '恢复默认配置选项', clr_st: '清空统计数据', clr_st_s: '将所有拦截计数器归零',
+			rst_rl: '清除本页规则', rst_rl_s: '移除本网站的所有手动规则', dbg_cp: '复制调试信息', dbg_cp_s: '复制诊断日志到剪贴板',
+			ub_ttl: '发现新版本！(v{ver})', ub_dsc: '更新可提升广告拦截能力。', ub_ltr: '稍后', ub_now: '立即更新',
+			rp_ttl: '问题反馈', rp_rsn: '原因:', rp_m1: '广告未拦截', rp_m2: '页面排版错乱', rp_m3: '视频播放异常', rp_m4: '功能建议', rp_m5: '其他',
+			rp_nt: '备注（可选）:', rp_ph: '补充说明广告位置或异常...', cancel: '取消', rp_send: '提交反馈', rl_empty: '当前页面暂无自定义规则',
+			p_depth: '层级', p_par: '父级', p_chd: '子级', p_blk: '拦截', p_all: '全部',
+			ts_pick: '请点选要拦截的元素', ts_pclose: '已退出选择器', ts_gone: '该元素已不在页面中', ts_nosel: '无法生成选择器',
+			ts_ball: '已拦截所有同类元素', ts_bone: '已拦截该元素', ts_wla: '已加入网站白名单', ts_wlr: '已从白名单移除',
+			ts_tdo: '已恢复当前会话保护', ts_tdf: '已在当前会话暂停保护', ts_cln: '页面清理完成', ts_rst: '设置已重置',
+			ts_clr: '统计已清空', ts_rlc: '本页规则已清除', ts_dbg: '调试信息已复制', ts_con: '已输出至控制台', ts_ulk: '页面滚动已解锁',
+			ts_pkon: '正在临时预览原始页面 (3秒)...', ts_pkoff: '已恢复过滤规则', ts_rm: '已移除: {sel}', ts_udo: '已撤销: {sel}',
+			ts_udn: '已恢复元素', ts_ud0: '没有可撤销的操作', ts_ufail: '检查更新失败', ts_ulat: '当前已是最新版本！',
+			ts_wait: '请等待 {sec} 秒后再试', ts_nohk: '未配置有效 Webhook', ts_rpok: '反馈发送成功！感谢。', ts_rperr: '发送失败: {msg}',
+			ts_noexp: '暂无可导出的自定义规则', ts_exp: '已复制 {count} 条 JSON 规则！', ts_ibad: '规则格式无效', ts_imp: '成功合并 {count} 条新规则！',
+			pr_json: '复制 JSON 规则:', pr_imp: '粘贴规则（JSON 或 Base64）:',
+			cf_rst: '确定将设置恢复为默认值？', cf_clr: '确定清空所有统计数据？', cf_rl: '确定清除本页所有手动规则？',
+			cf_plr: '该元素属于媒体播放器，拦截可能导致异常。是否继续？', cf_ball: '确定拦截所有同类元素 ({sel})？', cf_bone: '确定拦截该元素？\n\n{sel}',
+			networkRequests: '网络请求日志', networkRequestsSub: '检查并手动屏蔽可疑域名',
+			blockDomain: '屏蔽', unblockDomain: '解封', blockedBadge: '已屏蔽', allowedBadge: '已允许',
+			searchDomainPlaceholder: '搜索域名...', noRequestsYet: '暂无请求记录',
+			toastDomainBlocked: '已屏蔽域名: {domain}', toastDomainUnblocked: '已解封域名: {domain}',
+			netFilterAll: '全部', netClearLog: '清空会话日志',
+			rep_feat_lbl: '功能描述:',
+			placeholderFeature: '请详细描述您希望添加的功能或建议...',
+			placeholderBug: '描述广告位置或遇到的问题...',
+			toastEmptyNote: '请输入建议内容'
+		}
 	};
 
 	const hasGM = typeof GM_getValue === 'function' && typeof GM_setValue === 'function';
@@ -514,10 +638,29 @@
 
 	let config = loadConfig();
 
+	function getEffectiveLang() {
+		const pref = config && config.lang;
+		if (pref && pref !== 'auto' && TRANSLATIONS[pref]) return pref;
+		const nav = String((W.navigator && W.navigator.language) || 'en').toLowerCase();
+		if (nav.startsWith('vi')) return 'vi';
+		if (nav.startsWith('zh')) return 'zh-CN';
+		return 'en';
+	}
+
+	function t(key, params) {
+		const dict = TRANSLATIONS[getEffectiveLang()] || TRANSLATIONS.en;
+		let s = (dict && dict[key] !== undefined) ? dict[key] : (TRANSLATIONS.en[key] !== undefined ? TRANSLATIONS.en[key] : key);
+		if (params && typeof s === 'string') {
+			for (const k in params) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), String(params[k]));
+		}
+		return s;
+	}
+
 	const hostname = (location.hostname || '').toLowerCase().replace(/\.$/, '');
 	const state = {
 		whitelist: store.get(K_WL, []) || [],
 		siteRules: store.get(K_SR, {}) || {},
+		customBlockedHosts: store.get(K_BLOCKED, []) || [],
 		sessionDisabled: store.get(K_SESS, {}) || {},
 		tempAllowPopupHosts: new Set(),
 		manualBlocks: new Map(),
@@ -527,9 +670,19 @@
 		initialized: false
 	};
 
+	const customBlockedSet = new Set(
+		(Array.isArray(state.customBlockedHosts) ? state.customBlockedHosts : [])
+			.map(h => String(h || '').toLowerCase().trim().replace(/\.$/, ''))
+			.filter(Boolean)
+	);
+	const networkRingBuffer = [];
+	const MAX_NET_BUFFER = 80;
+
 	function persistWhitelist() { store.set(K_WL, state.whitelist.slice()); }
 
 	function persistSiteRules() { store.set(K_SR, state.siteRules); }
+
+	function persistCustomBlocked() { store.set(K_BLOCKED, state.customBlockedHosts.slice()); }
 
 	function persistSession() { store.set(K_SESS, state.sessionDisabled); }
 
@@ -560,6 +713,101 @@
 		const l = String(h || '').toLowerCase();
 		state.whitelist = state.whitelist.filter(x => x.toLowerCase() !== l);
 		persistWhitelist();
+	}
+
+	function isCustomBlockedHost(h) {
+		if (!h || !customBlockedSet.size) return false;
+		const norm = String(h).toLowerCase().trim().replace(/\.$/, '');
+		if (!norm) return false;
+		if (customBlockedSet.has(norm)) return true;
+		for (const pattern of customBlockedSet) {
+			if (hostMatches(norm, pattern)) return true;
+		}
+		return false;
+	}
+
+	function purgeCustomBlockedDom(domain) {
+		if (!domain || !D.documentElement) return;
+		try {
+			const nodes = D.querySelectorAll('script[src], iframe[src], img[src], img[data-src], a[href]');
+			for (let i = 0; i < Math.min(nodes.length, 400); i++) {
+				const el = nodes[i];
+				if (!el || isNviryaNode(el) || isProtectedPlayer(el)) continue;
+				const raw = attr(el, 'src') || attr(el, 'data-src') || attr(el, 'href') || '';
+				const u = safeUrl(raw);
+				if (u && hostMatches(u.hostname, domain)) {
+					const tag = String(el.tagName || '').toLowerCase();
+					if (tag === 'script' || tag === 'iframe') {
+						applyAction(el, 'remove', 'custom-blocked-domain');
+					} else {
+						applyAction(el, 'hide', 'custom-blocked-domain');
+					}
+				}
+			}
+		} catch (e) {}
+	}
+
+	function addCustomBlockedHost(h) {
+		const norm = String(h || '').toLowerCase().trim().replace(/\.$/, '');
+		if (!norm || norm === hostname) return false;
+		if (!customBlockedSet.has(norm)) {
+			customBlockedSet.add(norm);
+			state.customBlockedHosts.push(norm);
+			persistCustomBlocked();
+		}
+		for (let i = 0; i < networkRingBuffer.length; i++) {
+			if (hostMatches(networkRingBuffer[i].hostname, norm)) {
+				networkRingBuffer[i].blocked = true;
+			}
+		}
+		installCosmeticCSS();
+		purgeCustomBlockedDom(norm);
+		return true;
+	}
+
+	function removeCustomBlockedHost(h) {
+		const norm = String(h || '').toLowerCase().trim().replace(/\.$/, '');
+		if (!norm) return false;
+		customBlockedSet.delete(norm);
+		state.customBlockedHosts = state.customBlockedHosts.filter(x => {
+			const item = String(x || '').toLowerCase().trim().replace(/\.$/, '');
+			if (item === norm || hostMatches(norm, item)) {
+				customBlockedSet.delete(item);
+				return false;
+			}
+			return true;
+		});
+		persistCustomBlocked();
+		for (let i = 0; i < networkRingBuffer.length; i++) {
+			const entry = networkRingBuffer[i];
+			if (hostMatches(entry.hostname, norm)) {
+				const u = safeUrl(entry.url);
+				entry.blocked = !!(u && isAdUrl(u));
+			}
+		}
+		installCosmeticCSS();
+		return true;
+	}
+
+	function recordNetworkRequest(u, type, blocked) {
+		if (!u || !u.hostname) return;
+		if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+		if (u.origin === location.origin) return;
+		const reqHost = u.hostname.toLowerCase().replace(/\.$/, '');
+		if (!reqHost || reqHost === hostname) return;
+		if (networkRingBuffer.length >= MAX_NET_BUFFER) {
+			networkRingBuffer.shift();
+		}
+		networkRingBuffer.push({
+			url: u.href,
+			hostname: reqHost,
+			type: type || 'fetch',
+			blocked: !!blocked,
+			time: Date.now()
+		});
+		if (typeof UI !== 'undefined' && UI.refreshNetworkModalIfOpen) {
+			UI.refreshNetworkModalIfOpen();
+		}
 	}
 
 	function isDisabledHere() {
@@ -630,7 +878,7 @@
 
 	let statsSaveTimeout = null;
 
-	const getTodayKey = () => new Date().toISOString().slice(0, 10);
+	const getTodayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 	function recordWeeklyStat(delta = 1) {
 		try {
@@ -745,19 +993,34 @@
 		}
 	};
 	stats.load();
-	installEventListenerGuard();
-	installPopupGuard();
-	installRedirectGuard();
-	installNetworkGuard();
+	const origVisStateDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState') ||
+		Object.getOwnPropertyDescriptor(D, 'visibilityState');
+	const origHiddenDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden') ||
+		Object.getOwnPropertyDescriptor(D, 'hidden');
+
+	function getRealVisibilityState() {
+		try {
+			if (origVisStateDesc && typeof origVisStateDesc.get === 'function') {
+				return origVisStateDesc.get.call(D);
+			}
+		} catch (e) {}
+		return D.visibilityState;
+	}
 
 	try {
 		const syncFlush = () => { stats.saveImmediate(); };
 		W.addEventListener('pagehide', syncFlush, { capture: true });
 		W.addEventListener('beforeunload', syncFlush);
 		D.addEventListener('visibilitychange', () => {
-			if (D.visibilityState === 'hidden') syncFlush();
-		});
+			if (getRealVisibilityState() === 'hidden') syncFlush();
+		}, true);
 	} catch (e) {}
+
+	installEventListenerGuard();
+	installClipboardAndVisibilityGuard();
+	installPopupGuard();
+	installRedirectGuard();
+	installNetworkGuard();
 
 	function safeUrl(input) {
 		if (!input) return null;
@@ -819,6 +1082,7 @@
 		if (!u) return false;
 		const h = u.hostname.toLowerCase();
 		const p = u.pathname.toLowerCase();
+		if (isCustomBlockedHost(h)) return true;
 		if (RE_GAMBLING_HOST.test(h)) return true;
 		if (RE_AD_HOST.test(h)) return true;
 		if (RE_AD_PATH.test(p)) return true;
@@ -966,6 +1230,149 @@
 				return origAEL.apply(this, arguments);
 			};
 
+		} catch (e) {}
+	}
+
+	const RE_CLIPBOARD_ALLOW = /copy|sao chép|clipboard|share|code|mã|link/i;
+	const RE_MAINSTREAM_VIDEO_HOST = /(?:^|\.)(?:youtube\.com|youtu\.be|vimeo\.com|twitch\.tv|netflix\.com|bilibili\.com|dailymotion\.com|tiktok\.com|iq\.com|wetv\.vip|fptplay\.vn|vieon\.vn)$/i;
+
+	function isAllowedClipboardNode(node) {
+		if (!node || node.nodeType !== 1) return false;
+		if (isNviryaNode(node)) return true;
+		let cur = node,
+			depth = 0;
+		while (cur && cur.nodeType === 1 && depth < 6) {
+			const tag = String(cur.tagName || '').toLowerCase();
+			if (tag === 'body' || tag === 'html') break;
+			if (isNviryaNode(cur)) return true;
+			if (tag === 'pre' || tag === 'code' || tag === 'input' || tag === 'textarea' || cur.isContentEditable) return true;
+			const meta = ((cur.id || '') + ' ' + classString(cur) + ' ' + (attr(cur, 'aria-label') || '') + ' ' + (attr(cur, 'title') || '')).trim();
+			const txt = String(cur.textContent || '').trim();
+			if (RE_CLIPBOARD_ALLOW.test(meta) || (txt.length <= 160 && RE_CLIPBOARD_ALLOW.test(txt))) return true;
+			cur = cur.parentElement;
+			depth++;
+		}
+		return false;
+	}
+
+	function isClipboardWriteAllowed() {
+		if (!config.enabled || isDisabledHere()) return true;
+		const recentTarget = (Date.now() - lastUserTargetTime < 4000) ? lastUserTarget : null;
+		if (isAllowedClipboardNode(recentTarget) || isAllowedClipboardNode(D.activeElement)) return true;
+		return false;
+	}
+
+	function shouldSpoofVisibility() {
+		if (!config.enabled || isDisabledHere()) return false;
+		if (RE_MAINSTREAM_VIDEO_HOST.test(hostname)) return false;
+		return true;
+	}
+
+	function installClipboardAndVisibilityGuard() {
+		if (W.__nvirya_clip_vis_guard) return;
+		try { Object.defineProperty(W, '__nvirya_clip_vis_guard', { value: true }); } catch (e) { W.__nvirya_clip_vis_guard = true; }
+
+		// 1. Clipboard Guard: navigator.clipboard.writeText & document.execCommand('copy')
+		try {
+			const clipTargets = [];
+			if (W.Clipboard && W.Clipboard.prototype) clipTargets.push(W.Clipboard.prototype);
+			if (W.navigator && W.navigator.clipboard && clipTargets.indexOf(W.navigator.clipboard) === -1) {
+				clipTargets.push(W.navigator.clipboard);
+			}
+			clipTargets.forEach((target) => {
+				if (!target || typeof target.writeText !== 'function' || target.writeText.__nvirya) return;
+				const origWriteText = target.writeText;
+				const guardedWriteText = function(text) {
+					try {
+						if (!isClipboardWriteAllowed()) {
+							log('BLOCK', 'clipboard', 'Blocked unauthorized clipboard write');
+							return Promise.resolve();
+						}
+					} catch (err) {}
+					return origWriteText.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedWriteText, '__nvirya', { value: true }); } catch (e) {}
+				try {
+					Object.defineProperty(target, 'writeText', {
+						configurable: true,
+						writable: true,
+						value: guardedWriteText
+					});
+				} catch (e) {
+					try { target.writeText = guardedWriteText; } catch (e2) {}
+				}
+			});
+		} catch (e) {}
+
+		try {
+			const docProto = (W.Document && W.Document.prototype) || D;
+			const origExecCommand = docProto.execCommand || D.execCommand;
+			if (typeof origExecCommand === 'function' && !origExecCommand.__nvirya) {
+				const guardedExecCommand = function(command) {
+					try {
+						if (typeof command === 'string' && /^copy$/i.test(command.trim()) && !isClipboardWriteAllowed()) {
+							log('BLOCK', 'clipboard', 'Blocked unauthorized clipboard write');
+							return false;
+						}
+					} catch (err) {}
+					return origExecCommand.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedExecCommand, '__nvirya', { value: true }); } catch (e) {}
+				try {
+					Object.defineProperty(docProto, 'execCommand', {
+						configurable: true,
+						writable: true,
+						value: guardedExecCommand
+					});
+				} catch (e) {
+					try { D.execCommand = guardedExecCommand; } catch (e2) {}
+				}
+			}
+		} catch (e) {}
+
+		// 2. Visibility Spoofing: keep document.visibilityState = 'visible' & document.hidden = false
+		try {
+			const docProto = (W.Document && W.Document.prototype) || D;
+			Object.defineProperty(docProto, 'visibilityState', {
+				configurable: true,
+				enumerable: true,
+				get: function() {
+					if (shouldSpoofVisibility()) return 'visible';
+					return origVisStateDesc && origVisStateDesc.get ? origVisStateDesc.get.call(this) : 'visible';
+				}
+			});
+			Object.defineProperty(docProto, 'hidden', {
+				configurable: true,
+				enumerable: true,
+				get: function() {
+					if (shouldSpoofVisibility()) return false;
+					return origHiddenDesc && origHiddenDesc.get ? origHiddenDesc.get.call(this) : false;
+				}
+			});
+			Object.defineProperty(docProto, 'webkitHidden', {
+				configurable: true,
+				enumerable: true,
+				get: function() {
+					if (shouldSpoofVisibility()) return false;
+					return origHiddenDesc && origHiddenDesc.get ? origHiddenDesc.get.call(this) : false;
+				}
+			});
+		} catch (e) {}
+
+		try {
+			const stopVisEvent = (e) => {
+				if (shouldSpoofVisibility()) {
+					e.stopImmediatePropagation();
+				}
+			};
+			D.addEventListener('visibilitychange', stopVisEvent, true);
+			D.addEventListener('webkitvisibilitychange', stopVisEvent, true);
+			W.addEventListener('visibilitychange', stopVisEvent, true);
+			W.addEventListener('blur', (e) => {
+				if (e.target === W || e.target === D) {
+					stopVisEvent(e);
+				}
+			}, true);
 		} catch (e) {}
 	}
 
@@ -1141,18 +1548,21 @@
 			D.createElement = function(tagName, options) {
 				const el = origCreateElement.apply(this, arguments);
 				if (typeof tagName === 'string' && tagName.toLowerCase() === 'script') {
-					const origSetAttribute = el.setAttribute;
-					let srcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+					const srcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
 					if (srcDescriptor && srcDescriptor.set) {
 						const origSrcSet = srcDescriptor.set;
 						Object.defineProperty(el, 'src', {
 							configurable: true,
 							set: function(val) {
 								const u = safeUrl(val);
-								if (u && (isAdUrl(u) || isBlacklistedScriptHost(u.hostname))) {
-									log('BLOCK', 'script-src', 'Blocked dynamic script:', u.href);
-									stats.inc('requests');
-									return;
+								if (u) {
+									const shouldBlock = config.enabled && !isDisabledHere() && (isAdUrl(u) || isBlacklistedScriptHost(u.hostname));
+									recordNetworkRequest(u, 'script', shouldBlock);
+									if (shouldBlock) {
+										log('BLOCK', 'script-src', 'Blocked dynamic script:', u.href);
+										stats.inc('requests');
+										return;
+									}
 								}
 								return origSrcSet.call(this, val);
 							},
@@ -1287,6 +1697,35 @@
 			}
 		} catch (e) {}
 
+		const SEARCH_ENGINES = /(?:^|\.)(?:google\.[a-z.]+|bing\.com|yandex\.[a-z.]+|duckduckgo\.com|baidu\.com|coccoc\.com|yahoo\.com|ecosia\.org|brave\.com)$/i;
+		const RE_REDIRECT_PATH = /redirect|out|goto|jump|leave|link|external|away|exit/i;
+		const RE_REDIRECT_WRAPPER_HOST = /(?:^|\.)(?:l\.facebook\.com|lm\.facebook\.com|l\.instagram\.com|t\.umblr\.com|away\.vk\.com|out\.reddit\.com|steamcommunity\.com)$/i;
+		const REDIRECT_PARAM_KEYS = ['url', 'to', 'target', 'dest', 'destination', 'u', 'link', 'go', 'redirect', 'redirect_url', 'href'];
+
+		function extractUnwrappedRedirectUrl(u) {
+			if (!u || !u.searchParams) return null;
+			if (!RE_REDIRECT_PATH.test(u.pathname) && !RE_REDIRECT_WRAPPER_HOST.test(u.hostname)) return null;
+			for (let i = 0; i < REDIRECT_PARAM_KEYS.length; i++) {
+				const raw = u.searchParams.get(REDIRECT_PARAM_KEYS[i]);
+				if (!raw) continue;
+				let candidate = raw.trim();
+				try { candidate = decodeURIComponent(candidate); } catch (err) {}
+				if (/^aHR0c/i.test(candidate)) {
+					try {
+						const b64 = candidate.replace(/-/g, '+').replace(/_/g, '/');
+						candidate = atob(b64).trim();
+						try { candidate = decodeURIComponent(candidate); } catch (e2) {}
+					} catch (err) {}
+				}
+				if (!/^https?:\/\//i.test(candidate)) continue;
+				const targetUrl = safeUrl(candidate);
+				if (targetUrl && (targetUrl.protocol === 'http:' || targetUrl.protocol === 'https:') && !isAdUrl(targetUrl)) {
+					return targetUrl;
+				}
+			}
+			return null;
+		}
+
 		try {
 			D.addEventListener('click', function(e) {
 				if (e.isTrusted) trackUserTarget(e.target);
@@ -1295,14 +1734,28 @@
 				if (isExtensionUiPath(path)) return;
 				const anchor = findAnchorInPath(path);
 				if (!anchor) return;
-				const u = safeUrl(anchor.href || attr(anchor, 'href'));
+				if (anchor.hasAttribute('ping')) {
+					anchor.removeAttribute('ping');
+				}
+				let u = safeUrl(anchor.href || attr(anchor, 'href'));
 				if (!u) return;
+				if (e.isTrusted === true) {
+					const targetUrl = extractUnwrappedRedirectUrl(u);
+					if (targetUrl) {
+						anchor.href = targetUrl.href;
+						u = targetUrl;
+						stats.inc('redirects');
+						log('INFO', 'unwrap', 'Unwrapped redirect link to:', targetUrl.href);
+						if (!isSuspiciousPlayerOverlayClick(e.target, path)) return;
+					}
+				}
 				const adLink = isAdUrl(u);
 				const crossRoot = isUntrustedCrossSiteUrl(u);
 				const opensNew = targetOpensNewContext(anchor);
 				const syntheticExternal = e.isTrusted === false && crossRoot;
 				const hijack = crossRoot && isSuspiciousPlayerOverlayClick(e.target, path);
-				const blockedNewContext = opensNew && !isAllowedPopupDestination(u);
+				const isSearch = SEARCH_ENGINES.test(hostname);
+				const blockedNewContext = opensNew && !isAllowedPopupDestination(u) && (!isSearch || e.isTrusted === false);
 
 				if (adLink || blockedNewContext || syntheticExternal || hijack) {
 					const kind = opensNew ? 'popup' : 'redirect';
@@ -1397,10 +1850,13 @@
 				const origFetch = W.fetch;
 				const patched = function(input, init) {
 					try {
-						if (config.enabled && !isDisabledHere()) {
-							const url = typeof input === 'string' ? input : (input && input.url) || '';
-							const u = safeUrl(url);
-							if (u && isAdUrl(u) && config.strictMode) {
+						const url = typeof input === 'string' ? input : (input && input.url) || '';
+						const u = safeUrl(url);
+						if (u) {
+							const active = config.enabled && !isDisabledHere();
+							const shouldBlock = active && isAdUrl(u) && (config.strictMode || isCustomBlockedHost(u.hostname));
+							recordNetworkRequest(u, 'fetch', shouldBlock);
+							if (shouldBlock) {
 								stats.inc('requests');
 								log('BLOCK', 'network', 'fetch', u.href);
 								return Promise.reject(new TypeError('Blocked by nvirya AdGuard X'));
@@ -1419,10 +1875,14 @@
 			if (XHR && XHR.prototype && !XHR.prototype.__nvirya_open) {
 				const origOpen = XHR.prototype.open;
 				XHR.prototype.open = function(method, url) {
+					this.__nvirya_blocked = false;
 					try {
-						if (config.enabled && !isDisabledHere() && config.strictMode) {
-							const u = safeUrl(url);
-							if (u && isAdUrl(u)) {
+						const u = safeUrl(url);
+						if (u) {
+							const active = config.enabled && !isDisabledHere();
+							const shouldBlock = active && isAdUrl(u) && (config.strictMode || isCustomBlockedHost(u.hostname));
+							recordNetworkRequest(u, 'xhr', shouldBlock);
+							if (shouldBlock) {
 								stats.inc('requests');
 								log('BLOCK', 'network', 'xhr', u.href);
 								this.__nvirya_blocked = true;
@@ -1446,9 +1906,12 @@
 				const orig = W.navigator.sendBeacon;
 				const patched = function(url, data) {
 					try {
-						if (config.enabled && !isDisabledHere() && config.strictMode) {
-							const u = safeUrl(url);
-							if (u && isAdUrl(u)) {
+						const u = safeUrl(url);
+						if (u) {
+							const active = config.enabled && !isDisabledHere();
+							const shouldBlock = active && isAdUrl(u) && (config.strictMode || isCustomBlockedHost(u.hostname));
+							recordNetworkRequest(u, 'beacon', shouldBlock);
+							if (shouldBlock) {
 								stats.inc('requests');
 								log('BLOCK', 'beacon', u.href);
 								return false;
@@ -1927,7 +2390,7 @@
 
 	function hasVisibleLegitimateModal() {
 		try {
-			const nodes = D.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],[role="navigation"]');
+			const nodes = D.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"]');
 			for (let i = 0; i < Math.min(nodes.length, 40); i++) {
 				const el = nodes[i];
 				if (el.hasAttribute('data-nvirya-hidden') || isNviryaNode(el)) continue;
@@ -1985,12 +2448,10 @@
 			for (const prop of overflowProps) {
 				const camel = prop.replace(/-([a-z])/g, function(_, c) { return c.toUpperCase(); });
 				const current = String(cs[camel] || cs.getPropertyValue(prop) || '').toLowerCase();
-				const original = String(base.computed[prop] || '').toLowerCase();
-				if ((current === 'hidden' || current === 'clip') && original !== 'hidden' && original !== 'clip') {
-					const value = base.inline[prop] || base.computed[prop] || 'visible';
+				if (current === 'hidden' || current === 'clip') {
 					rememberScrollOverride(el, prop);
 					try {
-						el.style.setProperty(prop, value, base.priority[prop] || 'important');
+						el.style.setProperty(prop, 'auto', 'important');
 						changed = true;
 					} catch (e) {}
 				}
@@ -2024,6 +2485,9 @@
 		});
 	}
 
+	const TARGETED_CANDIDATE_SELECTOR = 'iframe, ins.adsbygoogle, [id^="aswift_"], [id^="google_ads_"], div[class*="banner" i], div[id*="banner" i], a[target="_blank"]';
+	const TARGETED_TRAP_SELECTOR = 'iframe, div[style], section[style], ins, a[target="_blank"]';
+
 	function queueTrapNode(node, includeDescendants) {
 		if (!node || node.nodeType !== 1 || hasNviryaAncestor(node) ||
 			attr(node, 'data-nvirya-ui') !== null || attr(node, 'data-nvirya-picker') !== null) return;
@@ -2039,8 +2503,8 @@
 		push(node);
 		if (includeDescendants && node.querySelectorAll) {
 			try {
-				const descendants = node.querySelectorAll('*');
-				for (let i = 0; i < Math.min(descendants.length, 80); i++) push(descendants[i]);
+				const descendants = node.querySelectorAll(TARGETED_TRAP_SELECTOR);
+				for (let i = 0; i < Math.min(descendants.length, 60); i++) push(descendants[i]);
 			} catch (e) {}
 		}
 		scheduleTrapFlush();
@@ -2465,13 +2929,21 @@
 
 	function installCosmeticCSS() {
 		if (!config.cosmeticFiltering) return;
+		const customHostRules = [];
+		customBlockedSet.forEach(domain => {
+			const clean = String(domain || '').replace(/["\\]/g, '');
+			if (clean) {
+				customHostRules.push(`iframe[src*="${clean}"], img[src*="${clean}"], a[href*="//${clean}"]`);
+			}
+		});
+		const extraSel = customHostRules.length ? ',\n    ' + customHostRules.join(',\n    ') : '';
 		const css = `
     [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"],
     ins.adsbygoogle,
     [data-ad-slot], [data-ad-client], [data-ad-unit],
     iframe[src*="googlesyndication"], iframe[src*="doubleclick"],
     iframe[src*="adservice.google"], iframe[src*="amazon-adsystem"],
-    [data-nvirya-hidden] {
+    [data-nvirya-hidden]${extraSel} {
       display: none !important;
       visibility: hidden !important;
       pointer-events: none !important;
@@ -2698,13 +3170,30 @@
 		}
 	}
 
-	function enqueue(el) {
-		if (!el || el.nodeType !== 1) return;
-		if (pendingSet.has(el)) return;
-		if (pendingQueue.length >= MAX_QUEUE) pendingQueue.shift();
-		pendingSet.add(el);
-		pendingQueue.push(el);
+	const batchedEnqueueSet = new Set();
+	let batchEnqueueScheduled = false;
+
+	function flushBatchedEnqueue() {
+		batchEnqueueScheduled = false;
+		if (!batchedEnqueueSet.size) return;
+		batchedEnqueueSet.forEach((el) => {
+			if (!el || el.nodeType !== 1 || pendingSet.has(el)) return;
+			if (pendingQueue.length >= MAX_QUEUE) pendingQueue.shift();
+			pendingSet.add(el);
+			pendingQueue.push(el);
+		});
+		batchedEnqueueSet.clear();
 		scheduleProcess();
+	}
+
+	function enqueue(el) {
+		if (!el || el.nodeType !== 1 || pendingSet.has(el) || batchedEnqueueSet.has(el)) return;
+		batchedEnqueueSet.add(el);
+		if (!batchEnqueueScheduled) {
+			batchEnqueueScheduled = true;
+			if (typeof W.requestAnimationFrame === 'function') W.requestAnimationFrame(flushBatchedEnqueue);
+			else setTimeout(flushBatchedEnqueue, 16);
+		}
 	}
 
 	function startObserver() {
@@ -2723,11 +3212,14 @@
 							if (n.nodeType === 1) {
 								if (/^(?:html|body)$/i.test(String(n.tagName))) captureScrollBaseline(n);
 								neutralizeMetaRefresh(n);
-								queueTrapNode(n, true);
+								queueTrapNode(n, false);
 								enqueue(n);
-								if (n.children && n.children.length) {
-									const lim = Math.min(n.children.length, 30);
-									for (let k = 0; k < lim; k++) enqueue(n.children[k]);
+								if (n.querySelectorAll) {
+									try {
+										const candidates = n.querySelectorAll(TARGETED_CANDIDATE_SELECTOR);
+										const lim = Math.min(candidates.length, 24);
+										for (let k = 0; k < lim; k++) enqueue(candidates[k]);
+									} catch (err) {}
 								}
 								hasMutations = true;
 							}
@@ -2735,7 +3227,6 @@
 					} else if (m.type === 'attributes') {
 						const targetNode = m.target;
 						if (targetNode && targetNode.nodeType === 1) {
-							neutralizeMetaRefresh(targetNode);
 							queueTrapNode(targetNode, false);
 							enqueue(targetNode);
 							hasMutations = true;
@@ -2751,7 +3242,7 @@
 				childList: true,
 				subtree: true,
 				attributes: true,
-				attributeFilter: ['src', 'href', 'style', 'class', 'id', 'data-src', 'srcset', 'data-srcset', 'http-equiv', 'aria-label', 'title', 'role', 'aria-modal']
+				attributeFilter: ['src', 'href', 'style', 'class', 'id', 'data-src', 'data-srcset']
 			});
 			if (D.documentElement) {
 				captureScrollBaseline(D.documentElement);
@@ -2771,25 +3262,14 @@
 		scheduleOverlayCleanup(root);
 		queueTrapNode(root, true);
 		scheduleVideoAdScan();
-		const all = root.querySelectorAll ? root.querySelectorAll('*') : [];
-		let trapIndex = 0;
-
-		function scanTrapBatch() {
-			const end = Math.min(trapIndex + 60, all.length);
-			for (; trapIndex < end; trapIndex++) queueTrapNode(all[trapIndex], false);
-			if (trapIndex < all.length) setTimeout(scanTrapBatch, 16);
+		let candidates = [];
+		try {
+			candidates = root.querySelectorAll ? root.querySelectorAll(TARGETED_CANDIDATE_SELECTOR) : [];
+		} catch (e) {}
+		for (let i = 0; i < candidates.length; i++) {
+			queueTrapNode(candidates[i], false);
+			enqueue(candidates[i]);
 		}
-		scanTrapBatch();
-		const CHUNK = 200;
-		let i = 0;
-
-		function step() {
-			const end = Math.min(i + CHUNK, all.length);
-			for (; i < end; i++) enqueue(all[i]);
-			if (i < all.length) scheduleProcess(), setTimeout(step, 24);
-			else scheduleProcess();
-		}
-		step();
 	}
 
 	function installSPAHooks() {
@@ -2822,7 +3302,7 @@
 			installSiteRulesCSS();
 			initialScan();
 		}
-		updateUIStatus();
+		if (typeof UI !== 'undefined' && UI.updateUIStatus) UI.updateUIStatus();
 	}
 
 	function handleAntiAdblock() {
@@ -2960,7 +3440,7 @@
 		}
 
 		function check(manual) {
-			if (checking) { if (manual) UI.toast('Checking...'); return; }
+			if (checking) { if (manual) UI.toast(t('upd_chk')); return; }
 			const now = Date.now();
 			const last = Number(store.get(K_UPD_LAST, 0)) || 0;
 			if (!manual && last <= now && now - last < UPDATE_CHECK_INTERVAL) return;
@@ -2968,7 +3448,7 @@
 			checking = true;
 			store.set(K_UPD_LAST, now);
 			UI.setUpdateChecking(true);
-			if (manual) UI.toast('Checking...');
+			if (manual) UI.toast(t('upd_chk'));
 
 			fetchRemoteVersion((err, remote) => {
 				checking = false;
@@ -2977,7 +3457,7 @@
 					if (err) {
 						log('WARN', 'update', 'check failed', err && err.message);
 						store.set(K_UPD_LAST, Date.now() - UPDATE_CHECK_INTERVAL + UPDATE_RETRY_AFTER);
-						if (manual) UI.toast('Unable to check for updates');
+						if (manual) UI.toast(t('ts_ufail'));
 						return;
 					}
 					if (compareVersions(VERSION, remote) < 0) {
@@ -2997,7 +3477,7 @@
 						store.del(K_UPD_SNOOZE);
 						UI.setUpdateAvailable(null);
 						UI.hideUpdateBanner();
-						if (manual) UI.toast('You are using the latest version!');
+						if (manual) UI.toast(t('ts_ulat'));
 					}
 				} catch (e) { log('ERROR', 'update', e && e.message); }
 			});
@@ -3025,6 +3505,7 @@
 	const UI = (() => {
 		const K_FAB = 'nvirya_x_fab';
 		const THEMES = ['auto', 'light', 'dark'];
+		const LANGS = ['auto', 'en', 'vi', 'zh-CN'];
 		const SVG_NS = 'http://www.w3.org/2000/svg';
 		const FAB_SIZE = 46,
 			FAB_MARGIN = 10;
@@ -3038,11 +3519,13 @@
 			grabEl = null,
 			bodyEl = null;
 		let themeBtn = null,
-			segBtns = [];
+			segBtns = [],
+			langBtns = [];
 		let statsEl = null,
 			toastEl = null;
 		let reportModalEl = null,
 			reportReasonSelect = null,
+			reportNoteLblEl = null,
 			reportNoteInput = null;
 		let pickerEl = null,
 			pickerLabelEl = null,
@@ -3060,10 +3543,14 @@
 			segLifetimeBtn = null;
 		let updateEl = null,
 			ubTitleEl = null,
+			ubDescEl = null,
+			ubLaterBtn = null,
+			ubGoBtn = null,
 			newBadgeEl = null;
 		let updateAvailable = null,
 			updateChecking = false;
-		let uiReady = false;
+		let uiReady = false,
+			sheetBuilt = false;
 
 		function el(tag, props, ...children) {
 			const e = document.createElement(tag);
@@ -3105,7 +3592,8 @@
 				['r', 9, 9, 13, 13, 2], 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'
 			],
 			flag: ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
-			download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm7 10 5 5 5-5', 'M12 15V3']
+			download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm7 10 5 5 5-5', 'M12 15V3'],
+			globe: [['c', 12, 12, 10], 'M2 12h20', 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z']
 		};
 
 		function icon(name, cls) {
@@ -3221,12 +3709,14 @@
       touch-action: none;
       pointer-events: auto;
       z-index: 2147482999;
-      transition: left .28s cubic-bezier(.32,.72,0,1), top .28s cubic-bezier(.32,.72,0,1), opacity .18s ease, transform .18s ease;
+      transition: left .28s cubic-bezier(.32,.72,0,1), top .28s cubic-bezier(.32,.72,0,1), opacity .24s ease, transform .28s cubic-bezier(.32,.72,0,1);
     }
     .handle svg { width: 22px; height: 22px; }
     .handle:hover, .handle:focus-visible { opacity: 1; }
     .handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .handle.hidden { display: none !important; }
+    .handle.idle[data-side="l"] { transform: translateX(-58%) scale(0.92); opacity: 0.42; }
+    .handle.idle[data-side="r"] { transform: translateX(58%) scale(0.92); opacity: 0.42; }
     .handle.dragging { cursor: grabbing; opacity: 1; transform: scale(1.08); transition: opacity .18s ease, transform .18s ease; }
     .handle.away { opacity: 0; pointer-events: none; transform: scale(.8); }
     .handle { --lc: 34,197,94; }
@@ -3508,6 +3998,34 @@
     .report-btn.cancel { background: var(--card); color: var(--text); border: 1px solid var(--border); }
     .report-btn.submit { background: var(--accent); color: #fff; }
     .report-btn:active { opacity: .8; }
+    .net-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 11px; padding: 9px 11px; gap: 8px;
+    }
+    .net-info { flex: 1; min-width: 0; }
+    .net-host-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .net-host {
+      font-weight: 600; font-size: 12.5px; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+    }
+    .net-cnt { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+    .net-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .net-badge {
+      display: inline-block; padding: 1.5px 6px; border-radius: 999px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    }
+    .net-badge.blocked { background: rgba(220,38,38,.14); color: var(--danger); }
+    .net-badge.allowed { background: rgba(34,197,94,.14); color: #22c55e; }
+    .net-act-btn {
+      flex: none; padding: 5px 10px; border-radius: 8px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      border: 1px solid var(--border); background: var(--sheet); color: var(--text);
+      transition: opacity .15s ease, transform .1s ease;
+    }
+    .net-act-btn.block { border-color: rgba(220,38,38,.35); color: var(--danger); }
+    .net-act-btn.unblock { border-color: var(--border); color: var(--accent); }
+    .net-act-btn:active { transform: scale(.96); opacity: .85; }
 
     @media (prefers-reduced-motion: reduce) {
       .update-banner { transition: none !important; }
@@ -3541,8 +4059,8 @@
       display: flex; align-items: flex-end; overflow: hidden;
     }
     .chart-bar-fill {
-      width: 100%; background: var(--muted); opacity: .4;
-      border-radius: 6px; transition: height .25s ease, background .2s ease;
+      width: 100%; background: var(--accent); opacity: .38;
+      border-radius: 6px; transition: height .25s ease, opacity .2s ease;
     }
     .chart-col.active .chart-bar-fill {
       background: var(--accent); opacity: 1;
@@ -3593,36 +4111,85 @@
 			}
 		}
 
+		let fabIdleTimer = null;
+
+		function clearFabIdleTimer() {
+			if (fabIdleTimer) {
+				clearTimeout(fabIdleTimer);
+				fabIdleTimer = null;
+			}
+		}
+
+		function resetFabIdle(schedule = true) {
+			if (!handleEl) return;
+			handleEl.classList.remove('idle');
+			clearFabIdleTimer();
+			if (schedule && !menuOpen && !handleEl.classList.contains('dragging') && !handleEl.classList.contains('hidden')) {
+				fabIdleTimer = setTimeout(() => {
+					fabIdleTimer = null;
+					if (handleEl && !menuOpen && !handleEl.classList.contains('dragging') && !handleEl.classList.contains('hidden')) {
+						handleEl.classList.add('idle');
+					}
+				}, 3000);
+			}
+		}
+
 		function applyFab() {
 			if (!handleEl) return;
 			const vw = D.documentElement.clientWidth || W.innerWidth || 360;
 			const vh = W.innerHeight || 640;
-			const left = fab.side === 'l' ? FAB_MARGIN : Math.max(FAB_MARGIN, vw - FAB_SIZE - FAB_MARGIN);
+			const side = fab.side === 'l' ? 'l' : 'r';
+			const left = side === 'l' ? FAB_MARGIN : Math.max(FAB_MARGIN, vw - FAB_SIZE - FAB_MARGIN);
 			const top = Math.max(FAB_MARGIN, Math.min(vh - FAB_SIZE - FAB_MARGIN, Math.round(fab.y * vh)));
+			handleEl.setAttribute('data-side', side);
 			handleEl.style.left = left + 'px';
 			handleEl.style.top = top + 'px';
+			resetFabIdle(!menuOpen);
 		}
 
-		function build() {
-			if (uiReady && host && host.isConnected) return;
-			host = document.createElement('div');
-			host.setAttribute('data-nvirya-ui', '');
-			host.style.cssText = 'all:initial; display:block; position:fixed; z-index:2147483647; top:0; left:0; width:0; height:0; pointer-events:none;';
-			root = host.attachShadow({ mode: 'open' });
-			const style = document.createElement('style');
-			style.textContent = CSS;
-			root.appendChild(style);
+		function langSetting() { return LANGS.indexOf(config.lang) !== -1 ? config.lang : 'auto'; }
 
-			handleEl = el('div', {
-				class: 'handle',
-				role: 'button',
-				tabindex: '0',
-				'aria-label': 'nvirya AdGuard',
-				'aria-haspopup': 'dialog',
-				'aria-expanded': 'false',
-				'data-state': 'ok'
-			}, icon('shield'), el('span', { class: 'fab-dot' }));
-			root.appendChild(handleEl);
+		function setLang(val) {
+			config.lang = LANGS.indexOf(val) !== -1 ? val : 'auto';
+			saveConfig();
+			refreshLanguageUI();
+		}
+
+		function refreshLanguageUI() {
+			if (sheetBuilt && bodyEl) buildBody();
+			if (ubDescEl) ubDescEl.textContent = t('ub_dsc');
+			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
+			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
+			if (ubTitleEl && updateAvailable) ubTitleEl.textContent = t('ub_ttl', { ver: updateAvailable });
+			if (reportModalEl) {
+				const wasOpen = reportModalEl.classList.contains('open');
+				reportModalEl.remove();
+				reportModalEl = null;
+				if (wasOpen) openReportModal();
+			}
+			if (rulesModalEl) {
+				const wasOpen = rulesModalEl.classList.contains('open');
+				rulesModalEl.remove();
+				rulesModalEl = null;
+				if (wasOpen) openRulesModal();
+			}
+			if (networkModalEl) {
+				const wasOpen = networkModalEl.classList.contains('open');
+				networkModalEl.remove();
+				networkModalEl = null;
+				if (wasOpen) openNetworkModal();
+			}
+			if (pickerEl && !pickerActive) {
+				pickerEl.remove();
+				if (pickerLabelEl) pickerLabelEl.remove();
+				if (pickerBarEl) pickerBarEl.remove();
+				pickerEl = pickerLabelEl = pickerBarEl = pickerSliderEl = pickerDepthValEl = null;
+			}
+		}
+
+		function ensureSheetBuilt() {
+			if (sheetBuilt && sheetEl) return;
+			if (!root) return;
 
 			backdropEl = el('div', { class: 'backdrop' });
 			backdropEl.addEventListener('click', (e) => {
@@ -3630,7 +4197,7 @@
 				e.stopPropagation();
 				setMenu(false);
 			});
-			root.appendChild(backdropEl);
+			root.insertBefore(backdropEl, toastEl);
 
 			sheetEl = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Nvirya AdGuard X', 'aria-hidden': 'true', tabindex: '-1' });
 			themeBtn = el('button', {
@@ -3656,7 +4223,7 @@
 			const head = el('div', { class: 'head' },
 				el('div', { class: 'titles' },
 					el('h1', null, 'Nvirya AdGuard X',
-						newBadgeEl = el('span', { class: 'new-badge', 'aria-label': 'There is a new update' }, 'NEW')),
+						newBadgeEl = el('span', { class: 'new-badge', 'aria-label': 'NEW' }, 'NEW')),
 					el('div', { class: 'badge' }, hostname || '(unknown)')
 				),
 				el('div', { class: 'head-btns' }, themeBtn, closeBtn)
@@ -3665,7 +4232,34 @@
 			bodyEl = el('div', { class: 'body' });
 			sheetEl.appendChild(grabEl);
 			sheetEl.appendChild(bodyEl);
-			root.appendChild(sheetEl);
+			root.insertBefore(sheetEl, toastEl);
+
+			sheetBuilt = true;
+			buildBody();
+			applyUpdateBadge();
+			wireSheet();
+		}
+
+		function build() {
+			if (uiReady && host && host.isConnected) return;
+			host = document.createElement('div');
+			host.setAttribute('data-nvirya-ui', '');
+			host.style.cssText = 'all:initial; display:block; position:fixed; z-index:2147483647; top:0; left:0; width:0; height:0; pointer-events:none;';
+			root = host.attachShadow({ mode: 'open' });
+			const style = document.createElement('style');
+			style.textContent = CSS;
+			root.appendChild(style);
+
+			handleEl = el('div', {
+				class: 'handle',
+				role: 'button',
+				tabindex: '0',
+				'aria-label': 'nvirya AdGuard',
+				'aria-haspopup': 'dialog',
+				'aria-expanded': 'false',
+				'data-state': 'ok'
+			}, icon('shield'), el('span', { class: 'fab-dot' }));
+			root.appendChild(handleEl);
 
 			toastEl = el('div', { class: 'toast', role: 'status' });
 			root.appendChild(toastEl);
@@ -3674,14 +4268,14 @@
 				el('div', { class: 'ub-row' },
 					el('span', { class: 'tile t-blue ub-icon' }, icon('download')),
 					el('div', { class: 'ub-txt' },
-						ubTitleEl = el('div', { class: 'ub-title' }, 'There is a new update!'),
-						el('div', { class: 'ub-desc' }, 'The update helps improve the ability to block ads.')
+						ubTitleEl = el('div', { class: 'ub-title' }, t('ub_ttl', { ver: VERSION })),
+						ubDescEl = el('div', { class: 'ub-desc' }, t('ub_dsc'))
 					),
-					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': 'Later', onclick: () => dismissUpdateBanner() }, icon('close'))
+					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': t('ub_ltr'), onclick: () => dismissUpdateBanner() }, icon('close'))
 				),
 				el('div', { class: 'ub-actions' },
-					el('button', { class: 'ub-btn later', type: 'button', onclick: () => dismissUpdateBanner() }, 'Later'),
-					el('a', {
+					ubLaterBtn = el('button', { class: 'ub-btn later', type: 'button', onclick: () => dismissUpdateBanner() }, t('ub_ltr')),
+					ubGoBtn = el('a', {
 						class: 'ub-btn go',
 						href: INSTALL_URL,
 						target: isAppleDevice() ? '_self' : '_blank',
@@ -3689,7 +4283,7 @@
 							Updater.snooze();
 							hideUpdateBanner();
 						}
-					}, 'Update Now')
+					}, t('ub_now'))
 				)
 			);
 			root.appendChild(updateEl);
@@ -3698,15 +4292,21 @@
 
 			loadFab();
 			updateAvailable = Updater.getAvailable();
-			buildBody();
 			applyTheme();
 			applyFab();
-			applyUpdateBadge();
+			renderStatus();
 
 			if (!config.showFloatingButton) handleEl.classList.add('hidden');
 
 			wireHandle();
-			wireSheet();
+
+			setTimeout(() => {
+				if (typeof W.requestIdleCallback === 'function') {
+					W.requestIdleCallback(() => ensureSheetBuilt(), { timeout: 2000 });
+				} else {
+					ensureSheetBuilt();
+				}
+			}, 3000);
 
 			try {
 				const mq = W.matchMedia('(prefers-color-scheme: dark)');
@@ -3721,7 +4321,7 @@
 			uiReady = true;
 		}
 
-		function sectionTitle(t) { return el('div', { class: 'sec-title' }, t); }
+		function sectionTitle(txt) { return el('div', { class: 'sec-title' }, txt); }
 
 		function item(o) {
 			const b = el('button', { class: 'item' + (o.danger ? ' danger' : ''), type: 'button', onclick: o.onclick });
@@ -3742,12 +4342,13 @@
 		}
 
 		function buildBody() {
+			if (!bodyEl) return;
 			clear(bodyEl);
 
-			bodyEl.appendChild(sectionTitle('Blocked Stats'));
+			bodyEl.appendChild(sectionTitle(t('s_stats')));
 			const statSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Stats Mode', style: { marginBottom: '8px' } });
-			segSessionBtn = el('button', { type: 'button', 'aria-pressed': 'true', onclick: () => setStatsMode('session') }, 'This Page');
-			segLifetimeBtn = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => setStatsMode('lifetime') }, 'All Time');
+			segSessionBtn = el('button', { type: 'button', 'aria-pressed': String(statsMode === 'session'), onclick: () => setStatsMode('session') }, t('this_page'));
+			segLifetimeBtn = el('button', { type: 'button', 'aria-pressed': String(statsMode === 'lifetime'), onclick: () => setStatsMode('lifetime') }, t('all_time'));
 			statSeg.appendChild(segSessionBtn);
 			statSeg.appendChild(segLifetimeBtn);
 			bodyEl.appendChild(statSeg);
@@ -3755,7 +4356,7 @@
 			statsEl = el('div', { class: 'stats' });
 			bodyEl.appendChild(statsEl);
 
-			bodyEl.appendChild(sectionTitle('Actions'));
+			bodyEl.appendChild(sectionTitle(t('s_act')));
 			const actions = el('div', { class: 'group icons' });
 
 			actions.appendChild(item({
@@ -3766,10 +4367,10 @@
 				onclick: () => {
 					if (isWhitelisted(hostname)) {
 						removeWhitelist(hostname);
-						toast('Removed from whitelist');
+						toast(t('ts_wlr'));
 					} else {
 						addWhitelist(hostname);
-						toast('Whitelisted for this site');
+						toast(t('ts_wla'));
 					}
 					renderStatus();
 					refreshProtection();
@@ -3784,19 +4385,19 @@
 					if (state.sessionDisabled[hostname]) {
 						delete state.sessionDisabled[hostname];
 						persistSession();
-						toast('Protection enabled for this session');
+						toast(t('ts_tdo'));
 					} else {
 						state.sessionDisabled[hostname] = true;
 						persistSession();
-						toast('Disabled for this session');
+						toast(t('ts_tdf'));
 					}
 					renderStatus();
 					refreshProtection();
 				}
 			}));
 			actions.appendChild(item({
-				label: 'Block element',
-				sub: 'Pick an element to hide on this site',
+				label: t('pick'),
+				sub: t('pick_s'),
 				tone: 'blue',
 				icon: 'target',
 				chevron: true,
@@ -3806,51 +4407,59 @@
 				}
 			}));
 			actions.appendChild(item({
-				label: 'Clean page',
-				sub: 'Hide leftover ad frames now',
+				label: t('clean'),
+				sub: t('clean_s'),
 				tone: 'purple',
 				icon: 'wand',
 				chevron: true,
 				onclick: () => {
 					cleanPage();
-					toast('Page cleaned');
+					toast(t('ts_cln'));
 				}
 			}));
 			actions.appendChild(item({
-				label: 'Report broken / Missed ad',
-				sub: 'Report missed ads or page breakage',
+				label: t('rep'),
+				sub: t('rep_s'),
 				tone: 'orange',
 				icon: 'flag',
 				chevron: true,
 				onclick: () => openReportModal()
 			}));
 			actions.appendChild(item({
-				label: 'Undo last block',
-				sub: 'Restore the last removed element',
+				label: t('undo'),
+				sub: t('undo_s'),
 				tone: 'gray',
 				icon: 'undo',
 				chevron: true,
 				onclick: () => undoLast()
 			}));
 			actions.appendChild(item({
-				label: 'Rules of this page',
-				sub: 'View and delete each blocked element',
+				label: t('networkRequests'),
+				sub: t('networkRequestsSub'),
+				tone: 'purple',
+				icon: 'globe',
+				chevron: true,
+				onclick: () => openNetworkModal()
+			}));
+			actions.appendChild(item({
+				label: t('rules'),
+				sub: t('rules_s'),
 				tone: 'blue',
 				icon: 'copy',
 				chevron: true,
 				onclick: () => openRulesModal()
 			}));
 			actions.appendChild(item({
-				label: 'See the original page',
-				sub: 'Temporarily show hidden blocks for 3 seconds',
+				label: t('peek'),
+				sub: t('peek_s'),
 				tone: 'orange',
 				icon: 'wand',
 				chevron: true,
 				onclick: () => peekOriginal()
 			}));
 			actions.appendChild(item({
-				label: 'Unlock the page scroll',
-				sub: 'Fix the device freeze due to blocking popup/modal',
+				label: t('unlock'),
+				sub: t('unlock_s'),
 				tone: 'green',
 				icon: 'undo',
 				chevron: true,
@@ -3858,14 +4467,14 @@
 			}));
 			bodyEl.appendChild(actions);
 
-			bodyEl.appendChild(sectionTitle('Settings'));
+			bodyEl.appendChild(sectionTitle(t('s_set')));
 			const themeGroup = el('div', { class: 'group pad' });
 			const seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Theme' });
 			segBtns = [];
 			for (const [val, label] of [
-					['auto', 'Auto'],
-					['light', 'Light'],
-					['dark', 'Dark']
+					['auto', t('t_auto')],
+					['light', t('t_light')],
+					['dark', t('t_dark')]
 				]) {
 				const b = el('button', { type: 'button', onclick: () => setTheme(val) }, label);
 				b.dataset.val = val;
@@ -3874,6 +4483,28 @@
 			}
 			themeGroup.appendChild(seg);
 			bodyEl.appendChild(themeGroup);
+
+			const langGroup = el('div', { class: 'group pad' });
+			const langSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Language' });
+			langBtns = [];
+			const curLang = langSetting();
+			for (const [val, label] of [
+					['auto', t('t_auto')],
+					['en', 'EN'],
+					['vi', 'VI'],
+					['zh-CN', '中文']
+				]) {
+				const b = el('button', {
+					type: 'button',
+					'aria-pressed': String(curLang === val),
+					onclick: () => setLang(val)
+				}, label);
+				b.dataset.val = val;
+				langBtns.push(b);
+				langSeg.appendChild(b);
+			}
+			langGroup.appendChild(langSeg);
+			bodyEl.appendChild(langGroup);
 
 			const swGroup = el('div', { class: 'group' });
 
@@ -3895,8 +4526,8 @@
 
 			const isSmartShieldActive = config.enabled && config.popupProtection && config.redirectProtection && config.cosmeticFiltering;
 			swGroup.appendChild(createToggleRow(
-				'Smart Shield',
-				'Block popups, instant redirects & stealth ad frames',
+				t('shield'),
+				t('shield_s'),
 				isSmartShieldActive,
 				(val) => {
 					config.enabled = val;
@@ -3912,8 +4543,8 @@
 			));
 
 			swGroup.appendChild(createToggleRow(
-				'Media Guard',
-				'Defend video players',
+				t('media'),
+				t('media_s'),
 				!!config.playerProtection,
 				(val) => {
 					config.playerProtection = val;
@@ -3922,8 +4553,8 @@
 			));
 
 			swGroup.appendChild(createToggleRow(
-				'Strict Network Filter',
-				'Deep network inspection (may break rare websites)',
+				t('strict'),
+				t('strict_s'),
 				!!config.strictMode,
 				(val) => {
 					config.strictMode = val;
@@ -3932,8 +4563,8 @@
 			));
 
 			swGroup.appendChild(createToggleRow(
-				'Floating Button',
-				'Show quick access widget on the edge of screen',
+				t('fab'),
+				t('fab_s'),
 				!!config.showFloatingButton,
 				(val) => {
 					config.showFloatingButton = val;
@@ -3945,19 +4576,19 @@
 
 			bodyEl.appendChild(swGroup);
 
-			bodyEl.appendChild(sectionTitle('Backup & Share Rules'));
+			bodyEl.appendChild(sectionTitle(t('s_bak')));
 			const shareGroup = el('div', { class: 'group icons' });
 			shareGroup.appendChild(item({
-				label: 'Export Rules',
-				sub: 'Copy custom site rules to clipboard',
+				label: t('exp'),
+				sub: t('exp_s'),
 				tone: 'blue',
 				icon: 'copy',
 				chevron: true,
 				onclick: () => exportSiteRules()
 			}));
 			shareGroup.appendChild(item({
-				label: 'Import Rules',
-				sub: 'Merge rules from JSON or Base64',
+				label: t('imp'),
+				sub: t('imp_s'),
 				tone: 'purple',
 				icon: 'download',
 				chevron: true,
@@ -3965,69 +4596,69 @@
 			}));
 			bodyEl.appendChild(shareGroup);
 
-			bodyEl.appendChild(sectionTitle('Data'));
+			bodyEl.appendChild(sectionTitle(t('s_data')));
 			const data = el('div', { class: 'group' });
 			data.appendChild(item({
 				role: 'upd',
-				label: 'Check for updates',
-				sub: 'Current version v' + VERSION,
+				label: t('upd'),
+				sub: t('upd_cur', { ver: VERSION }),
 				onclick: () => Updater.check(true)
 			}));
 			data.appendChild(item({
-				label: 'Reset settings',
-				sub: 'Restore the default options',
+				label: t('rst_cfg'),
+				sub: t('rst_cfg_s'),
 				danger: true,
 				onclick: () => {
-					if (!confirm('Reset all settings to defaults?')) return;
+					if (!confirm(t('cf_rst'))) return;
 					config = Object.assign({}, DEFAULT_CONFIG);
 					saveConfig();
-					buildBody();
+					refreshLanguageUI();
 					applyTheme();
 					if (handleEl) handleEl.classList.toggle('hidden', !config.showFloatingButton);
 					refreshProtection();
-					toast('Settings reset');
+					toast(t('ts_rst'));
 				}
 			}));
 			data.appendChild(item({
-				label: 'Clear statistics',
-				sub: 'Set all counters back to zero',
+				label: t('clr_st'),
+				sub: t('clr_st_s'),
 				danger: true,
 				onclick: () => {
-					if (!confirm('Clear all lifetime and session statistics?')) return;
+					if (!confirm(t('cf_clr'))) return;
 					stats.reset();
 					renderStats();
-					toast('Stats cleared');
+					toast(t('ts_clr'));
 				}
 			}));
 			data.appendChild(item({
-				label: 'Reset site rules',
-				sub: 'Remove all blocked elements on this site',
+				label: t('rst_rl'),
+				sub: t('rst_rl_s'),
 				danger: true,
 				onclick: () => {
-					if (!confirm('Clear all manual rules for this site?')) return;
+					if (!confirm(t('cf_rl'))) return;
 					delete state.siteRules[hostname];
 					persistSiteRules();
-					toast('Site rules cleared');
+					toast(t('ts_rlc'));
 					onLocationChange();
 				}
 			}));
 			bodyEl.appendChild(data);
 
-			bodyEl.appendChild(sectionTitle('Debug'));
+			bodyEl.appendChild(sectionTitle(t('s_dbg')));
 			const dbg = el('div', { class: 'group icons' });
 			dbg.appendChild(item({
-				label: 'Copy debug info',
-				sub: 'Copy diagnostics to the clipboard',
+				label: t('dbg_cp'),
+				sub: t('dbg_cp_s'),
 				tone: 'gray',
 				icon: 'copy',
 				onclick: () => {
 					const info = collectDebugInfo();
 					try {
 						navigator.clipboard.writeText(info);
-						toast('Debug info copied');
+						toast(t('ts_dbg'));
 					} catch (e) {
 						console.log(info);
-						toast('Logged to console');
+						toast(t('ts_con'));
 					}
 				}
 			}));
@@ -4047,9 +4678,9 @@
 			if (!b) return;
 			const s = b.querySelector('.sub');
 			if (!s) return;
-			if (updateChecking) s.textContent = 'Checking...';
-			else if (updateAvailable) s.textContent = 'There is a new version v' + updateAvailable + ' (now v' + VERSION + ')';
-			else s.textContent = 'Current version v' + VERSION;
+			if (updateChecking) s.textContent = t('upd_chk');
+			else if (updateAvailable) s.textContent = t('upd_new', { remote: updateAvailable, ver: VERSION });
+			else s.textContent = t('upd_cur', { ver: VERSION });
 		}
 
 		function applyUpdateBadge() {
@@ -4071,7 +4702,10 @@
 			if (!updateEl) return;
 			if (ver) setUpdateAvailable(ver);
 			if (!updateAvailable) return;
-			if (ubTitleEl) ubTitleEl.textContent = 'There is a new update! (v' + updateAvailable + ')';
+			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl', { ver: updateAvailable });
+			if (ubDescEl) ubDescEl.textContent = t('ub_dsc');
+			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
+			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
 			updateEl.classList.add('show');
 			updateEl.setAttribute('aria-hidden', 'false');
 		}
@@ -4109,24 +4743,26 @@
 				if (s) s.textContent = sub2;
 			};
 			const wl = isWhitelisted(hostname);
-			setItem('wl', wl ? 'Remove from whitelist' : 'Do not block this site',
-				wl ? 'Resume blocking on this site' : 'Always allow this site to run unfiltered');
+			setItem('wl', wl ? t('wl_rem') : t('wl_add'),
+				wl ? t('wl_rem_s') : t('wl_add_s'));
 			const sd = !!state.sessionDisabled[hostname];
-			setItem('td', sd ? 'Enable for this session' : 'Disable for this session',
-				sd ? 'Turn blocking back on' : 'Pause blocking on this site');
+			setItem('td', sd ? t('td_on') : t('td_off'),
+				sd ? t('td_on_s') : t('td_off_s'));
 		}
+
+		let selectedChartDay = null;
 
 		function renderStats() {
 			if (!statsEl) return;
 			const currentData = statsMode === 'session' ? stats.session : stats.lifetime;
 			const secondaryData = statsMode === 'session' ? stats.lifetime : stats.session;
-			const secLabel = statsMode === 'session' ? 'All-time: ' : 'This page: ';
+			const secLabel = statsMode === 'session' ? t('all_pre') : t('page_pre');
 
 			const rows = [
-				['Ads removed', currentData.ads, secondaryData.ads],
-				['Elements hidden', currentData.hidden, secondaryData.hidden],
-				['Popups blocked', currentData.popups, secondaryData.popups],
-				['Requests blocked', currentData.requests, secondaryData.requests],
+				[t('ads_rem'), currentData.ads, secondaryData.ads],
+				[t('el_hid'), currentData.hidden, secondaryData.hidden],
+				[t('pop_blk'), currentData.popups, secondaryData.popups],
+				[t('req_blk'), currentData.requests, secondaryData.requests],
 			];
 
 			clear(statsEl);
@@ -4142,35 +4778,34 @@
 
 			const weeklyData = store.get(K_WEEKLY, {}) || {};
 			const now = new Date();
-			
+			const todayKey = getTodayKey(now);
+
 			const dayOfWeek = now.getDay();
 			const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
 			const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMon);
 
-			const dayNames = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+			const dayNames = String(t('days')).split('|');
 			const weekDays = [];
 			let maxVal = 10;
-			let todayCount = 0;
-
-			const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-			const todayKey = toKey(now);
 
 			for (let i = 0; i < 7; i++) {
 				const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-				const key = toKey(d);
+				const key = getTodayKey(d);
 				const count = weeklyData[key] || 0;
 				const isToday = key === todayKey;
-				const isFuture = d.setHours(0,0,0,0) > now.setHours(0,0,0,0);
+				const isFuture = d.getTime() > now.getTime() && !isToday;
 
 				if (count > maxVal) maxVal = count;
-				if (isToday) todayCount = count;
-
-				weekDays.push({ key, label: dayNames[i], count, isToday, isFuture });
+				weekDays.push({ key, label: dayNames[i] || '', count, isToday, isFuture });
 			}
 
-			const detailTextEl = el('span', { class: 'chart-detail' }, `Today: ${fmt(todayCount)} ads`);
+			const activeKey = selectedChartDay || todayKey;
+			const activeDayObj = weekDays.find(d => d.key === activeKey) || weekDays.find(d => d.isToday) || weekDays[0];
+			const activePrefix = activeDayObj.isToday ? t('today') : `${activeDayObj.label} (${activeDayObj.key.slice(5)})`;
+
+			const detailTextEl = el('span', { class: 'chart-detail' }, `${activePrefix}: ${fmt(activeDayObj.count)} ${t('ads_u')}`);
 			const chartHead = el('div', { class: 'chart-head' },
-				el('span', { class: 'chart-title' }, "This week's activity"),
+				el('span', { class: 'chart-title' }, t('s_week')),
 				detailTextEl
 			);
 
@@ -4186,7 +4821,7 @@
 				const dayLabel = el('span', { class: 'chart-day' }, day.label);
 				
 				let colClass = 'chart-col';
-				if (day.isToday) colClass += ' active';
+				if (day.key === activeDayObj.key) colClass += ' active';
 				if (day.isFuture) colClass += ' future';
 
 				const col = el('div', { 
@@ -4194,10 +4829,8 @@
 					onclick: (e) => {
 						if (day.isFuture) return;
 						e.stopPropagation();
-						barsContainer.querySelectorAll('.chart-col').forEach(c => c.classList.remove('active'));
-						col.classList.add('active');
-						const prefix = day.isToday ? 'Today' : day.label;
-						detailTextEl.textContent = `${prefix} (${day.key.slice(5)}): ${fmt(day.count)} ads`;
+						selectedChartDay = day.key;
+						renderStats();
 					}
 				}, barBg, dayLabel);
 
@@ -4209,6 +4842,7 @@
 		}
 
 		function setMenu(open) {
+			if (open) ensureSheetBuilt();
 			if (!sheetEl) return;
 			menuOpen = !!open;
 			sheetEl.classList.toggle('open', menuOpen);
@@ -4219,6 +4853,7 @@
 			if (handleEl) {
 				handleEl.classList.toggle('away', menuOpen);
 				handleEl.setAttribute('aria-expanded', String(menuOpen));
+				resetFabIdle(!menuOpen);
 			}
 			sheetEl.setAttribute('aria-hidden', String(!menuOpen));
 			if (statsTimer) {
@@ -4236,7 +4871,12 @@
 
 		function wireHandle() {
 			let drag = null;
+			handleEl.addEventListener('mouseenter', () => resetFabIdle(true));
+			handleEl.addEventListener('mouseleave', () => resetFabIdle(true));
+			handleEl.addEventListener('focus', () => resetFabIdle(true));
+			handleEl.addEventListener('blur', () => resetFabIdle(true));
 			handleEl.addEventListener('pointerdown', (e) => {
+				resetFabIdle(true);
 				if (e.pointerType === 'mouse' && e.button !== 0) return;
 				const r = handleEl.getBoundingClientRect();
 				drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
@@ -4250,6 +4890,7 @@
 					if (Math.hypot(dx, dy) < 6) return;
 					drag.moved = true;
 					handleEl.classList.add('dragging');
+					resetFabIdle(false);
 				}
 				const vw = D.documentElement.clientWidth || W.innerWidth;
 				const vh = W.innerHeight;
@@ -4271,6 +4912,8 @@
 					applyFab();
 				} else if (!cancelled) {
 					setMenu(!menuOpen);
+				} else {
+					resetFabIdle(!menuOpen);
 				}
 			};
 			handleEl.addEventListener('pointerup', (e) => endDrag(e, false));
@@ -4288,6 +4931,7 @@
 
 				if (e.key === 'Escape') {
 					if (pickerActive) exitPicker(true);
+					else if (networkModalEl && networkModalEl.classList.contains('open')) closeNetworkModal();
 					else if (rulesModalEl && rulesModalEl.classList.contains('open')) closeRulesModal();
 					else if (reportModalEl && reportModalEl.classList.contains('open')) closeReportModal();
 					else if (menuOpen) setMenu(false);
@@ -4391,6 +5035,15 @@
 			renderStats();
 		}
 
+		function syncReportFormMode() {
+			if (!reportReasonSelect || !reportNoteInput) return;
+			const isFeature = reportReasonSelect.value === 'Feature request';
+			reportNoteInput.placeholder = isFeature ? t('placeholderFeature') : t('placeholderBug');
+			if (reportNoteLblEl) {
+				reportNoteLblEl.textContent = isFeature ? t('rep_feat_lbl') : t('rp_nt');
+			}
+		}
+
 		function buildReportModal() {
 			if (reportModalEl) return;
 
@@ -4403,23 +5056,28 @@
 
 			const head = el('div', { class: 'report-head' },
 				el('div', { class: 'titles' },
-					el('h2', null, 'Report an incident'),
+					el('h2', null, t('rp_ttl')),
 					el('div', { class: 'badge', style: { marginTop: '2px' } }, hostname || '(unknown)')
 				),
 				closeBtn
 			);
-			
-			reportReasonSelect = el('select', { class: 'report-select' },
-    		el('option', { value: 'Missed ad' }, 'Ad not blocked'),
-  		  el('option', { value: 'Broken layout' }, 'Page layout issue'),
- 	      el('option', { value: 'Player issue' }, 'Video player issue'),
-        el('option', { value: 'Feature request' }, 'Feature request'),
-        el('option', { value: 'Other' }, 'Other')
-      );
+
+			reportReasonSelect = el('select', {
+				class: 'report-select',
+				onchange: () => syncReportFormMode()
+			},
+				el('option', { value: 'Missed ad' }, t('rp_m1')),
+				el('option', { value: 'Broken layout' }, t('rp_m2')),
+				el('option', { value: 'Player issue' }, t('rp_m3')),
+				el('option', { value: 'Feature request' }, t('rp_m4')),
+				el('option', { value: 'Other' }, t('rp_m5'))
+			);
+
+			reportNoteLblEl = el('div', { class: 'report-lbl' }, t('rp_nt'));
 
 			reportNoteInput = el('textarea', {
 				class: 'report-textarea',
-				placeholder: 'Note more about the location of advertising...',
+				placeholder: t('placeholderBug'),
 				rows: '3'
 			});
 
@@ -4427,21 +5085,21 @@
 				class: 'report-btn cancel',
 				type: 'button',
 				onclick: () => closeReportModal()
-			}, 'Hủy');
+			}, t('cancel'));
 
 			const submitBtn = el('button', {
 				class: 'report-btn submit',
 				type: 'button',
 				onclick: () => submitReport()
-			}, 'Send a report');
+			}, t('rp_send'));
 
 			const actions = el('div', { class: 'report-actions' }, cancelBtn, submitBtn);
 
 			const card = el('div', { class: 'report-card' },
 				head,
-				el('div', { class: 'report-lbl' }, 'Reason:'),
+				el('div', { class: 'report-lbl' }, t('rp_rsn')),
 				reportReasonSelect,
-				el('div', { class: 'report-lbl' }, 'Notes (optional):'),
+				reportNoteLblEl,
 				reportNoteInput,
 				actions
 			);
@@ -4453,6 +5111,7 @@
 		function openReportModal() {
 			if (!reportModalEl) buildReportModal();
 			if (reportNoteInput) reportNoteInput.value = '';
+			syncReportFormMode();
 			reportModalEl.classList.add('open');
 			if (host) host.style.pointerEvents = 'auto';
 		}
@@ -4463,60 +5122,91 @@
 		}
 
 		function submitReport() {
+			const reason = (reportReasonSelect && reportReasonSelect.value) || 'Missed ad';
+			const note = (reportNoteInput && reportNoteInput.value.trim()) || '';
+			const isFeatureRequest = reason === 'Feature request';
+
+			if (isFeatureRequest && !note) {
+				toast(t('toastEmptyNote'));
+				if (reportNoteInput) {
+					try { reportNoteInput.focus(); } catch (e) {}
+				}
+				return;
+			}
+
 			const lastMap = store.get(K_LAST_REP, {}) || {};
 			const lastTime = lastMap[hostname] || 0;
 			const elapsed = Date.now() - lastTime;
 			if (elapsed < 30000) {
 				const waitSec = Math.ceil((30000 - elapsed) / 1000);
-				toast(`Please wait ${waitSec}s before sending again`);
+				toast(t('ts_wait', { sec: waitSec }));
 				return;
 			}
 
 			const webhookUrl = getWebhookTarget();
 			if (!webhookUrl) {
-				toast('Have not configured a valid webhook in the script');
+				toast(t('ts_nohk'));
 				closeReportModal();
 				return;
 			}
 
-			const reason = (reportReasonSelect && reportReasonSelect.value) || 'Missed ad';
-			const note = (reportNoteInput && reportNoteInput.value.trim()) || '';
-			const cleanUrl = getSanitizedUrl();
-			const recentLogs = logRing.slice(-5).map(e => `[${e.level}] ${e.type}: ${e.msg} ${e.extra || ''}`).join('\n') || 'There is no log';
+			let payload;
+			if (isFeatureRequest) {
+				payload = {
+					username: 'Nvirya AdGuard Feedback',
+					avatar_url: 'https://raw.nvirya.com/assets/icon.png',
+					embeds: [{
+						title: 'Đề xuất tính năng mới',
+						color: 3447003,
+						fields: [
+							{ name: 'Nội dung đề xuất', value: (note || '(Không có nội dung)').slice(0, 1000) },
+							{ name: 'Phiên bản đang dùng', value: 'v' + VERSION, inline: true },
+							{ name: 'Nền tảng / Thiết bị', value: isAppleDevice() ? 'iOS / iPadOS' : 'Android / Desktop', inline: true }
+						],
+						footer: { text: 'Nvirya AdGuard Idea Box' },
+						timestamp: new Date().toISOString()
+					}]
+				};
+			} else {
+				const cleanUrl = getSanitizedUrl().slice(0, 1000);
+				const recentLogs = (logRing.slice(-4).map(e => `[${e.level}] ${e.type}: ${e.msg} ${e.extra || ''}`).join('\n') || 'No logs').slice(0, 900);
+				const embedColor = reason === 'Missed ad' ? 15158332 :
+					(reason === 'Broken layout' || reason === 'Player issue') ? 16107018 : 10181046;
 
-			const payload = {
-				username: 'Nvirya AdGuard Reporter',
-				avatar_url: 'https://raw.nvirya.com/assets/icon.png',
-				embeds: [{
-					title: 'Báo cáo sự cố: ' + reason,
-					color: reason.includes('Lọt') ? 15158332 : 16107018,
-					fields: [
-						{ name: 'Domain', value: hostname || 'unknown', inline: true },
-						{ name: 'Phiên bản', value: 'v' + VERSION, inline: true },
-						{ name: 'Lý do', value: reason, inline: true },
-						{ name: 'URL (Sanitized)', value: cleanUrl },
-						{ name: 'Ghi chú', value: note || '(Không có)' },
-						{
-							name: 'Thống kê chặn',
-							value: `• **Phiên hiện tại (Session):** Chặn ${stats.session.ads} ads, Ẩn ${stats.session.hidden} el, Chặn ${stats.session.popups} popups\n• **Tổng tích lũy (Lifetime):** Chặn ${stats.lifetime.ads} ads, Ẩn ${stats.lifetime.hidden} el`
-						},
-						{ name: 'Logs gần nhất', value: '```text\n' + recentLogs + '\n```' },
-						{ name: 'User Agent', value: '```\n' + (navigator.userAgent || 'unknown').slice(0, 220) + '\n```' }
-					],
-					footer: { text: 'Nvirya AdGuard Security Report' },
-					timestamp: new Date().toISOString()
-				}]
-			};
+				payload = {
+					username: 'Nvirya AdGuard Reporter',
+					avatar_url: 'https://raw.nvirya.com/assets/icon.png',
+					embeds: [{
+						title: 'Báo cáo sự cố: ' + reason,
+						color: embedColor,
+						fields: [
+							{ name: 'Domain', value: hostname || 'unknown', inline: true },
+							{ name: 'Phiên bản', value: 'v' + VERSION, inline: true },
+							{ name: 'Lý do', value: reason, inline: true },
+							{ name: 'URL (Sanitized)', value: cleanUrl || 'unknown' },
+							{ name: 'Ghi chú', value: (note || '(Không có)').slice(0, 1000) },
+							{
+								name: 'Thống kê chặn',
+								value: `• **Session:** ${stats.session.ads} ads, ${stats.session.hidden} hidden, ${stats.session.popups} popups\n• **Lifetime:** ${stats.lifetime.ads} ads, ${stats.lifetime.hidden} hidden`
+							},
+							{ name: 'Logs gần nhất', value: '```text\n' + recentLogs + '\n```' },
+							{ name: 'User Agent', value: '```\n' + (navigator.userAgent || 'unknown').slice(0, 200) + '\n```' }
+						],
+						footer: { text: 'Nvirya AdGuard Security Report' },
+						timestamp: new Date().toISOString()
+					}]
+				};
+			}
 
 			const onSuccess = () => {
 				lastMap[hostname] = Date.now();
 				store.set(K_LAST_REP, lastMap);
-				toast('The report has been sent successfully! Thank you.');
+				toast(t('ts_rpok'));
 				closeReportModal();
 			};
 
 			const onError = (msg) => {
-				toast('Send failed: ' + (msg || 'Connection error'));
+				toast(t('ts_rperr', { msg: msg || 'Connection error' }));
 			};
 
 			const bodyStr = JSON.stringify(payload);
@@ -4551,16 +5241,16 @@
 				if (Array.isArray(rules[h])) totalRules += rules[h].length;
 			}
 			if (totalRules === 0) {
-				toast('There are no custom rules to export yet');
+				toast(t('ts_noexp'));
 				return;
 			}
 			const jsonStr = JSON.stringify(rules, null, 2);
 
-			const fallback = () => prompt('Copy JSON rules:', jsonStr);
+			const fallback = () => prompt(t('pr_json'), jsonStr);
 			try {
 				if (navigator.clipboard && navigator.clipboard.writeText) {
 					navigator.clipboard.writeText(jsonStr).then(() => {
-						toast(`Copied ${totalRules} rules as JSON!`);
+						toast(t('ts_exp', { count: totalRules }));
 					}).catch(fallback);
 				} else {
 					fallback();
@@ -4571,7 +5261,7 @@
 		}
 
 		function importSiteRules() {
-			const input = prompt('Paste your rules (JSON or Base64):');
+			const input = prompt(t('pr_imp'));
 			if (!input || !input.trim()) return;
 			const raw = input.trim();
 			let parsed = null;
@@ -4597,17 +5287,17 @@
 			}
 
 			if (!parsed || typeof parsed !== 'object') {
-				toast('Invalid rules format');
+				toast(t('ts_ibad'));
 				return;
 			}
 
 			let mergedCount = 0;
 			if (!state.siteRules) state.siteRules = {};
 
-			for (const host of Object.keys(parsed)) {
-				const hostRules = parsed[host];
+			for (const hostKey of Object.keys(parsed)) {
+				const hostRules = parsed[hostKey];
 				if (!Array.isArray(hostRules)) continue;
-				const normHost = host.toLowerCase().trim();
+				const normHost = hostKey.toLowerCase().trim();
 				if (!state.siteRules[normHost]) state.siteRules[normHost] = [];
 
 				const existingSelectors = new Set(state.siteRules[normHost].map(r => r.selector));
@@ -4628,11 +5318,27 @@
 			persistSiteRules();
 			installSiteRulesCSS();
 			initialScan();
-			toast(`Successfully merged ${mergedCount} new rule(s)!`);
+			toast(t('ts_imp', { count: mergedCount }));
 		}
 
 		let blockBtn = null,
-			blockAllBtn = null;
+			blockAllBtn = null,
+			pickerSliderEl = null,
+			pickerDepthValEl = null,
+			pickerChain = [];
+
+		function buildPickerChain(startEl) {
+			const chain = [];
+			let cur = startEl;
+			while (cur && cur.nodeType === 1 && chain.length <= 6) {
+				const tag = String(cur.tagName || '').toLowerCase();
+				if (tag === 'body' || tag === 'html') break;
+				if (isNviryaNode(cur)) break;
+				chain.push(cur);
+				cur = cur.parentElement;
+			}
+			return chain;
+		}
 
 		function buildPicker() {
 			if (pickerEl) return;
@@ -4649,10 +5355,47 @@
 			pickerBarEl.setAttribute('data-nvirya-picker', '');
 			pickerBarEl.setAttribute('role', 'toolbar');
 			pickerBarEl.setAttribute('aria-label', 'Element picker navigation');
-			pickerBarEl.style.cssText = 'position:fixed; display:none; align-items:center; gap:5px; padding:6px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(20px) saturate(1.5); backdrop-filter:blur(20px) saturate(1.5); font-size:12px; white-space:nowrap; user-select:none;';
+			pickerBarEl.style.cssText = 'position:fixed; display:none; flex-direction:column; align-items:stretch; gap:7px; padding:8px 10px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(20px) saturate(1.5); backdrop-filter:blur(20px) saturate(1.5); font-size:12px; white-space:nowrap; user-select:none;';
 
 			const pickerStyle = document.createElement('style');
 			pickerStyle.textContent = `
+				.p-row { display: flex; align-items: center; gap: 5px; }
+				.p-slider-row { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
+				.p-slider-lbl { font: 600 11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--muted); }
+				.p-slider-val { font: 600 11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--accent); min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
+				.p-slider {
+					-webkit-appearance: none;
+					appearance: none;
+					flex: 1;
+					height: 4px;
+					border-radius: 999px;
+					background: var(--border);
+					accent-color: var(--accent);
+					outline: none;
+					cursor: pointer;
+					margin: 0;
+				}
+				.p-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+				.p-slider::-webkit-slider-thumb {
+					-webkit-appearance: none;
+					appearance: none;
+					width: 16px;
+					height: 16px;
+					border-radius: 50%;
+					background: var(--accent);
+					border: 2px solid var(--sheet);
+					box-shadow: 0 1px 4px rgba(0,0,0,.28);
+					transition: transform .12s ease;
+				}
+				.p-slider::-webkit-slider-thumb:active { transform: scale(1.15); }
+				.p-slider::-moz-range-thumb {
+					width: 16px;
+					height: 16px;
+					border-radius: 50%;
+					background: var(--accent);
+					border: 2px solid var(--sheet);
+					box-shadow: 0 1px 4px rgba(0,0,0,.28);
+				}
 				.p-btn {
 					border: 1px solid var(--border);
 					border-radius: 8px;
@@ -4676,13 +5419,36 @@
 				}
 			`;
 
-			const parentBtn = el('button', { type: 'button', class: 'p-btn', onclick: () => traversePicker(-1) }, 'Parent');
-			const childBtn = el('button', { type: 'button', class: 'p-btn', onclick: () => traversePicker(1) }, 'Child');
-			blockBtn = el('button', { type: 'button', class: 'p-btn p-btn-action', onclick: () => confirmPickerSelection(false) }, 'Block');
-			blockAllBtn = el('button', { type: 'button', class: 'p-btn p-btn-action', style: { background: '#8b5cf6' }, onclick: () => confirmPickerSelection(true) }, 'All');
-			const cancelBtn = el('button', { type: 'button', class: 'p-btn p-btn-cancel', onclick: () => exitPicker(false) }, 'Cancel');
+			pickerSliderEl = el('input', {
+				type: 'range',
+				class: 'p-slider',
+				min: '0',
+				max: '0',
+				value: '0',
+				step: '1',
+				'aria-label': 'DOM Depth',
+				oninput: () => {
+					const idx = parseInt(pickerSliderEl.value, 10) || 0;
+					if (pickerChain[idx]) {
+						showPickerTarget(pickerChain[idx], true);
+					}
+				}
+			});
+			pickerDepthValEl = el('span', { class: 'p-slider-val' }, '1/1');
+			const sliderRow = el('div', { class: 'p-slider-row' },
+				el('span', { class: 'p-slider-lbl' }, t('p_depth')),
+				pickerSliderEl,
+				pickerDepthValEl
+			);
 
-			pickerBarEl.append(pickerStyle, parentBtn, childBtn, blockBtn, blockAllBtn, cancelBtn);
+			const parentBtn = el('button', { type: 'button', class: 'p-btn', onclick: () => traversePicker(-1) }, t('p_par'));
+			const childBtn = el('button', { type: 'button', class: 'p-btn', onclick: () => traversePicker(1) }, t('p_chd'));
+			blockBtn = el('button', { type: 'button', class: 'p-btn p-btn-action', onclick: () => confirmPickerSelection(false) }, t('p_blk'));
+			blockAllBtn = el('button', { type: 'button', class: 'p-btn p-btn-action', style: { background: '#8b5cf6' }, onclick: () => confirmPickerSelection(true) }, t('p_all'));
+			const cancelBtn = el('button', { type: 'button', class: 'p-btn p-btn-cancel', onclick: () => exitPicker(false) }, t('cancel'));
+			const btnRow = el('div', { class: 'p-row' }, parentBtn, childBtn, blockBtn, blockAllBtn, cancelBtn);
+
+			pickerBarEl.append(pickerStyle, sliderRow, btnRow);
 
 			const targetRoot = root || D.body || D.documentElement;
 			targetRoot.appendChild(pickerEl);
@@ -4694,6 +5460,7 @@
 			if (!config.elementPicker) return;
 			buildPicker();
 			pickerActive = true;
+			pickerChain = [];
 			pickerEl.style.display = 'block';
 			pickerLabelEl.style.display = 'block';
 			if (pickerBarEl) pickerBarEl.style.display = 'none';
@@ -4702,11 +5469,17 @@
 			D.addEventListener('click', pickerClick, true);
 			D.addEventListener('touchmove', pickerTouchMove, true);
 			D.addEventListener('touchend', pickerTouchEnd, true);
-			toast('Tap an element to block');
+			toast(t('ts_pick'));
 		}
 
 		function exitPicker(silent) {
 			pickerActive = false;
+			pickerChain = [];
+			if (pickerSliderEl) {
+				pickerSliderEl.min = '0';
+				pickerSliderEl.max = '0';
+				pickerSliderEl.value = '0';
+			}
 			if (pickerEl) pickerEl.style.display = 'none';
 			if (pickerLabelEl) pickerLabelEl.style.display = 'none';
 			if (pickerBarEl) pickerBarEl.style.display = 'none';
@@ -4715,7 +5488,7 @@
 			D.removeEventListener('click', pickerClick, true);
 			D.removeEventListener('touchmove', pickerTouchMove, true);
 			D.removeEventListener('touchend', pickerTouchEnd, true);
-			if (!silent) toast('Picker closed');
+			if (!silent) toast(t('ts_pclose'));
 		}
 
 		function describe(el) {
@@ -4727,10 +5500,25 @@
 			return tag + id + cls;
 		}
 
-		function showPickerTarget(el) {
+		function showPickerTarget(el, fromChain) {
 			if (!el || el.nodeType !== 1 || isNviryaNode(el)) return;
+			if (!fromChain || !pickerChain.length || pickerChain.indexOf(el) === -1) {
+				pickerChain = buildPickerChain(el);
+			}
 			pickerTarget = el;
 			pickerHover = el;
+			const chainIdx = Math.max(0, pickerChain.indexOf(el));
+			const maxIdx = Math.max(0, pickerChain.length - 1);
+			if (pickerSliderEl) {
+				pickerSliderEl.min = '0';
+				pickerSliderEl.max = String(maxIdx);
+				pickerSliderEl.value = String(chainIdx);
+				pickerSliderEl.disabled = maxIdx === 0;
+			}
+			if (pickerDepthValEl) {
+				pickerDepthValEl.textContent = (chainIdx + 1) + '/' + Math.max(1, pickerChain.length);
+			}
+
 			const rect = el.getBoundingClientRect();
 			pickerEl.style.left = rect.left + 'px';
 			pickerEl.style.top = rect.top + 'px';
@@ -4742,8 +5530,10 @@
 
 			const buttons = pickerBarEl ? pickerBarEl.querySelectorAll('button') : [];
 			if (buttons.length >= 2) {
-				buttons[0].disabled = !el.parentElement || /^(?:body|html)$/.test(String(el.parentElement.tagName || '').toLowerCase());
-				buttons[1].disabled = !el.firstElementChild;
+				const canGoParent = chainIdx < maxIdx || (!!el.parentElement && !/^(?:body|html)$/i.test(String(el.parentElement.tagName || '')));
+				const canGoChild = chainIdx > 0 || !!el.firstElementChild;
+				buttons[0].disabled = !canGoParent;
+				buttons[1].disabled = !canGoChild;
 			}
 
 			const simSel = makeSimilarSelector(el);
@@ -4752,15 +5542,16 @@
 				try { simCount = D.querySelectorAll(simSel).length; } catch (e) {}
 			}
 			if (blockAllBtn) {
-				blockAllBtn.textContent = simCount > 1 ? `All (${simCount})` : 'All';
+				blockAllBtn.textContent = simCount > 1 ? `${t('p_all')} (${simCount})` : t('p_all');
 				blockAllBtn.style.display = simCount > 1 ? 'inline-block' : 'none';
 			}
 
 			if (pickerBarEl) {
 				pickerBarEl.style.display = 'flex';
-				const barW = simCount > 1 ? 290 : 230;
+				const barW = simCount > 1 ? 296 : 240;
+				const barH = 76;
 				const left = Math.max(6, Math.min((W.innerWidth || 320) - barW, rect.left));
-				const top = rect.bottom + 10 + 52 < (W.innerHeight || 480) ? rect.bottom + 10 : Math.max(6, rect.top - 58);
+				const top = rect.bottom + 10 + barH < (W.innerHeight || 480) ? rect.bottom + 10 : Math.max(6, rect.top - barH - 8);
 				pickerBarEl.style.left = left + 'px';
 				pickerBarEl.style.top = top + 'px';
 			}
@@ -4884,32 +5675,52 @@
 
 		function selectElement(el) {
 			if (!el || el.nodeType !== 1 || isNviryaNode(el)) return;
-			showPickerTarget(el);
+			pickerChain = buildPickerChain(el);
+			showPickerTarget(el, true);
 		}
 
 		function traversePicker(direction) {
 			if (!pickerTarget) return;
-			const next = direction < 0 ? pickerTarget.parentElement : pickerTarget.firstElementChild;
+			const idx = pickerChain.indexOf(pickerTarget);
+			let next = null;
+			if (direction < 0) {
+				if (idx !== -1 && idx + 1 < pickerChain.length) {
+					next = pickerChain[idx + 1];
+				} else {
+					const p = pickerTarget.parentElement;
+					if (p && !/^(?:body|html)$/i.test(String(p.tagName || '')) && !isNviryaNode(p)) {
+						if (pickerChain.length <= 6 && pickerChain.indexOf(p) === -1) pickerChain.push(p);
+						next = p;
+					}
+				}
+			} else {
+				if (idx > 0) {
+					next = pickerChain[idx - 1];
+				} else if (pickerTarget.firstElementChild && !isNviryaNode(pickerTarget.firstElementChild)) {
+					next = pickerTarget.firstElementChild;
+					pickerChain = buildPickerChain(next);
+				}
+			}
 			if (!next || /^(?:body|html)$/i.test(String(next.tagName || '')) || isNviryaNode(next)) return;
-			showPickerTarget(next);
+			showPickerTarget(next, true);
 		}
 
 		function confirmPickerSelection(isAll) {
 			const selected = pickerTarget;
-			if (!selected || !selected.isConnected) { toast('Element is no longer on the page'); return; }
-			if (isProtectedPlayer(selected) && !confirm('This element belongs to the media player. Blocking can damage video playback. Continue?')) {
+			if (!selected || !selected.isConnected) { toast(t('ts_gone')); return; }
+			if (isProtectedPlayer(selected) && !confirm(t('cf_plr'))) {
 				exitPicker(true);
 				return;
 			}
 
 			const sel = isAll ? makeSimilarSelector(selected) : makeSelector(selected);
 			if (!sel) {
-				toast('Unable to create selector');
+				toast(t('ts_nosel'));
 				exitPicker(true);
 				return;
 			}
 
-			const promptMsg = isAll ? `Block ALL similar elements (${sel})? ` : `Block this element on the page? \N\n${sel}`;
+			const promptMsg = isAll ? t('cf_ball', { sel }) : t('cf_bone', { sel });
 			if (!confirm(promptMsg)) { exitPicker(true); return; }
 
 			if (!state.siteRules[hostname]) state.siteRules[hostname] = [];
@@ -4926,7 +5737,8 @@
 			} catch (e) {}
 
 			installSiteRulesCSS();
-			toast(isAll ? 'Blocked all similar elements' : 'Blocked elements');
+			scheduleUnlockPageScroll();
+			toast(isAll ? t('ts_ball') : t('ts_bone'));
 			exitPicker(true);
 		}
 
@@ -4936,6 +5748,7 @@
 			lines.push('Host: ' + hostname);
 			lines.push('URL: ' + location.href.split('?')[0]);
 			lines.push('Enabled: ' + config.enabled);
+			lines.push('Lang: ' + config.lang + ' (' + getEffectiveLang() + ')');
 			lines.push('Whitelisted: ' + isWhitelisted(hostname));
 			lines.push('Session-disabled: ' + !!state.sessionDisabled[hostname]);
 			lines.push('Strict mode: ' + config.strictMode);
@@ -4950,18 +5763,18 @@
 		}
 
 		function forceUnlockScroll() {
-			const changed = unlockPageScroll();
+			unlockPageScroll();
 			try {
-				[D.documentElement, D.body].forEach(el => {
-					if (!el) return;
-					el.style.setProperty('overflow', 'auto', 'important');
-					el.style.setProperty('overflow-y', 'auto', 'important');
-					if (W.getComputedStyle(el).position === 'fixed') {
-						el.style.setProperty('position', 'static', 'important');
+				[D.documentElement, D.body].forEach(elNode => {
+					if (!elNode) return;
+					elNode.style.setProperty('overflow', 'auto', 'important');
+					elNode.style.setProperty('overflow-y', 'auto', 'important');
+					if (W.getComputedStyle(elNode).position === 'fixed') {
+						elNode.style.setProperty('position', 'static', 'important');
 					}
 				});
 			} catch (e) {}
-			toast('Unlocked page scroll');
+			toast(t('ts_ulk'));
 		}
 
 		let peekTimer = null;
@@ -4973,29 +5786,14 @@
 			if (cosmeticStyleEl) cosmeticStyleEl.disabled = true;
 
 			setMenu(false);
-			toast('Temporarily see the original page (3s)...');
+			toast(t('ts_pkon'));
 
 			peekTimer = setTimeout(() => {
 				if (siteStyle) siteStyle.disabled = false;
 				if (cosmeticStyleEl) cosmeticStyleEl.disabled = false;
 				peekTimer = null;
-				toast('Restored the filter');
+				toast(t('ts_pkoff'));
 			}, 3000);
-		}
-
-		function forceUnlockScroll() {
-			const changed = unlockPageScroll();
-			try {
-				[D.documentElement, D.body].forEach(el => {
-					if (!el) return;
-					el.style.setProperty('overflow', 'auto', 'important');
-					el.style.setProperty('overflow-y', 'auto', 'important');
-					if (W.getComputedStyle(el).position === 'fixed') {
-						el.style.setProperty('position', 'static', 'important');
-					}
-				});
-			} catch (e) {}
-			toast('Unlocked page scroll');
 		}
 
 		let rulesModalEl = null;
@@ -5005,7 +5803,7 @@
 			const card = el('div', { class: 'report-card', style: { maxHeight: '80vh', display: 'flex', flexDirection: 'column' } });
 			const head = el('div', { class: 'report-head' },
 				el('div', { class: 'titles' },
-					el('h2', null, 'Rules of this page'),
+					el('h2', null, t('rules')),
 					el('div', { class: 'badge', style: { marginTop: '2px' } }, hostname || '(unknown)')
 				),
 				el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => closeRulesModal() }, icon('close'))
@@ -5036,14 +5834,14 @@
 
 			installSiteRulesCSS();
 			try {
-				D.querySelectorAll(selector).forEach(el => {
-					el.removeAttribute('data-nvirya-hidden');
-					state.hiddenNodes.delete(el);
+				D.querySelectorAll(selector).forEach(elNode => {
+					elNode.removeAttribute('data-nvirya-hidden');
+					state.hiddenNodes.delete(elNode);
 				});
 			} catch (e) {}
 
 			renderRulesList();
-			toast(`Đã gỡ: ${selector}`);
+			toast(t('ts_rm', { sel: selector }));
 		}
 
 		function renderRulesList() {
@@ -5053,7 +5851,7 @@
 			const rules = state.siteRules[hostname] || [];
 
 			if (rules.length === 0) {
-				listContainer.appendChild(el('div', { style: { textAlign: 'center', padding: '16px', color: 'var(--muted)', fontSize: '13px' } }, 'There are no rules for this page'));
+				listContainer.appendChild(el('div', { style: { textAlign: 'center', padding: '16px', color: 'var(--muted)', fontSize: '13px' } }, t('rl_empty')));
 				return;
 			}
 
@@ -5093,6 +5891,201 @@
 			});
 		}
 
+		let networkModalEl = null,
+			netSearchInput = null,
+			netListContainer = null,
+			netTabAllBtn = null,
+			netTabBlockedBtn = null,
+			netFilterMode = 'all',
+			netSearchQuery = '';
+
+		function setNetFilterMode(mode) {
+			netFilterMode = mode === 'blocked' ? 'blocked' : 'all';
+			if (netTabAllBtn) netTabAllBtn.setAttribute('aria-pressed', String(netFilterMode === 'all'));
+			if (netTabBlockedBtn) netTabBlockedBtn.setAttribute('aria-pressed', String(netFilterMode === 'blocked'));
+			renderNetworkList();
+		}
+
+		function buildNetworkModal() {
+			if (networkModalEl) return;
+			const card = el('div', {
+				class: 'report-card',
+				style: { maxWidth: '400px', maxHeight: '82vh', display: 'flex', flexDirection: 'column', gap: '8px' }
+			});
+			const head = el('div', { class: 'report-head' },
+				el('div', { class: 'titles' },
+					el('h2', null, t('networkRequests')),
+					el('div', { class: 'badge', style: { marginTop: '2px' } }, hostname || '(unknown)')
+				),
+				el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => closeNetworkModal() }, icon('close'))
+			);
+
+			netSearchInput = el('input', {
+				type: 'search',
+				class: 'report-select',
+				placeholder: t('searchDomainPlaceholder'),
+				value: netSearchQuery,
+				oninput: () => {
+					netSearchQuery = String(netSearchInput.value || '').trim().toLowerCase();
+					renderNetworkList();
+				}
+			});
+
+			const filterSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Filter' });
+			netTabAllBtn = el('button', {
+				type: 'button',
+				'aria-pressed': String(netFilterMode === 'all'),
+				onclick: () => setNetFilterMode('all')
+			}, t('netFilterAll'));
+			netTabBlockedBtn = el('button', {
+				type: 'button',
+				'aria-pressed': String(netFilterMode === 'blocked'),
+				onclick: () => setNetFilterMode('blocked')
+			}, t('blockedBadge'));
+			filterSeg.append(netTabAllBtn, netTabBlockedBtn);
+
+			netListContainer = el('div', {
+				class: 'rules-list',
+				style: { overflowY: 'auto', flex: '1 1 auto', minHeight: '140px', maxHeight: '48vh', margin: '4px 0', display: 'flex', flexDirection: 'column', gap: '6px' }
+			});
+
+			const clearBtn = el('button', {
+				class: 'report-btn cancel',
+				type: 'button',
+				style: { marginTop: '2px', padding: '8px 0', fontSize: '12.5px' },
+				onclick: () => {
+					networkRingBuffer.length = 0;
+					renderNetworkList();
+				}
+			}, t('netClearLog'));
+
+			card.append(head, netSearchInput, filterSeg, netListContainer, clearBtn);
+			networkModalEl = el('div', { class: 'report-modal' }, card);
+			networkModalEl.addEventListener('click', (e) => {
+				if (e.target === networkModalEl) closeNetworkModal();
+			});
+			root.appendChild(networkModalEl);
+		}
+
+		function openNetworkModal() {
+			buildNetworkModal();
+			renderNetworkList();
+			networkModalEl.classList.add('open');
+			if (host) host.style.pointerEvents = 'auto';
+		}
+
+		function closeNetworkModal() {
+			if (networkModalEl) networkModalEl.classList.remove('open');
+			if (host && !menuOpen) host.style.pointerEvents = 'none';
+		}
+
+		function renderNetworkList() {
+			if (!networkModalEl || !netListContainer) return;
+			clear(netListContainer);
+
+			const domainMap = new Map();
+			for (let i = 0; i < networkRingBuffer.length; i++) {
+				const item = networkRingBuffer[i];
+				if (!item || !item.hostname) continue;
+				const d = item.hostname;
+				let group = domainMap.get(d);
+				if (!group) {
+					group = {
+						hostname: d,
+						count: 0,
+						blocked: false,
+						types: new Set(),
+						lastTime: 0,
+						sampleUrl: item.url || ''
+					};
+					domainMap.set(d, group);
+				}
+				group.count++;
+				if (item.blocked || isCustomBlockedHost(d)) group.blocked = true;
+				if (item.type) group.types.add(item.type);
+				if (item.time > group.lastTime) {
+					group.lastTime = item.time;
+					group.sampleUrl = item.url || group.sampleUrl;
+				}
+			}
+
+			customBlockedSet.forEach(d => {
+				if (!domainMap.has(d)) {
+					domainMap.set(d, {
+						hostname: d,
+						count: 0,
+						blocked: true,
+						types: new Set(['custom']),
+						lastTime: 0,
+						sampleUrl: 'https://' + d
+					});
+				}
+			});
+
+			const groups = Array.from(domainMap.values()).filter(g => {
+				if (netFilterMode === 'blocked' && !g.blocked) return false;
+				if (netSearchQuery) {
+					const matchHost = g.hostname.indexOf(netSearchQuery) !== -1;
+					const matchUrl = String(g.sampleUrl || '').toLowerCase().indexOf(netSearchQuery) !== -1;
+					if (!matchHost && !matchUrl) return false;
+				}
+				return true;
+			}).sort((a, b) => (b.lastTime - a.lastTime) || (b.count - a.count));
+
+			if (groups.length === 0) {
+				netListContainer.appendChild(
+					el('div', { style: { textAlign: 'center', padding: '20px 12px', color: 'var(--muted)', fontSize: '13px' } }, t('noRequestsYet'))
+				);
+				return;
+			}
+
+			groups.forEach(g => {
+				const isCustomBlocked = isCustomBlockedHost(g.hostname);
+				const isBlocked = g.blocked || isCustomBlocked;
+
+				const badge = el('span', {
+					class: 'net-badge ' + (isBlocked ? 'blocked' : 'allowed')
+				}, isBlocked ? t('blockedBadge') : t('allowedBadge'));
+
+				const countText = g.count > 0 ? ` (${g.count})` : '';
+				const hostLine = el('div', { class: 'net-host-row' },
+					el('span', { class: 'net-host', title: g.sampleUrl || g.hostname }, g.hostname + countText),
+					badge
+				);
+
+				const typeList = Array.from(g.types).join(', ');
+				const info = el('div', { class: 'net-info' },
+					hostLine,
+					typeList ? el('div', { class: 'net-meta' }, typeList) : null
+				);
+
+				const actionBtn = el('button', {
+					type: 'button',
+					class: 'net-act-btn ' + (isCustomBlocked ? 'unblock' : 'block'),
+					onclick: () => {
+						if (isCustomBlocked) {
+							removeCustomBlockedHost(g.hostname);
+							toast(t('toastDomainUnblocked', { domain: g.hostname }));
+						} else {
+							addCustomBlockedHost(g.hostname);
+							toast(t('toastDomainBlocked', { domain: g.hostname }));
+						}
+						renderNetworkList();
+						renderStats();
+					}
+				}, isCustomBlocked ? t('unblockDomain') : t('blockDomain'));
+
+				const row = el('div', { class: 'net-row' }, info, actionBtn);
+				netListContainer.appendChild(row);
+			});
+		}
+
+		function refreshNetworkModalIfOpen() {
+			if (networkModalEl && networkModalEl.classList.contains('open')) {
+				renderNetworkList();
+			}
+		}
+
 		return {
 			build,
 			setMenu,
@@ -5106,6 +6099,7 @@
 			hideUpdateBanner,
 			setUpdateAvailable,
 			setUpdateChecking,
+			refreshNetworkModalIfOpen,
 			isMenuOpen: () => menuOpen,
 			isPickerActive: () => pickerActive
 		};
@@ -5143,7 +6137,7 @@
 				});
 			} catch (e) {}
 
-			UI.toast(`Redone: ${popped.selector}`);
+			UI.toast(t('ts_udo', { sel: popped.selector }));
 			return;
 		}
 
@@ -5155,12 +6149,12 @@
 				} else {
 					lastNode.parent.appendChild(lastNode.el);
 				}
-				UI.toast('Restored the element');
+				UI.toast(t('ts_udn'));
 				return;
 			} catch (e) {}
 		}
 
-		UI.toast('There is no action to undo');
+		UI.toast(t('ts_ud0'));
 	}
 
 
@@ -5185,13 +6179,13 @@
 				state.sessionDisabled[hostname] = true;
 				persistSession();
 				refreshProtection();
-				UI.toast('Temporarily turned off');
+				UI.toast(t('ts_tdf'));
 			});
 			GM_registerMenuCommand('Turn it back on this page', () => {
 				delete state.sessionDisabled[hostname];
 				persistSession();
 				refreshProtection();
-				UI.toast('Turned on');
+				UI.toast(t('ts_tdo'));
 			});
 			GM_registerMenuCommand('Check for updates', () => Updater.check(true));
 			GM_registerMenuCommand('Turn On/Off Debug', () => {
@@ -5220,6 +6214,7 @@
 		installScriptElementGuard();
 		installIframePopupGuard();
 		defuseGoogleTagManager();
+		installClipboardAndVisibilityGuard();
 		installPopupGuard();
 		installRedirectGuard();
 		installNetworkGuard();
