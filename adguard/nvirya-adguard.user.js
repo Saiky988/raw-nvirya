@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.3.0
+// @version      11.3.2
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -28,7 +28,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.3.0';
+	const VERSION = '11.3.2';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -4112,6 +4112,7 @@
 		}
 
 		let fabIdleTimer = null;
+		let lastFabWakeFromIdleAt = 0;
 
 		function clearFabIdleTimer() {
 			if (fabIdleTimer) {
@@ -4122,7 +4123,10 @@
 
 		function resetFabIdle(schedule = true) {
 			if (!handleEl) return;
-			handleEl.classList.remove('idle');
+			if (handleEl.classList.contains('idle')) {
+				lastFabWakeFromIdleAt = Date.now();
+				handleEl.classList.remove('idle');
+			}
 			clearFabIdleTimer();
 			if (schedule && !menuOpen && !handleEl.classList.contains('dragging') && !handleEl.classList.contains('hidden')) {
 				fabIdleTimer = setTimeout(() => {
@@ -4183,7 +4187,7 @@
 				pickerEl.remove();
 				if (pickerLabelEl) pickerLabelEl.remove();
 				if (pickerBarEl) pickerBarEl.remove();
-				pickerEl = pickerLabelEl = pickerBarEl = pickerSliderEl = pickerDepthValEl = null;
+				pickerEl = pickerLabelEl = pickerBarEl = pickerSliderEl = pickerDepthValEl = pickerSegStepsEl = null;
 			}
 		}
 
@@ -4871,24 +4875,56 @@
 
 		function wireHandle() {
 			let drag = null;
-			handleEl.addEventListener('mouseenter', () => resetFabIdle(true));
-			handleEl.addEventListener('mouseleave', () => resetFabIdle(true));
-			handleEl.addEventListener('focus', () => resetFabIdle(true));
-			handleEl.addEventListener('blur', () => resetFabIdle(true));
-			handleEl.addEventListener('pointerdown', (e) => {
+			let lastPageScrollAt = 0;
+
+			const markPageScroll = () => {
+				lastPageScrollAt = Date.now();
+				if (drag) {
+					drag.isScrollingOrDragging = true;
+				}
+			};
+			try {
+				W.addEventListener('scroll', markPageScroll, { passive: true, capture: true });
+				D.addEventListener('touchmove', (e) => {
+					if (!drag) lastPageScrollAt = Date.now();
+				}, { passive: true, capture: true });
+			} catch (e) {}
+
+			handleEl.addEventListener('mouseenter', (e) => {
+				if (e.pointerType === 'touch') return;
 				resetFabIdle(true);
+			});
+			handleEl.addEventListener('mouseleave', () => resetFabIdle(true));
+			handleEl.addEventListener('blur', () => resetFabIdle(true));
+
+			handleEl.addEventListener('pointerdown', (e) => {
 				if (e.pointerType === 'mouse' && e.button !== 0) return;
+				const wasIdle = handleEl.classList.contains('idle') || (e.pointerType !== 'mouse' && (Date.now() - lastFabWakeFromIdleAt < 120));
 				const r = handleEl.getBoundingClientRect();
-				drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
+				drag = {
+					sx: e.clientX,
+					sy: e.clientY,
+					ox: r.left,
+					oy: r.top,
+					startTime: Date.now(),
+					wasIdle,
+					isScrollingOrDragging: (Date.now() - lastPageScrollAt) < 160,
+					moved: false
+				};
+				clearFabIdleTimer();
 				try { handleEl.setPointerCapture(e.pointerId); } catch (er) {}
 			});
+
 			handleEl.addEventListener('pointermove', (e) => {
 				if (!drag) return;
 				const dx = e.clientX - drag.sx,
 					dy = e.clientY - drag.sy;
+				const dist = Math.hypot(dx, dy);
 				if (!drag.moved) {
-					if (Math.hypot(dx, dy) < 6) return;
+					if (dist <= 8) return;
+					drag.isScrollingOrDragging = true;
 					drag.moved = true;
+					handleEl.classList.remove('idle');
 					handleEl.classList.add('dragging');
 					resetFabIdle(false);
 				}
@@ -4897,12 +4933,14 @@
 				handleEl.style.left = Math.max(4, Math.min(vw - FAB_SIZE - 4, drag.ox + dx)) + 'px';
 				handleEl.style.top = Math.max(4, Math.min(vh - FAB_SIZE - 4, drag.oy + dy)) + 'px';
 			});
+
 			const endDrag = (e, cancelled) => {
 				if (!drag) return;
 				const d = drag;
 				drag = null;
 				handleEl.classList.remove('dragging');
 				try { handleEl.releasePointerCapture(e.pointerId); } catch (er) {}
+
 				if (d.moved) {
 					const r = handleEl.getBoundingClientRect();
 					const vw = D.documentElement.clientWidth || W.innerWidth;
@@ -4910,18 +4948,32 @@
 					fab = { side: (r.left + r.width / 2) < vw / 2 ? 'l' : 'r', y: Math.max(0, Math.min(1, r.top / vh)) };
 					store.set(K_FAB, fab);
 					applyFab();
-				} else if (!cancelled) {
-					setMenu(!menuOpen);
-				} else {
-					resetFabIdle(!menuOpen);
+					return;
 				}
+
+				if (cancelled || d.isScrollingOrDragging || (Date.now() - lastPageScrollAt) < 160) {
+					resetFabIdle(!menuOpen);
+					return;
+				}
+
+				if (d.wasIdle || handleEl.classList.contains('idle')) {
+					resetFabIdle(true);
+					return;
+				}
+
+				setMenu(!menuOpen);
 			};
+
 			handleEl.addEventListener('pointerup', (e) => endDrag(e, false));
 			handleEl.addEventListener('pointercancel', (e) => endDrag(e, true));
 			handleEl.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter' || e.key === ' ') {
 					e.preventDefault();
-					setMenu(!menuOpen);
+					if (handleEl.classList.contains('idle')) {
+						resetFabIdle(true);
+					} else {
+						setMenu(!menuOpen);
+					}
 				}
 			});
 
@@ -5325,6 +5377,7 @@
 			blockAllBtn = null,
 			pickerSliderEl = null,
 			pickerDepthValEl = null,
+			pickerSegStepsEl = null,
 			pickerChain = [];
 
 		function buildPickerChain(startEl) {
@@ -5338,6 +5391,41 @@
 				cur = cur.parentElement;
 			}
 			return chain;
+		}
+
+		function syncPickerSliderVisual(idx, maxIdx) {
+			const total = Math.max(1, maxIdx + 1);
+			const ratio = maxIdx > 0 ? (idx / maxIdx) : 0;
+			if (pickerSliderEl) {
+				pickerSliderEl.style.setProperty('--p-ratio', String(ratio));
+			}
+			if (pickerDepthValEl) {
+				pickerDepthValEl.textContent = `${idx + 1}/${total}`;
+				pickerDepthValEl.style.setProperty('--p-ratio', String(ratio));
+			}
+			if (pickerSegStepsEl) {
+				if (pickerSegStepsEl.childNodes.length !== total) {
+					clear(pickerSegStepsEl);
+					for (let i = 0; i < total; i++) {
+						pickerSegStepsEl.appendChild(el('span', { class: 'p-seg-step' }, String(i + 1)));
+					}
+				}
+				for (let i = 0; i < pickerSegStepsEl.childNodes.length; i++) {
+					const node = pickerSegStepsEl.childNodes[i];
+					if (node && node.classList) node.classList.toggle('active', i === idx);
+				}
+			}
+		}
+
+		function handlePickerSliderInput(e) {
+			if (e) e.stopPropagation();
+			if (!pickerSliderEl) return;
+			const idx = parseInt(pickerSliderEl.value, 10) || 0;
+			const maxIdx = Math.max(0, pickerChain.length - 1);
+			syncPickerSliderVisual(idx, maxIdx);
+			if (pickerChain[idx]) {
+				showPickerTarget(pickerChain[idx], true);
+			}
 		}
 
 		function buildPicker() {
@@ -5355,61 +5443,160 @@
 			pickerBarEl.setAttribute('data-nvirya-picker', '');
 			pickerBarEl.setAttribute('role', 'toolbar');
 			pickerBarEl.setAttribute('aria-label', 'Element picker navigation');
-			pickerBarEl.style.cssText = 'position:fixed; display:none; flex-direction:column; align-items:stretch; gap:7px; padding:8px 10px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(20px) saturate(1.5); backdrop-filter:blur(20px) saturate(1.5); font-size:12px; white-space:nowrap; user-select:none;';
+			pickerBarEl.style.cssText = 'position:fixed; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); left:50%; transform:translateX(-50%); width:min(90vw, 340px); display:none; flex-direction:column; align-items:stretch; gap:8px; padding:10px; z-index:2147483005; pointer-events:auto; background:var(--sheet); color:var(--text); border:1px solid var(--border); border-radius:18px; box-shadow:0 10px 32px rgba(0,0,0,.22); -webkit-backdrop-filter:blur(24px) saturate(1.6); backdrop-filter:blur(24px) saturate(1.6); font-size:12.5px; white-space:nowrap; user-select:none; touch-action:manipulation;';
 
 			const pickerStyle = document.createElement('style');
 			pickerStyle.textContent = `
-				.p-row { display: flex; align-items: center; gap: 5px; }
-				.p-slider-row { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
-				.p-slider-lbl { font: 600 11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--muted); }
-				.p-slider-val { font: 600 11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--accent); min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
+				.p-seg-wrap {
+					position: relative;
+					width: 100%;
+					height: 32px;
+					border-radius: 999px;
+					background: var(--seg-bg);
+					border: 1px solid var(--border);
+					box-sizing: border-box;
+					display: flex;
+					align-items: center;
+					overflow: hidden;
+				}
+				.p-seg-steps {
+					position: absolute;
+					top: 0;
+					left: 3px;
+					right: 3px;
+					bottom: 0;
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					pointer-events: none;
+					z-index: 1;
+				}
+				.p-seg-step {
+					flex: 1;
+					text-align: center;
+					font: 600 10.5px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+					color: var(--muted);
+					opacity: 0.55;
+					position: relative;
+				}
+				.p-seg-step + .p-seg-step::before {
+					content: '';
+					position: absolute;
+					left: 0;
+					top: 50%;
+					transform: translateY(-50%);
+					width: 1px;
+					height: 10px;
+					background: var(--border);
+				}
+				.p-seg-step.active {
+					opacity: 0;
+				}
 				.p-slider {
+					--p-ratio: 0;
 					-webkit-appearance: none;
 					appearance: none;
-					flex: 1;
-					height: 4px;
+					position: relative;
+					z-index: 2;
+					width: 100%;
+					height: 32px;
+					padding: 0 3px;
+					margin: 0;
 					border-radius: 999px;
-					background: var(--border);
-					accent-color: var(--accent);
+					background: transparent;
+					border: none;
 					outline: none;
 					cursor: pointer;
-					margin: 0;
+					touch-action: pan-x;
+					box-sizing: border-box;
 				}
-				.p-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+				.p-slider:disabled {
+					opacity: 0.5;
+					cursor: not-allowed;
+				}
+				.p-slider::-webkit-slider-runnable-track {
+					width: 100%;
+					height: 26px;
+					border-radius: 999px;
+					background: transparent;
+					border: none;
+				}
 				.p-slider::-webkit-slider-thumb {
 					-webkit-appearance: none;
 					appearance: none;
-					width: 16px;
-					height: 16px;
-					border-radius: 50%;
-					background: var(--accent);
-					border: 2px solid var(--sheet);
-					box-shadow: 0 1px 4px rgba(0,0,0,.28);
-					transition: transform .12s ease;
+					width: 54px;
+					height: 26px;
+					border-radius: 999px;
+					background: var(--seg-on);
+					border: 1px solid var(--border);
+					box-shadow: 0 2px 6px rgba(0,0,0,.18);
+					transition: transform .12s cubic-bezier(.32,.72,0,1);
 				}
-				.p-slider::-webkit-slider-thumb:active { transform: scale(1.15); }
+				.p-slider:active:not(:disabled)::-webkit-slider-thumb {
+					transform: scale(0.97);
+				}
+				.p-slider::-moz-range-track {
+					width: 100%;
+					height: 26px;
+					border-radius: 999px;
+					background: transparent;
+					border: none;
+				}
 				.p-slider::-moz-range-thumb {
-					width: 16px;
-					height: 16px;
-					border-radius: 50%;
-					background: var(--accent);
-					border: 2px solid var(--sheet);
-					box-shadow: 0 1px 4px rgba(0,0,0,.28);
+					width: 54px;
+					height: 26px;
+					border-radius: 999px;
+					background: var(--seg-on);
+					border: 1px solid var(--border);
+					box-shadow: 0 2px 6px rgba(0,0,0,.18);
+				}
+				.p-thumb-lbl {
+					--p-ratio: 0;
+					position: absolute;
+					top: 50%;
+					left: calc(3px + var(--p-ratio) * (100% - 60px));
+					width: 54px;
+					height: 26px;
+					transform: translateY(-50%);
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					font: 700 11.5px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+					color: var(--text);
+					font-variant-numeric: tabular-nums;
+					pointer-events: none;
+					z-index: 3;
+				}
+				.p-row {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					gap: 6px;
+					width: 100%;
 				}
 				.p-btn {
+					flex: 1 1 0;
+					min-width: 0;
+					height: 32px;
+					min-height: 32px;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
 					border: 1px solid var(--border);
 					border-radius: 8px;
-					padding: 6px 9px;
+					padding: 0 8px;
 					background: var(--card);
 					color: var(--text);
-					font: 500 12px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+					font: 600 12.5px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 					cursor: pointer;
 					touch-action: manipulation;
+					overflow: hidden;
+					text-overflow: ellipsis;
 					transition: background .15s ease, opacity .15s ease, transform .1s ease;
 				}
 				.p-btn:active:not(:disabled) { transform: scale(0.96); }
 				.p-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-				.p-btn-action { background: var(--accent); color: #ffffff; border-color: transparent; font-weight: 600; }
+				.p-btn-action { background: var(--accent); color: #ffffff; border-color: transparent; }
 				.p-btn-action:active:not(:disabled) { opacity: 0.85; }
 				.p-btn-cancel { background: transparent; border-color: var(--border); color: var(--muted); }
 				@media (hover: hover) {
@@ -5419,6 +5606,8 @@
 				}
 			`;
 
+			pickerSegStepsEl = el('div', { class: 'p-seg-steps' });
+			pickerDepthValEl = el('span', { class: 'p-thumb-lbl' }, '1/1');
 			pickerSliderEl = el('input', {
 				type: 'range',
 				class: 'p-slider',
@@ -5427,16 +5616,10 @@
 				value: '0',
 				step: '1',
 				'aria-label': 'DOM Depth',
-				oninput: () => {
-					const idx = parseInt(pickerSliderEl.value, 10) || 0;
-					if (pickerChain[idx]) {
-						showPickerTarget(pickerChain[idx], true);
-					}
-				}
+				oninput: handlePickerSliderInput
 			});
-			pickerDepthValEl = el('span', { class: 'p-slider-val' }, '1/1');
-			const sliderRow = el('div', { class: 'p-slider-row' },
-				el('span', { class: 'p-slider-lbl' }, t('p_depth')),
+			const sliderRow = el('div', { class: 'p-seg-wrap' },
+				pickerSegStepsEl,
 				pickerSliderEl,
 				pickerDepthValEl
 			);
@@ -5479,6 +5662,7 @@
 				pickerSliderEl.min = '0';
 				pickerSliderEl.max = '0';
 				pickerSliderEl.value = '0';
+				syncPickerSliderVisual(0, 0);
 			}
 			if (pickerEl) pickerEl.style.display = 'none';
 			if (pickerLabelEl) pickerLabelEl.style.display = 'none';
@@ -5515,9 +5699,7 @@
 				pickerSliderEl.value = String(chainIdx);
 				pickerSliderEl.disabled = maxIdx === 0;
 			}
-			if (pickerDepthValEl) {
-				pickerDepthValEl.textContent = (chainIdx + 1) + '/' + Math.max(1, pickerChain.length);
-			}
+			syncPickerSliderVisual(chainIdx, maxIdx);
 
 			const rect = el.getBoundingClientRect();
 			pickerEl.style.left = rect.left + 'px';
@@ -5543,17 +5725,11 @@
 			}
 			if (blockAllBtn) {
 				blockAllBtn.textContent = simCount > 1 ? `${t('p_all')} (${simCount})` : t('p_all');
-				blockAllBtn.style.display = simCount > 1 ? 'inline-block' : 'none';
+				blockAllBtn.style.display = simCount > 1 ? 'inline-flex' : 'none';
 			}
 
 			if (pickerBarEl) {
 				pickerBarEl.style.display = 'flex';
-				const barW = simCount > 1 ? 296 : 240;
-				const barH = 76;
-				const left = Math.max(6, Math.min((W.innerWidth || 320) - barW, rect.left));
-				const top = rect.bottom + 10 + barH < (W.innerHeight || 480) ? rect.bottom + 10 : Math.max(6, rect.top - barH - 8);
-				pickerBarEl.style.left = left + 'px';
-				pickerBarEl.style.top = top + 'px';
 			}
 		}
 
