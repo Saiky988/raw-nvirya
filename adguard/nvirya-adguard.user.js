@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.3.2
+// @version      11.3.3
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -18,6 +18,7 @@
 // @connect      raw.nvirya.com
 // @connect      discord.com
 // @connect      discordapp.com
+// @connect      *
 // @run-at       document-start
 // @all-frames   true
 // ==/UserScript==
@@ -28,7 +29,7 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.3.2';
+	const VERSION = '11.3.3';
 	const SCRIPT_START_TIME = Date.now();
 
 	function mainWorldShield() {
@@ -37,11 +38,172 @@
 
 		const W = window;
 		const D = document;
+		const RE_SHIELD_AD_URL = /(?:^|\.|\/\/)(?:highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease|monetag|propellerads|admaven|ad-maven|popads|popcash|adsterra|exoclick|onclickmax|wingsmob)(?:\.|\/|$)|\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[\/:?#]|$)|(?:^|\/)(?:apu\.php|cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
+		const RE_SHIELD_INLINE = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|znid|zoneid.*\d{5,}|dataset\.zone\s*=|createElement\(['"]script['"]\).*?(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)/i;
+
+		const isAdStack = () => {
+			try {
+				const st = (new Error().stack) || '';
+				if (!st || /eruda|vconsole|chobitsu/i.test(st)) return false;
+				return RE_SHIELD_AD_URL.test(st);
+			} catch (e) { return false; }
+		};
+
+		try {
+			const origST = W.setTimeout;
+			const origSI = W.setInterval;
+			if (typeof origST === 'function') {
+				W.setTimeout = function(fn, delay) {
+					if (isAdStack() || (typeof fn === 'string' && RE_SHIELD_INLINE.test(fn))) return 0;
+					return origST.apply(this, arguments);
+				};
+			}
+			if (typeof origSI === 'function') {
+				W.setInterval = function(fn, delay) {
+					if (isAdStack() || (typeof fn === 'string' && RE_SHIELD_INLINE.test(fn))) return 0;
+					return origSI.apply(this, arguments);
+				};
+			}
+		} catch (e) {}
+
+		try {
+			const origAEL = W.EventTarget && W.EventTarget.prototype && W.EventTarget.prototype.addEventListener;
+			if (typeof origAEL === 'function') {
+				W.EventTarget.prototype.addEventListener = function(type, listener, options) {
+					if (isAdStack()) return;
+					return origAEL.apply(this, arguments);
+				};
+			}
+		} catch (e) {}
+
+		try {
+			const elProto = W.Element && W.Element.prototype;
+			if (elProto && typeof elProto.attachShadow === 'function' && !elProto.attachShadow.__nvirya) {
+				const origAttachShadow = elProto.attachShadow;
+				const patchedAttachShadow = function(init) {
+					try {
+						const isOwnUi = this.hasAttribute && (this.hasAttribute('data-nvirya-ui') || this.hasAttribute('data-nvirya-picker'));
+						const idc = ((this.id || '') + ' ' + (typeof this.className === 'string' ? this.className : '')).toLowerCase();
+						const isDevTool = /eruda|__chobitsu|vconsole/i.test(idc);
+						if (!isOwnUi && !isDevTool) {
+							const stack = (new Error().stack) || '';
+							if (RE_SHIELD_AD_URL.test(stack)) {
+								try { this.style.setProperty('display', 'none', 'important'); this.remove(); } catch (e) {}
+								const dummyHost = D.createElement('div');
+								return origAttachShadow.call(dummyHost, { mode: 'open' });
+							}
+							const forcedInit = Object.assign({}, init || {}, { mode: 'open' });
+							const sr = origAttachShadow.call(this, forcedInit);
+							try { this.__nvirya_sr = sr; } catch (e) {}
+							return sr;
+						}
+					} catch (e) {}
+					return origAttachShadow.apply(this, arguments);
+				};
+				try { Object.defineProperty(patchedAttachShadow, '__nvirya', { value: true }); } catch (e) {}
+				elProto.attachShadow = patchedAttachShadow;
+			}
+		} catch (e) {}
+
+		const isBlockedScriptEl = (node) => {
+			if (!node || node.nodeType !== 1 || String(node.tagName || '').toLowerCase() !== 'script') return false;
+			const src = node.src || (node.getAttribute && node.getAttribute('src')) || '';
+			if (src && /eruda|vconsole|chobitsu/i.test(src)) return false;
+			const zone = (node.dataset && node.dataset.zone) || (node.getAttribute && node.getAttribute('data-zone')) || '';
+			const text = !src ? (node.textContent || '') : '';
+			if (text && /eruda|vconsole|chobitsu/i.test(text)) return false;
+			return !!(zone || (src && RE_SHIELD_AD_URL.test(src)) || (text && RE_SHIELD_INLINE.test(text)));
+		};
+
+		const killScriptNode = (node) => {
+			if (!isBlockedScriptEl(node)) return false;
+			try {
+				node.type = 'javascript/blocked';
+				node.removeAttribute('src');
+				node.removeAttribute('data-zone');
+				node.textContent = '';
+				if (node.parentNode) node.parentNode.removeChild(node);
+			} catch (e) {}
+			return true;
+		};
+
+		try {
+			D.addEventListener('beforescriptexecute', (e) => {
+				if (killScriptNode(e.target)) {
+					e.preventDefault();
+					e.stopPropagation();
+				}
+			}, true);
+		} catch (e) {}
+
+		try {
+			const scriptKillerObs = new MutationObserver((mutations) => {
+				for (let i = 0; i < mutations.length; i++) {
+					const m = mutations[i];
+					if (m.type === 'attributes') {
+						killScriptNode(m.target);
+						continue;
+					}
+					const added = m.addedNodes;
+					for (let j = 0; j < added.length; j++) {
+						const n = added[j];
+						if (!n || n.nodeType !== 1) continue;
+						if (String(n.tagName || '').toLowerCase() === 'script') {
+							killScriptNode(n);
+						} else if (n.querySelectorAll) {
+							const scripts = n.querySelectorAll('script');
+							for (let k = 0; k < scripts.length; k++) killScriptNode(scripts[k]);
+						}
+					}
+				}
+			});
+			scriptKillerObs.observe(D, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'data-zone'] });
+			const existingScripts = D.querySelectorAll ? D.querySelectorAll('script') : [];
+			for (let i = 0; i < existingScripts.length; i++) killScriptNode(existingScripts[i]);
+		} catch (e) {}
+
+		try {
+			const scriptProto = W.HTMLScriptElement && W.HTMLScriptElement.prototype;
+			if (scriptProto) {
+				const origSrcDesc = Object.getOwnPropertyDescriptor(scriptProto, 'src');
+				if (origSrcDesc && origSrcDesc.set) {
+					const origSet = origSrcDesc.set;
+					Object.defineProperty(scriptProto, 'src', {
+						configurable: true,
+						enumerable: origSrcDesc.enumerable,
+						set: function(val) {
+							const sVal = String(val || '');
+							if (!/eruda|vconsole|chobitsu/i.test(sVal) && (RE_SHIELD_AD_URL.test(sVal) || (this.dataset && this.dataset.zone))) {
+								this.type = 'javascript/blocked';
+								try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+								return;
+							}
+							return origSet.call(this, val);
+						},
+						get: origSrcDesc.get
+					});
+				}
+				const origSetAttr = scriptProto.setAttribute;
+				if (typeof origSetAttr === 'function') {
+					scriptProto.setAttribute = function(name, val) {
+						const n = String(name || '').toLowerCase();
+						const v = String(val || '');
+						if ((n === 'src' && !/eruda|vconsole|chobitsu/i.test(v) && RE_SHIELD_AD_URL.test(v)) || n === 'data-zone') {
+							this.type = 'javascript/blocked';
+							try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+							return;
+						}
+						return origSetAttr.apply(this, arguments);
+					};
+				}
+			}
+		} catch (e) {}
 
 		try {
 			const origFunction = W.Function;
 			const patchedFunction = function() {
-				if (arguments.length >= 1 && (arguments[0] === '_vrx' || String(arguments[0]).includes('_vrx') || (typeof arguments[1] === 'string' && arguments[1].includes('_vrx')))) {
+				const bodyStr = Array.prototype.join.call(arguments, ' ');
+				if (bodyStr.includes('_vrx') || RE_SHIELD_INLINE.test(bodyStr)) {
 					return function() {};
 				}
 				return origFunction.apply(this, arguments);
@@ -104,7 +266,7 @@
 						configurable: true,
 						enumerable: origSrcDesc.enumerable,
 						set: function(val) {
-							if (typeof val === 'string' && /cloudiniry|highrevenueformat|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate/i.test(val)) {
+							if (typeof val === 'string' && RE_SHIELD_AD_URL.test(val)) {
 								return;
 							}
 							return origSet.call(this, val);
@@ -129,7 +291,6 @@
 
 		try {
 			const origOpen = W.open;
-			const RE_AD_URL = /(?:^|\.)(?:highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm)(?:\.|$)|(?:^|\/)(?:cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
 
 			let lastClickTarget = null;
 			let lastClickTime = 0;
@@ -174,7 +335,7 @@
 
 			W.open = function(url, name, features) {
 				const urlStr = String(url || '');
-				if (RE_AD_URL.test(urlStr)) {
+				if (RE_SHIELD_AD_URL.test(urlStr)) {
 					triggerAdvance();
 					return makeDummy();
 				}
@@ -412,6 +573,9 @@
 	const K_WL = 'nvirya_x_whitelist';
 	const K_SR = 'nvirya_x_site_rules';
 	const K_BLOCKED = 'nvirya_x_custom_blocked';
+	const K_SYNC_URL = 'nvirya_x_sync_url';
+	const K_SYNC_TIME = 'nvirya_x_sync_time';
+	const SYNC_INTERVAL_MS = 86400000;
 	const K_ST = 'nvirya_x_stats';
 	const K_SESS = 'nvirya_x_session';
   const K_WEEKLY = 'nvirya_x_weekly_history';
@@ -490,7 +654,12 @@
 			rep_feat_lbl: 'Description:',
 			placeholderFeature: "Describe the feature or improvement you'd like to suggest...",
 			placeholderBug: 'Describe the issue or ad location...',
-			toastEmptyNote: 'Please describe your feature request'
+			toastEmptyNote: 'Please describe your feature request',
+			syncRemoteRules: 'Sync from Raw URL',
+			syncRemoteRulesSub: 'Automatically fetch and block domains from an external list',
+			promptSyncUrl: 'Enter the raw rules URL (.txt or .json):',
+			toastSyncSuccess: 'Successfully synced and blocked {count} new domains!',
+			systemBlocked: 'Auto Blocked'
 		},
 		vi: {
 			s_stats: 'Thống kê chặn', s_week: 'Hoạt động tuần này', s_act: 'Tác vụ nhanh', s_set: 'Cài đặt', s_bak: 'Sao lưu & Chia sẻ luật', s_data: 'Dữ liệu', s_dbg: 'Gỡ lỗi',
@@ -532,7 +701,12 @@
 			rep_feat_lbl: 'Ý tưởng / Tính năng:',
 			placeholderFeature: 'Mô tả chi tiết tính năng bạn muốn đề xuất...',
 			placeholderBug: 'Mô tả vị trí quảng cáo hoặc lỗi gặp phải...',
-			toastEmptyNote: 'Vui lòng nhập nội dung đề xuất'
+			toastEmptyNote: 'Vui lòng nhập nội dung đề xuất',
+			syncRemoteRules: 'Đồng bộ từ Link Raw',
+			syncRemoteRulesSub: 'Tự động tải danh sách chặn từ nguồn bên ngoài',
+			promptSyncUrl: 'Nhập đường dẫn raw (.txt hoặc .json):',
+			toastSyncSuccess: 'Đã đồng bộ và chặn thêm {count} domain mới!',
+			systemBlocked: 'Tự động chặn'
 		},
 		'zh-CN': {
 			s_stats: '拦截统计', s_week: '本周活动趋势', s_act: '快捷操作', s_set: '设置', s_bak: '备份与分享规则', s_data: '数据管理', s_dbg: '调试',
@@ -574,7 +748,12 @@
 			rep_feat_lbl: '功能描述:',
 			placeholderFeature: '请详细描述您希望添加的功能或建议...',
 			placeholderBug: '描述广告位置或遇到的问题...',
-			toastEmptyNote: '请输入建议内容'
+			toastEmptyNote: '请输入建议内容',
+			syncRemoteRules: '从原始链接同步',
+			syncRemoteRulesSub: '自动从外部列表获取并屏蔽域名',
+			promptSyncUrl: '输入原始规则链接 (.txt 或 .json):',
+			toastSyncSuccess: '成功同步并屏蔽了 {count} 个新域名！',
+			systemBlocked: '自动屏蔽'
 		}
 	};
 
@@ -810,6 +989,217 @@
 		}
 	}
 
+	function scanStaticDomResources() {
+		if (!D.documentElement) return;
+		try {
+			const existingHosts = new Set();
+			for (let i = 0; i < networkRingBuffer.length; i++) {
+				if (networkRingBuffer[i] && networkRingBuffer[i].hostname) {
+					existingHosts.add(networkRingBuffer[i].hostname);
+				}
+			}
+			const nodes = D.querySelectorAll('script[src], iframe[src], img[src], img[data-src]');
+			const lim = Math.min(nodes.length, 300);
+			for (let i = 0; i < lim; i++) {
+				const el = nodes[i];
+				if (!el || isNviryaNode(el)) continue;
+				const raw = attr(el, 'src') || attr(el, 'data-src') || '';
+				if (!raw || raw.startsWith('data:') || raw.startsWith('blob:')) continue;
+				const u = safeUrl(raw);
+				if (!u || (u.protocol !== 'http:' && u.protocol !== 'https:')) continue;
+				if (u.origin === location.origin) continue;
+				const reqHost = u.hostname.toLowerCase().replace(/\.$/, '');
+				if (!reqHost || reqHost === hostname || existingHosts.has(reqHost)) continue;
+				existingHosts.add(reqHost);
+				const isBlocked = isAdUrl(u) || el.hasAttribute('data-nvirya-hidden');
+				if (networkRingBuffer.length >= MAX_NET_BUFFER) {
+					networkRingBuffer.shift();
+				}
+				networkRingBuffer.push({
+					url: u.href,
+					hostname: reqHost,
+					type: 'dom-element',
+					blocked: !!isBlocked,
+					time: Date.now()
+				});
+			}
+		} catch (e) {}
+	}
+
+	const RE_VALID_DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+
+	function extractDomainCandidate(rawLine) {
+		if (!rawLine || typeof rawLine !== 'string') return '';
+		let s = rawLine.trim();
+		if (!s || s.startsWith('#') || s.startsWith('!') || s.startsWith('//') || s.startsWith('[')) return '';
+		if (s.indexOf('##') !== -1 || s.indexOf('#@#') !== -1 || s.indexOf('#?#') !== -1 || s.indexOf('#$#') !== -1) return '';
+		const commentIdx = s.search(/\s+(?:#|!|\/\/)/);
+		if (commentIdx !== -1) s = s.slice(0, commentIdx).trim();
+
+		const hostsMatch = s.match(/^(?:0\.0\.0\.0|127\.0\.0\.1|::1)\s+([^\s#]+)/);
+		if (hostsMatch) s = hostsMatch[1];
+
+		if (s.startsWith('||')) s = s.slice(2);
+		else if (s.startsWith('|')) s = s.slice(1);
+		s = s.replace(/^https?:\/\//i, '');
+		s = s.replace(/^\*\./, '');
+		s = s.split(/[\/?^$:|\s]/)[0].trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+
+		if (!s || s === 'localhost' || s === 'broadcasthost' || s === 'local' || s === hostname) return '';
+		if (!RE_VALID_DOMAIN.test(s)) return '';
+		return s;
+	}
+
+	function parseDomainsFromRawText(rawText) {
+		const out = new Set();
+		if (!rawText || typeof rawText !== 'string') return out;
+		const trimmed = rawText.trim();
+		if (!trimmed) return out;
+
+		if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+			try {
+				const parsed = JSON.parse(trimmed);
+				const collect = (val) => {
+					if (!val) return;
+					if (typeof val === 'string') {
+						const d = extractDomainCandidate(val);
+						if (d) out.add(d);
+					} else if (Array.isArray(val)) {
+						for (let i = 0; i < val.length; i++) collect(val[i]);
+					} else if (typeof val === 'object') {
+						if (typeof val.domain === 'string') collect(val.domain);
+						if (typeof val.hostname === 'string') collect(val.hostname);
+						for (const k of Object.keys(val)) {
+							const kd = extractDomainCandidate(k);
+							if (kd) out.add(kd);
+							if (Array.isArray(val[k])) collect(val[k]);
+						}
+					}
+				};
+				collect(parsed);
+				if (out.size > 0) return out;
+			} catch (e) {}
+		}
+
+		const lines = trimmed.split(/\r?\n/);
+		const maxLines = Math.min(lines.length, 15000);
+		for (let i = 0; i < maxLines; i++) {
+			const d = extractDomainCandidate(lines[i]);
+			if (d) out.add(d);
+		}
+		return out;
+	}
+
+	function syncRulesFromRawUrl(rawUrl, silent) {
+		const cleanInput = String(rawUrl || '').trim();
+		if (!cleanInput) return;
+		let u;
+		try {
+			u = new URL(cleanInput);
+			if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Invalid protocol');
+		} catch (e) {
+			if (!silent && typeof UI !== 'undefined' && UI.toast) UI.toast(t('ts_ibad'));
+			return;
+		}
+
+		const fetchUrlObj = new URL(u.href);
+		fetchUrlObj.searchParams.set('_t', String(Date.now()));
+		const fetchUrl = fetchUrlObj.href;
+
+		const handleResponseText = (text) => {
+			try {
+				const domains = parseDomainsFromRawText(text);
+				let addedCount = 0;
+				domains.forEach((d) => {
+					if (!customBlockedSet.has(d)) {
+						customBlockedSet.add(d);
+						state.customBlockedHosts.push(d);
+						addedCount++;
+					}
+				});
+
+				if (addedCount > 0) {
+					persistCustomBlocked();
+					for (let i = 0; i < networkRingBuffer.length; i++) {
+						if (isCustomBlockedHost(networkRingBuffer[i].hostname)) {
+							networkRingBuffer[i].blocked = true;
+						}
+					}
+				}
+
+				store.set(K_SYNC_URL, u.href);
+				store.set(K_SYNC_TIME, Date.now());
+
+				installCosmeticCSS();
+				installSiteRulesCSS();
+				try {
+					const nodes = D.querySelectorAll('script[src], iframe[src], img[src], img[data-src], a[href]');
+					for (let i = 0; i < Math.min(nodes.length, 400); i++) {
+						const el = nodes[i];
+						if (!el || isNviryaNode(el) || isProtectedPlayer(el)) continue;
+						const src = attr(el, 'src') || attr(el, 'data-src') || attr(el, 'href') || '';
+						const nu = safeUrl(src);
+						if (nu && isCustomBlockedHost(nu.hostname)) {
+							const tag = String(el.tagName || '').toLowerCase();
+							if (tag === 'script' || tag === 'iframe') applyAction(el, 'remove', 'synced-blocked-domain');
+							else applyAction(el, 'hide', 'synced-blocked-domain');
+						}
+					}
+				} catch (err) {}
+
+				if (typeof UI !== 'undefined') {
+					if (UI.refreshNetworkModalIfOpen) UI.refreshNetworkModalIfOpen();
+					if (!silent && UI.toast) UI.toast(t('toastSyncSuccess', { count: addedCount }));
+				}
+				log('INFO', 'sync', 'Synced remote rules from ' + u.href + ', new domains:', addedCount);
+			} catch (err) {
+				log('ERROR', 'sync', err && err.message);
+				if (!silent && typeof UI !== 'undefined' && UI.toast) UI.toast(t('ts_ibad'));
+			}
+		};
+
+		const handleError = (err) => {
+			log('WARN', 'sync', 'Failed to sync remote rules', err && err.message);
+			if (!silent && typeof UI !== 'undefined' && UI.toast) {
+				UI.toast(t('ts_rperr', { msg: (err && err.message) || 'Network error' }));
+			}
+		};
+
+		if (typeof GM_xmlhttpRequest === 'function') {
+			try {
+				GM_xmlhttpRequest({
+					method: 'GET',
+					url: fetchUrl,
+					headers: { 'Cache-Control': 'no-cache' },
+					nocache: true,
+					timeout: 10000,
+					onload: (res) => {
+						if (res.status >= 200 && res.status < 300 && typeof res.responseText === 'string') {
+							handleResponseText(res.responseText);
+						} else {
+							handleError(new Error('HTTP ' + res.status));
+						}
+					},
+					onerror: () => handleError(new Error('CORS / Network error')),
+					ontimeout: () => handleError(new Error('Timeout'))
+				});
+				return;
+			} catch (e) {}
+		}
+
+		try {
+			fetch(fetchUrl, { cache: 'no-store' })
+				.then(res => {
+					if (!res.ok) throw new Error('HTTP ' + res.status);
+					return res.text();
+				})
+				.then(handleResponseText)
+				.catch(handleError);
+		} catch (e) {
+			handleError(e);
+		}
+	}
+
 	function isDisabledHere() {
 		if (!config.enabled) return true;
 		if (state.sessionDisabled[hostname]) return true;
@@ -818,7 +1208,13 @@
 	}
 
 	const RE_AD_HOST =
-		/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|galaksion|richads|rollerads|evadav|pushub|coinhive|crypto-loot|adsco\.re|directrev|yllix|bidvertiser|trafficstars|ero-advertising|adxprt|creativecdn|exdynsrv|adkeeper|yektanet|popmyads|adreactor|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|googletagmanager\.com|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm)(?:\.|$)/i;
+		/(?:^|\.)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|adsystem\.amazon|adnxs|appnexus|adsrvr|rubiconproject|pubmatic|openx|criteo|casalemedia|smartadserver|yieldmo|yieldone|360yield|adhese|sharethrough|teads|bidswitch|onetag|zedo|mgid|taboola|outbrain|revcontent|adcash|clickadu|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|onclickmax|hppymel|wingsmob|macly|viirhpfa|werefilledwit|adnium|zorvec|hilltopads|clickaine|admicro|adflex|adpia|adtrue|adpushup|ecomobi|innity|komoona|popin|zucks|geniee|vclick|vietad|yeah1ads|adnow|monetag|galaksion|richads|rollerads|evadav|pushub|coinhive|crypto-loot|adsco\.re|directrev|yllix|bidvertiser|trafficstars|ero-advertising|adxprt|creativecdn|exdynsrv|adkeeper|yektanet|popmyads|adreactor|go2cloud|bkcdn|magsrv|tsyndicate|brazzersnetwork|indexexchange|triplelift|spotx|spotxchange|tremor|telaria|conversant|eqads|gumgum|sovrn|lijit|districtm|fyber|smaato|mopub|inmobi|vungle|applovin|chartboost|unityads|adcolony|vidible|springserve|freewheel|stickyads|adrecover|33across|emxdgt|flashtalking|groundtruth|krux|bluekai|lotame|eyeota|exelator|liveramp|thetradedesk|quantcast|quantserve|scorecardresearch|imrworldwide|moatads|doubleverify|adsafeprotected|serving-sys|atdmt|media\.net|ads\.twitter|ads-twitter|an\.facebook|ads\.tiktok|adx|adsota|masoffer|accesstrade|googletagmanager\.com|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease)(?:\.|$)/i;
+
+	const RE_SUSPECT_TLD = /\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)$/i;
+
+	const RE_INLINE_AD_SCRIPT = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|znid|zoneid.*\d{5,}|dataset\.zone\s*=|createElement\(['"]script['"]\).*?(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)/i;
+
+	const RE_AD_STACK = /(?:^|[/.])(?:doubleclick|googlesyndication|adnxs|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|onclickmax|wingsmob|hilltopads|monetag|galaksion|richads|rollerads|evadav|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease)\.|https?:\/\/[^/\s]*\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[/:?#]|$)/i;
 
 	const RE_GAMBLING_HOST =
 		/(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88|ok9|go99|hb88|vip52|rik789|dabet|may88|sky88|uk88|bong99|88online|kubet77|kubet88|hi88vip|f8bet0|shbet0|789bet0|jun880|new880)(?:\.|$)/i;
@@ -1016,6 +1412,7 @@
 		}, true);
 	} catch (e) {}
 
+	installPreExecutionScriptKiller();
 	installEventListenerGuard();
 	installClipboardAndVisibilityGuard();
 	installPopupGuard();
@@ -1078,6 +1475,13 @@
 		return isTrustedPopupHost(url.hostname) || sameRootDomain(url.hostname, hostname);
 	}
 
+	function isSuspiciousAdDomain(host) {
+		if (!host) return false;
+		const h = String(host).toLowerCase().replace(/\.$/, '');
+		if (!h || sameRootDomain(h, hostname) || isWhitelisted(h) || isTrustedPopupHost(h)) return false;
+		return RE_SUSPECT_TLD.test(h);
+	}
+
 	function isAdUrl(u) {
 		if (!u) return false;
 		const h = u.hostname.toLowerCase();
@@ -1085,6 +1489,7 @@
 		if (isCustomBlockedHost(h)) return true;
 		if (RE_GAMBLING_HOST.test(h)) return true;
 		if (RE_AD_HOST.test(h)) return true;
+		if (isSuspiciousAdDomain(h)) return true;
 		if (RE_AD_PATH.test(p)) return true;
 		return false;
 	}
@@ -1214,22 +1619,61 @@
 		return makeDummyWindow();
 	}
 
+	function isAdCallStack() {
+		try {
+			const stack = (new Error().stack) || '';
+			if (!stack || /eruda|vconsole|chobitsu/i.test(stack)) return false;
+			return RE_AD_STACK.test(stack) || /wingsmob|cloudfront/i.test(stack);
+		} catch (e) {
+			return false;
+		}
+	}
+
 	function installEventListenerGuard() {
 		try {
 			const origAEL = EventTarget.prototype.addEventListener;
-			EventTarget.prototype.addEventListener = function(type, listener, options) {
-				if (/^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend)$/i.test(type)) {
+			if (typeof origAEL === 'function' && !origAEL.__nvirya) {
+				const guardedAEL = function(type, listener, options) {
 					try {
-						const stack = new Error().stack || '';
-						if (RE_AD_HOST.test(stack) || /wingsmob|cloudfront/i.test(stack)) {
+						if (config.enabled && !isDisabledHere() && isAdCallStack()) {
 							log('BLOCK', 'event-trap', 'Defused ad listener via stack:', type);
 							return;
 						}
 					} catch (err) {}
-				}
-				return origAEL.apply(this, arguments);
-			};
+					return origAEL.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedAEL, '__nvirya', { value: true }); } catch (e) {}
+				EventTarget.prototype.addEventListener = guardedAEL;
+			}
+		} catch (e) {}
 
+		try {
+			const origST = W.setTimeout;
+			if (typeof origST === 'function' && !origST.__nvirya) {
+				const guardedST = function(fn, delay) {
+					try {
+						if (config.enabled && !isDisabledHere() && (isAdCallStack() || (typeof fn === 'string' && RE_INLINE_AD_SCRIPT.test(fn)))) {
+							return 0;
+						}
+					} catch (err) {}
+					return origST.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedST, '__nvirya', { value: true }); } catch (e) {}
+				W.setTimeout = guardedST;
+			}
+			const origSI = W.setInterval;
+			if (typeof origSI === 'function' && !origSI.__nvirya) {
+				const guardedSI = function(fn, delay) {
+					try {
+						if (config.enabled && !isDisabledHere() && (isAdCallStack() || (typeof fn === 'string' && RE_INLINE_AD_SCRIPT.test(fn)))) {
+							return 0;
+						}
+					} catch (err) {}
+					return origSI.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedSI, '__nvirya', { value: true }); } catch (e) {}
+				W.setInterval = guardedSI;
+			}
 		} catch (e) {}
 	}
 
@@ -1272,7 +1716,6 @@
 		if (W.__nvirya_clip_vis_guard) return;
 		try { Object.defineProperty(W, '__nvirya_clip_vis_guard', { value: true }); } catch (e) { W.__nvirya_clip_vis_guard = true; }
 
-		// 1. Clipboard Guard: navigator.clipboard.writeText & document.execCommand('copy')
 		try {
 			const clipTargets = [];
 			if (W.Clipboard && W.Clipboard.prototype) clipTargets.push(W.Clipboard.prototype);
@@ -1330,7 +1773,6 @@
 			}
 		} catch (e) {}
 
-		// 2. Visibility Spoofing: keep document.visibilityState = 'visible' & document.hidden = false
 		try {
 			const docProto = (W.Document && W.Document.prototype) || D;
 			Object.defineProperty(docProto, 'visibilityState', {
@@ -1542,44 +1984,234 @@
 		} catch (e) { log('WARN', 'anchor-click', 'HTMLAnchorElement.click hook unavailable', e && e.message); }
 	}
 
-	function installScriptElementGuard() {
-		try {
-			const origCreateElement = D.createElement;
-			D.createElement = function(tagName, options) {
-				const el = origCreateElement.apply(this, arguments);
-				if (typeof tagName === 'string' && tagName.toLowerCase() === 'script') {
-					const srcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
-					if (srcDescriptor && srcDescriptor.set) {
-						const origSrcSet = srcDescriptor.set;
-						Object.defineProperty(el, 'src', {
-							configurable: true,
-							set: function(val) {
-								const u = safeUrl(val);
-								if (u) {
-									const shouldBlock = config.enabled && !isDisabledHere() && (isAdUrl(u) || isBlacklistedScriptHost(u.hostname));
-									recordNetworkRequest(u, 'script', shouldBlock);
-									if (shouldBlock) {
-										log('BLOCK', 'script-src', 'Blocked dynamic script:', u.href);
-										stats.inc('requests');
-										return;
-									}
-								}
-								return origSrcSet.call(this, val);
-							},
-							get: srcDescriptor.get
-						});
-					}
-				}
-				return el;
-			};
-		} catch (e) {
-			log('WARN', 'guard', 'Cannot hook createElement for script', e && e.message);
-		}
-	}
-
 	function isBlacklistedScriptHost(host) {
 		if (!host) return false;
-		return /(?:^|\.)(?:googletagmanager\.com|wingsmob\.com|monetag\.com|propu\.com|propellerads\.com|adsterra\.com|exoclick\.com|highrevenueformat\.com|cloudiniry\.net|p7jeusk9n\.shop)(?:\.|$)/i.test(host);
+		const h = String(host).toLowerCase().replace(/\.$/, '');
+		if (RE_AD_HOST.test(h) || isSuspiciousAdDomain(h) || isCustomBlockedHost(h)) return true;
+		return /(?:^|\.)(?:googletagmanager\.com|wingsmob\.com|monetag\.com|propu\.com|propellerads\.com|adsterra\.com|exoclick\.com|highrevenueformat\.com|cloudiniry\.net|p7jeusk9n\.shop|484r\.com|bvtpk\.com|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads)(?:\.|$)/i.test(h);
+	}
+
+	function neutralizeScriptNode(node) {
+		if (!node || node.nodeType !== 1 || String(node.tagName || '').toLowerCase() !== 'script') return false;
+		if (!config.enabled || isDisabledHere()) return false;
+		const rawSrc = node.src || attr(node, 'src') || '';
+		if (rawSrc && /eruda|vconsole|chobitsu/i.test(rawSrc)) return false;
+		const hasAdZone = !!(attr(node, 'data-zone') || (node.dataset && node.dataset.zone));
+		if (rawSrc || hasAdZone) {
+			const u = safeUrl(rawSrc);
+			if (hasAdZone || (u && (isAdUrl(u) || isBlacklistedScriptHost(u.hostname)))) {
+				if (u) recordNetworkRequest(u, 'script', true);
+				try {
+					node.type = 'javascript/blocked';
+					node.removeAttribute('src');
+					node.removeAttribute('data-zone');
+					node.textContent = '';
+					if (node.parentNode) node.parentNode.removeChild(node);
+				} catch (e) {}
+				stats.inc('requests');
+				stats.inc('ads');
+				log('BLOCK', 'script-kill', 'Killed pre-execution ad script:', u ? u.href : 'data-zone');
+				return true;
+			}
+		} else {
+			const codeText = node.textContent || '';
+			if (codeText && !/eruda|vconsole|chobitsu/i.test(codeText) && RE_INLINE_AD_SCRIPT.test(codeText)) {
+				try {
+					node.type = 'javascript/blocked';
+					node.textContent = '';
+					if (node.parentNode) node.parentNode.removeChild(node);
+				} catch (e) {}
+				stats.inc('ads');
+				log('BLOCK', 'script-kill', 'Killed inline adware loader script');
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function installPreExecutionScriptKiller() {
+		if (W.__nvirya_pre_script_killer) return;
+		try { Object.defineProperty(W, '__nvirya_pre_script_killer', { value: true }); } catch (e) { W.__nvirya_pre_script_killer = true; }
+
+		try {
+			const elProto = W.Element && W.Element.prototype;
+			if (elProto && typeof elProto.attachShadow === 'function' && !elProto.attachShadow.__nvirya_us) {
+				const origAttach = elProto.attachShadow;
+				const guardedAttach = function(init) {
+					try {
+						if (!isNviryaNode(this) && config.enabled && !isDisabledHere()) {
+							const stack = (new Error().stack) || '';
+							if (isAdCallStack()) {
+								log('BLOCK', 'shadow-ad', 'Blocked adware attachShadow via stack');
+								try { this.style.setProperty('display', 'none', 'important'); this.remove(); } catch (e) {}
+								const dummy = D.createElement('div');
+								return origAttach.call(dummy, { mode: 'open' });
+							}
+							const forced = Object.assign({}, init || {}, { mode: 'open' });
+							const sr = origAttach.call(this, forced);
+							try { this.__nvirya_sr = sr; } catch (e) {}
+							return sr;
+						}
+					} catch (e) {}
+					return origAttach.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedAttach, '__nvirya_us', { value: true }); } catch (e) {}
+				elProto.attachShadow = guardedAttach;
+			}
+		} catch (e) {}
+
+		try {
+			const scriptProto = W.HTMLScriptElement && W.HTMLScriptElement.prototype;
+			if (scriptProto && !scriptProto.__nvirya_src_hooked) {
+				const srcDesc = Object.getOwnPropertyDescriptor(scriptProto, 'src');
+				if (srcDesc && srcDesc.set) {
+					const origSrcSet = srcDesc.set;
+					Object.defineProperty(scriptProto, 'src', {
+						configurable: true,
+						enumerable: srcDesc.enumerable,
+						set: function(val) {
+							const sVal = String(val || '');
+							if (!/eruda|vconsole|chobitsu/i.test(sVal)) {
+								const u = safeUrl(sVal);
+								const hasZone = !!(attr(this, 'data-zone') || (this.dataset && this.dataset.zone));
+								const shouldBlock = config.enabled && !isDisabledHere() && (hasZone || (u && (isAdUrl(u) || isBlacklistedScriptHost(u.hostname))));
+								if (u) recordNetworkRequest(u, 'script', shouldBlock);
+								if (shouldBlock) {
+									this.type = 'javascript/blocked';
+									try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+									stats.inc('requests');
+									stats.inc('ads');
+									log('BLOCK', 'script-src', 'Blocked script.src setter:', u ? u.href : sVal);
+									return;
+								}
+							}
+							return origSrcSet.call(this, val);
+						},
+						get: srcDesc.get
+					});
+				}
+				const origSetAttr = scriptProto.setAttribute;
+				if (typeof origSetAttr === 'function') {
+					scriptProto.setAttribute = function(name, val) {
+						const n = String(name || '').toLowerCase();
+						const sVal = String(val || '');
+						if ((n === 'src' || n === 'data-zone') && config.enabled && !isDisabledHere() && !/eruda|vconsole|chobitsu/i.test(sVal)) {
+							if (n === 'data-zone') {
+								this.type = 'javascript/blocked';
+								try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+								return;
+							}
+							const u = safeUrl(sVal);
+							if (u) {
+								const shouldBlock = isAdUrl(u) || isBlacklistedScriptHost(u.hostname);
+								recordNetworkRequest(u, 'script', shouldBlock);
+								if (shouldBlock) {
+									this.type = 'javascript/blocked';
+									try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+									stats.inc('requests');
+									stats.inc('ads');
+									log('BLOCK', 'script-src', 'Blocked script.setAttribute(src):', u.href);
+									return;
+								}
+							}
+						}
+						return origSetAttr.apply(this, arguments);
+					};
+				}
+				scriptProto.__nvirya_src_hooked = true;
+			}
+		} catch (e) {}
+
+		try {
+			if (W.navigator && W.navigator.serviceWorker && typeof W.navigator.serviceWorker.register === 'function' && !W.navigator.serviceWorker.register.__nvirya) {
+				const origRegister = W.navigator.serviceWorker.register;
+				const guardedRegister = function(scriptURL, options) {
+					try {
+						if (config.enabled && !isDisabledHere()) {
+							const sUrl = String(scriptURL || '');
+							const u = safeUrl(sUrl);
+							if ((u && isAdUrl(u)) || /(?:sw|service[-_]?worker|firebase-messaging|onesignal|push|monetag|propeller|zoneid|bvtpk|484r)/i.test(sUrl)) {
+								log('BLOCK', 'sw', 'Blocked suspicious ServiceWorker registration:', sUrl);
+								stats.inc('requests');
+								return Promise.reject(new DOMException('Blocked by Nvirya AdGuard', 'SecurityError'));
+							}
+						}
+					} catch (err) {}
+					return origRegister.apply(this, arguments);
+				};
+				try { Object.defineProperty(guardedRegister, '__nvirya', { value: true }); } catch (e) {}
+				W.navigator.serviceWorker.register = guardedRegister;
+			}
+		} catch (e) {}
+
+		try {
+			D.addEventListener('beforescriptexecute', function(e) {
+				if (neutralizeScriptNode(e.target)) {
+					e.preventDefault();
+					e.stopPropagation();
+				}
+			}, true);
+		} catch (e) {}
+
+		try {
+			const fastObs = new MutationObserver((mutations) => {
+				if (!config.enabled || isDisabledHere()) return;
+				for (let i = 0; i < mutations.length; i++) {
+					const m = mutations[i];
+					if (m.type === 'attributes') {
+						neutralizeScriptNode(m.target);
+						continue;
+					}
+					const added = m.addedNodes;
+					for (let j = 0; j < added.length; j++) {
+						const n = added[j];
+						if (!n || n.nodeType !== 1) continue;
+						if (String(n.tagName || '').toLowerCase() === 'script') {
+							neutralizeScriptNode(n);
+						} else if (n.querySelectorAll) {
+							const scripts = n.querySelectorAll('script');
+							for (let k = 0; k < scripts.length; k++) neutralizeScriptNode(scripts[k]);
+						}
+					}
+				}
+			});
+			fastObs.observe(D, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'data-zone'] });
+			const existing = D.querySelectorAll ? D.querySelectorAll('script') : [];
+			for (let i = 0; i < existing.length; i++) neutralizeScriptNode(existing[i]);
+		} catch (e) {}
+
+		try {
+			const nodeProto = W.Node && W.Node.prototype;
+			if (nodeProto && !nodeProto.__nvirya_dom_hook) {
+				const origAppend = nodeProto.appendChild;
+				const origInsert = nodeProto.insertBefore;
+				const shouldBlockNodeInsert = (child) => {
+					if (!child || child.nodeType !== 1 || !config.enabled || isDisabledHere()) return false;
+					if (isNviryaNode(child)) return false;
+					const tag = String(child.tagName || '').toLowerCase();
+					if (tag === 'script' && neutralizeScriptNode(child)) return true;
+					if (isAdCallStack() && (tag === 'div' || tag === 'iframe' || tag === 'script' || tag === 'a' || tag === 'aside' || tag === 'section' || tag.includes('-'))) {
+						log('BLOCK', 'dom-insert', 'Blocked adware DOM insertion via stack:', tag);
+						stats.inc('ads');
+						return true;
+					}
+					return false;
+				};
+				nodeProto.appendChild = function(child) {
+					if (shouldBlockNodeInsert(child)) return child;
+					return origAppend.apply(this, arguments);
+				};
+				nodeProto.insertBefore = function(child, ref) {
+					if (shouldBlockNodeInsert(child)) return child;
+					return origInsert.apply(this, arguments);
+				};
+				nodeProto.__nvirya_dom_hook = true;
+			}
+		} catch (e) {}
+	}
+
+	function installScriptElementGuard() {
+		installPreExecutionScriptKiller();
 	}
 
 	function installIframePopupGuard() {
@@ -1854,7 +2486,7 @@
 						const u = safeUrl(url);
 						if (u) {
 							const active = config.enabled && !isDisabledHere();
-							const shouldBlock = active && isAdUrl(u) && (config.strictMode || isCustomBlockedHost(u.hostname));
+							const shouldBlock = active && (isAdUrl(u) || (config.strictMode && RE_TRACKER.test(u.hostname)));
 							recordNetworkRequest(u, 'fetch', shouldBlock);
 							if (shouldBlock) {
 								stats.inc('requests');
@@ -1880,7 +2512,7 @@
 						const u = safeUrl(url);
 						if (u) {
 							const active = config.enabled && !isDisabledHere();
-							const shouldBlock = active && isAdUrl(u) && (config.strictMode || isCustomBlockedHost(u.hostname));
+							const shouldBlock = active && (isAdUrl(u) || (config.strictMode && RE_TRACKER.test(u.hostname)));
 							recordNetworkRequest(u, 'xhr', shouldBlock);
 							if (shouldBlock) {
 								stats.inc('requests');
@@ -1909,7 +2541,7 @@
 						const u = safeUrl(url);
 						if (u) {
 							const active = config.enabled && !isDisabledHere();
-							const shouldBlock = active && isAdUrl(u) && (config.strictMode || isCustomBlockedHost(u.hostname));
+							const shouldBlock = active && (isAdUrl(u) || (config.strictMode && RE_TRACKER.test(u.hostname)));
 							recordNetworkRequest(u, 'beacon', shouldBlock);
 							if (shouldBlock) {
 								stats.inc('requests');
@@ -2171,6 +2803,8 @@
 		return isInvisibleTrap(el);
 	}
 
+	const RE_DEVTOOLS_NODE = /(?:^|[\s_-])(?:eruda|eruda-[a-z0-9_-]+|__chobitsu-hide__|vconsole|vc-[a-z0-9_-]+)(?:$|[\s_-])/i;
+
 	function hasNviryaAncestor(el) {
 		if (!el) return false;
 		let cur = el,
@@ -2178,6 +2812,8 @@
 		while (cur && depth < 20) {
 			if (cur.nodeType === 1) {
 				if (attr(cur, 'data-nvirya-ui') !== null || attr(cur, 'data-nvirya-picker') !== null) return true;
+				const idc = ((cur.id || '') + ' ' + classString(cur)).trim();
+				if (idc && RE_DEVTOOLS_NODE.test(idc)) return true;
 			}
 			if (cur.host && cur.host.nodeType === 1) {
 				cur = cur.host;
@@ -2212,7 +2848,7 @@
 	function isProtectedTrapSurface(el) {
 		if (!el || el.nodeType !== 1 || hasNviryaAncestor(el)) return true;
 		const tag = String(el.tagName || '').toLowerCase();
-		if (tag === 'iframe') return false; // Transparent or ad iframes are never protected
+		if (tag === 'iframe') return false;
 
 		const safeTags = /^(?:nav|header|footer|main|dialog|video|audio|canvas|svg|form|input|select|textarea|button)$/i;
 		let cur = el,
@@ -2485,7 +3121,7 @@
 		});
 	}
 
-	const TARGETED_CANDIDATE_SELECTOR = 'iframe, ins.adsbygoogle, [id^="aswift_"], [id^="google_ads_"], div[class*="banner" i], div[id*="banner" i], a[target="_blank"]';
+	const TARGETED_CANDIDATE_SELECTOR = 'iframe, ins.adsbygoogle, [id^="aswift_"], [id^="google_ads_"], .aads-sticky, aside.ads, .ads_single_top, .ads_single_center, .ads_header, div[class*="banner" i], div[id*="banner" i], a[target="_blank"]';
 	const TARGETED_TRAP_SELECTOR = 'iframe, div[style], section[style], ins, a[target="_blank"]';
 
 	function queueTrapNode(node, includeDescendants) {
@@ -2879,6 +3515,7 @@
 
 	function cleanupFloatingAdModals(root) {
 		if (isDisabledHere()) return;
+		scanShadowRoots(root || D.documentElement);
 		let nodes = [];
 		const query = 'div,section,dialog';
 		try {
@@ -2939,10 +3576,13 @@
 		const extraSel = customHostRules.length ? ',\n    ' + customHostRules.join(',\n    ') : '';
 		const css = `
     [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"],
-    ins.adsbygoogle,
+    ins.adsbygoogle, .aads-sticky, #aads-close, iframe[data-aa],
+    aside.ads, .ads_single_top, .ads_single_center, .ads_header,
+    .ads_download_1, .ads_download_2, .ads_download_u_1, .ads_download_u_2, .ads_download_u_3,
     [data-ad-slot], [data-ad-client], [data-ad-unit],
     iframe[src*="googlesyndication"], iframe[src*="doubleclick"],
     iframe[src*="adservice.google"], iframe[src*="amazon-adsystem"],
+    iframe[src*="a-ads.com"],
     [data-nvirya-hidden]${extraSel} {
       display: none !important;
       visibility: hidden !important;
@@ -3145,6 +3785,120 @@
 		if (pendingQueue.length) scheduleProcess();
 	}
 
+	const RE_FAKE_BOT_TEXT = /(?:xác minh bạn không phải|không phải là bot|hãy xác minh|nhấn tiếp tục|bấm tiếp tục|verify you are (?:not a )?(?:bot|human)|human verification|robot check|click allow|nhấn cho phép|press continue|tap continue|robot verification|chú ý\s*:.*tiếp tục)/i;
+	const LEGIT_CAPTCHA_SELECTOR = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="google.com/recaptcha"], iframe[src*="recaptcha.net"], iframe[src*="hcaptcha.com"]';
+
+	function hasLegitCaptchaIframe(rootNode) {
+		if (!rootNode || !rootNode.querySelector) return false;
+		try {
+			return !!rootNode.querySelector(LEGIT_CAPTCHA_SELECTOR);
+		} catch (e) {
+			return false;
+		}
+	}
+
+	function isFakeBotVerificationModal(el) {
+		if (!el || el.nodeType !== 1 || isNviryaNode(el) || isProtectedPlayer(el)) return false;
+		const tag = String(el.tagName || '').toLowerCase();
+		if (tag === 'html' || tag === 'body' || tag === 'main') return false;
+		let cs;
+		try { cs = W.getComputedStyle(el); } catch (e) { return false; }
+		if (!cs || (cs.position !== 'fixed' && cs.position !== 'absolute')) return false;
+		const z = parseInt(cs.zIndex, 10);
+		if (!isFinite(z) || z <= 999) return false;
+		if (hasLegitCaptchaIframe(el)) return false;
+
+		const text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+		if (text && text.length <= 600 && RE_FAKE_BOT_TEXT.test(text)) {
+			return true;
+		}
+		const sr = el.shadowRoot || el.__nvirya_sr;
+		if (sr && !hasLegitCaptchaIframe(sr)) {
+			const shadowText = String(sr.textContent || '').replace(/\s+/g, ' ').trim();
+			if (shadowText && shadowText.length <= 600 && RE_FAKE_BOT_TEXT.test(shadowText)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function isShadowDomAdHost(el) {
+		if (!el || el.nodeType !== 1 || isNviryaNode(el)) return false;
+		const sr = el.shadowRoot || el.__nvirya_sr;
+		if (!sr) return false;
+		if (attr(el, 'data-nvirya-ui') !== null || isProtectedPlayer(el)) return false;
+		if (hasLegitCaptchaIframe(sr)) return false;
+		try {
+			const srText = String(sr.textContent || '').replace(/\s+/g, ' ').trim();
+			if (srText && srText.length <= 600 && RE_FAKE_BOT_TEXT.test(srText)) return true;
+
+			const links = sr.querySelectorAll ? sr.querySelectorAll('a[href], iframe[src], script[src]') : [];
+			for (let i = 0; i < Math.min(links.length, 15); i++) {
+				const raw = attr(links[i], 'href') || attr(links[i], 'src') || '';
+				const u = safeUrl(raw);
+				if (u && isAdUrl(u)) return true;
+			}
+
+			const styles = sr.querySelectorAll ? sr.querySelectorAll('style') : [];
+			for (let i = 0; i < styles.length; i++) {
+				const cssText = styles[i].textContent || '';
+				if (/position\s*:\s*fixed/i.test(cssText) && /z-index\s*:\s*214748\d{4}/i.test(cssText) && srText.length < 300) {
+					return true;
+				}
+			}
+		} catch (e) {}
+		return false;
+	}
+
+	function scanShadowRoots(root) {
+		if (!root || isDisabledHere()) return;
+		try {
+			if (root.nodeType === 1 && root.shadowRoot && isShadowDomAdHost(root)) {
+				applyAction(root, 'remove', 'shadow-dom-ad-host');
+				return;
+			}
+			const candidates = root.querySelectorAll ? root.querySelectorAll('div, section, aside, body > *') : [];
+			const lim = Math.min(candidates.length, 150);
+			for (let i = 0; i < lim; i++) {
+				const el = candidates[i];
+				if (!el || isNviryaNode(el)) continue;
+				if (el.shadowRoot && isShadowDomAdHost(el)) {
+					applyAction(el, 'remove', 'shadow-dom-ad-host');
+				} else if (isFakeBotVerificationModal(el)) {
+					applyAction(el, 'remove', 'fake-bot-overlay');
+				}
+			}
+		} catch (e) {}
+	}
+
+	function guardMaxZIndexNode(el) {
+		if (!el || el.nodeType !== 1 || isNviryaNode(el) || isProtectedPlayer(el)) return;
+		const tag = String(el.tagName || '').toLowerCase();
+		if (tag === 'html' || tag === 'body' || tag === 'head' || tag === 'script' || tag === 'style') return;
+		try {
+			if (isFakeBotVerificationModal(el) || isShadowDomAdHost(el) || isFloatingAdModal(el) || isInvisibleTrap(el)) {
+				applyAction(el, 'remove', 'max-zindex-ad-overlay');
+				return;
+			}
+			const cs = W.getComputedStyle(el);
+			const z = cs ? parseInt(cs.zIndex, 10) : NaN;
+			if (isFinite(z) && z >= 2147483000) {
+				el.style.setProperty('z-index', '2147482000', 'important');
+			}
+		} catch (e) {}
+	}
+
+	function ensureNviryaHostLast() {
+		try {
+			const uiHost = D.querySelector('[data-nvirya-ui]');
+			if (!uiHost) return;
+			const parent = D.documentElement || D.body;
+			if (parent && uiHost.parentNode === parent && parent.lastElementChild !== uiHost) {
+				parent.appendChild(uiHost);
+			}
+		} catch (e) {}
+	}
+
 	function inspectAndAct(el) {
 		if (!el || el.nodeType !== 1) return;
 		if (isDisabledHere()) return;
@@ -3152,9 +3906,26 @@
 		if (el.hasAttribute && el.hasAttribute('data-nvirya-hidden')) return;
 
 		const tag = (el.tagName || '').toLowerCase();
-		if (!CANDIDATE_TAGS.has(tag)) return;
+		if (tag === 'script') {
+			neutralizeScriptNode(el);
+			return;
+		}
 
-		if ((tag === 'div' || tag === 'section' || tag === 'dialog') && isFloatingAdModal(el)) {
+		if (el.shadowRoot && isShadowDomAdHost(el)) {
+			applyAction(el, 'remove', 'shadow-dom-ad-host');
+			return;
+		}
+
+		if (isFakeBotVerificationModal(el)) {
+			applyAction(el, 'remove', 'fake-bot-overlay');
+			return;
+		}
+
+		guardMaxZIndexNode(el);
+
+		if (!CANDIDATE_TAGS.has(tag) && !tag.includes('-')) return;
+
+		if ((tag === 'div' || tag === 'section' || tag === 'dialog' || tag === 'aside') && isFloatingAdModal(el)) {
 			applyAction(el, 'remove', 'floating-ad-modal');
 			return;
 		}
@@ -3165,7 +3936,7 @@
 			return;
 		}
 
-		if (tag === 'div' || tag === 'section' || tag === 'iframe') {
+		if (tag === 'div' || tag === 'section' || tag === 'aside' || tag === 'iframe') {
 			if (isSuspiciousOverlay(el)) applyAction(el, 'remove', 'suspicious-overlay');
 		}
 	}
@@ -3204,18 +3975,31 @@
 			observer = new MutationObserver((mutations) => {
 				if (isDisabledHere()) return;
 				let hasMutations = false;
+				let rootChildAdded = false;
 				for (let i = 0; i < mutations.length; i++) {
 					const m = mutations[i];
 					if (m.type === 'childList') {
 						for (let j = 0; j < m.addedNodes.length; j++) {
 							const n = m.addedNodes[j];
 							if (n.nodeType === 1) {
-								if (/^(?:html|body)$/i.test(String(n.tagName))) captureScrollBaseline(n);
+								if (isNviryaNode(n)) continue;
+								const nTag = String(n.tagName || '').toLowerCase();
+								if (nTag === 'script') {
+									if (neutralizeScriptNode(n)) continue;
+								}
+								if (nTag === 'html' || nTag === 'body') captureScrollBaseline(n);
+								if (m.target === D.documentElement || m.target === D.body) {
+									rootChildAdded = true;
+									guardMaxZIndexNode(n);
+								}
 								neutralizeMetaRefresh(n);
+								scanShadowRoots(n);
 								queueTrapNode(n, false);
 								enqueue(n);
 								if (n.querySelectorAll) {
 									try {
+										const scripts = n.querySelectorAll('script');
+										for (let s = 0; s < scripts.length; s++) neutralizeScriptNode(scripts[s]);
 										const candidates = n.querySelectorAll(TARGETED_CANDIDATE_SELECTOR);
 										const lim = Math.min(candidates.length, 24);
 										for (let k = 0; k < lim; k++) enqueue(candidates[k]);
@@ -3226,13 +4010,15 @@
 						}
 					} else if (m.type === 'attributes') {
 						const targetNode = m.target;
-						if (targetNode && targetNode.nodeType === 1) {
+						if (targetNode && targetNode.nodeType === 1 && !isNviryaNode(targetNode)) {
+							guardMaxZIndexNode(targetNode);
 							queueTrapNode(targetNode, false);
 							enqueue(targetNode);
 							hasMutations = true;
 						}
 					}
 				}
+				if (rootChildAdded) ensureNviryaHostLast();
 				if (hasMutations) {
 					scheduleOverlayCleanup();
 					scheduleVideoAdScan();
@@ -3707,8 +4493,8 @@
       cursor: grab;
       user-select: none; -webkit-user-select: none;
       touch-action: none;
-      pointer-events: auto;
-      z-index: 2147482999;
+      pointer-events: auto !important;
+      z-index: 2147483647 !important;
       transition: left .28s cubic-bezier(.32,.72,0,1), top .28s cubic-bezier(.32,.72,0,1), opacity .24s ease, transform .28s cubic-bezier(.32,.72,0,1);
     }
     .handle svg { width: 22px; height: 22px; }
@@ -4025,7 +4811,8 @@
     }
     .net-act-btn.block { border-color: rgba(220,38,38,.35); color: var(--danger); }
     .net-act-btn.unblock { border-color: var(--border); color: var(--accent); }
-    .net-act-btn:active { transform: scale(.96); opacity: .85; }
+    .net-act-btn.sys-blocked { border-color: var(--border); color: var(--muted); opacity: .65; cursor: default; pointer-events: none; }
+    .net-act-btn:active:not(:disabled) { transform: scale(.96); opacity: .85; }
 
     @media (prefers-reduced-motion: reduce) {
       .update-banner { transition: none !important; }
@@ -4140,11 +4927,20 @@
 
 		function applyFab() {
 			if (!handleEl) return;
-			const vw = D.documentElement.clientWidth || W.innerWidth || 360;
-			const vh = W.innerHeight || 640;
+			if (host && !host.isConnected) {
+				const container = D.documentElement || D.body;
+				if (container) {
+					try { container.appendChild(host); } catch (e) {}
+				}
+			}
+			const vw = W.innerWidth || D.documentElement.clientWidth || 360;
+			const vh = W.innerHeight || D.documentElement.clientHeight || 640;
+			const maxLeft = Math.max(FAB_MARGIN, vw - FAB_SIZE - FAB_MARGIN);
+			const maxTop = Math.max(FAB_MARGIN, vh - FAB_SIZE - FAB_MARGIN);
 			const side = fab.side === 'l' ? 'l' : 'r';
-			const left = side === 'l' ? FAB_MARGIN : Math.max(FAB_MARGIN, vw - FAB_SIZE - FAB_MARGIN);
-			const top = Math.max(FAB_MARGIN, Math.min(vh - FAB_SIZE - FAB_MARGIN, Math.round(fab.y * vh)));
+			const targetLeft = side === 'l' ? FAB_MARGIN : maxLeft;
+			const left = Math.max(FAB_MARGIN, Math.min(maxLeft, targetLeft));
+			const top = Math.max(FAB_MARGIN, Math.min(maxTop, Math.round(fab.y * vh)));
 			handleEl.setAttribute('data-side', side);
 			handleEl.style.left = left + 'px';
 			handleEl.style.top = top + 'px';
@@ -4248,7 +5044,7 @@
 			if (uiReady && host && host.isConnected) return;
 			host = document.createElement('div');
 			host.setAttribute('data-nvirya-ui', '');
-			host.style.cssText = 'all:initial; display:block; position:fixed; z-index:2147483647; top:0; left:0; width:0; height:0; pointer-events:none;';
+			host.style.cssText = 'all:initial; display:block; position:fixed !important; z-index:2147483647 !important; pointer-events:none !important; top:0; left:0; width:0; height:0; isolation:isolate !important;';
 			root = host.attachShadow({ mode: 'open' });
 			const style = document.createElement('style');
 			style.textContent = CSS;
@@ -4292,7 +5088,7 @@
 			);
 			root.appendChild(updateEl);
 
-			(D.body || D.documentElement).appendChild(host);
+			(D.documentElement || D.body).appendChild(host);
 
 			loadFab();
 			updateAvailable = Updater.getAvailable();
@@ -4598,6 +5394,20 @@
 				chevron: true,
 				onclick: () => importSiteRules()
 			}));
+			shareGroup.appendChild(item({
+				label: t('syncRemoteRules'),
+				sub: t('syncRemoteRulesSub'),
+				tone: 'green',
+				icon: 'download',
+				chevron: true,
+				onclick: () => {
+					const prevUrl = store.get(K_SYNC_URL, '') || '';
+					const inputUrl = prompt(t('promptSyncUrl'), prevUrl);
+					if (inputUrl && inputUrl.trim()) {
+						syncRulesFromRawUrl(inputUrl.trim(), false);
+					}
+				}
+			}));
 			bodyEl.appendChild(shareGroup);
 
 			bodyEl.appendChild(sectionTitle(t('s_data')));
@@ -4888,6 +5698,37 @@
 				D.addEventListener('touchmove', (e) => {
 					if (!drag) lastPageScrollAt = Date.now();
 				}, { passive: true, capture: true });
+
+				// Bypass Overlay on FAB Tap (30px radius protection for APK sites)
+				D.addEventListener('pointerdown', (e) => {
+					if (!e.isTrusted || !handleEl || !config.showFloatingButton || menuOpen) return;
+					if (handleEl.classList.contains('hidden') || handleEl.classList.contains('away')) return;
+					const path = eventPath(e);
+					if (isExtensionUiPath(path) || path.indexOf(handleEl) !== -1 || path.indexOf(host) !== -1) return;
+					const r = handleEl.getBoundingClientRect();
+					if (!r.width || !r.height) return;
+					const cx = r.left + r.width / 2;
+					const cy = r.top + r.height / 2;
+					if (Math.hypot(e.clientX - cx, e.clientY - cy) <= 30) {
+						const blocker = e.target;
+						if (blocker && blocker.nodeType === 1 && !isNviryaNode(blocker)) {
+							const bTag = String(blocker.tagName || '').toLowerCase();
+							if (!/^(?:html|body|main|video|audio)$/i.test(bTag) && !isProtectedPlayer(blocker)) {
+								try {
+									e.preventDefault();
+									e.stopPropagation();
+									e.stopImmediatePropagation();
+								} catch (err) {}
+								applyAction(blocker, 'remove', 'fab-overlay-trap');
+								if (handleEl.classList.contains('idle')) {
+									resetFabIdle(true);
+								} else {
+									setMenu(true);
+								}
+							}
+						}
+					}
+				}, true);
 			} catch (e) {}
 
 			handleEl.addEventListener('mouseenter', (e) => {
@@ -6145,6 +6986,7 @@
 
 		function openNetworkModal() {
 			buildNetworkModal();
+			scanStaticDomResources();
 			renderNetworkList();
 			networkModalEl.classList.add('open');
 			if (host) host.style.pointerEvents = 'auto';
@@ -6157,6 +6999,7 @@
 
 		function renderNetworkList() {
 			if (!networkModalEl || !netListContainer) return;
+			scanStaticDomResources();
 			clear(netListContainer);
 
 			const domainMap = new Map();
@@ -6217,7 +7060,8 @@
 
 			groups.forEach(g => {
 				const isCustomBlocked = isCustomBlockedHost(g.hostname);
-				const isBlocked = g.blocked || isCustomBlocked;
+				const isSysBlocked = !isCustomBlocked && (g.blocked || RE_AD_HOST.test(g.hostname) || RE_GAMBLING_HOST.test(g.hostname) || isSuspiciousAdDomain(g.hostname));
+				const isBlocked = isCustomBlocked || isSysBlocked;
 
 				const badge = el('span', {
 					class: 'net-badge ' + (isBlocked ? 'blocked' : 'allowed')
@@ -6235,21 +7079,30 @@
 					typeList ? el('div', { class: 'net-meta' }, typeList) : null
 				);
 
-				const actionBtn = el('button', {
-					type: 'button',
-					class: 'net-act-btn ' + (isCustomBlocked ? 'unblock' : 'block'),
-					onclick: () => {
-						if (isCustomBlocked) {
-							removeCustomBlockedHost(g.hostname);
-							toast(t('toastDomainUnblocked', { domain: g.hostname }));
-						} else {
-							addCustomBlockedHost(g.hostname);
-							toast(t('toastDomainBlocked', { domain: g.hostname }));
+				let actionBtn;
+				if (isSysBlocked) {
+					actionBtn = el('button', {
+						type: 'button',
+						class: 'net-act-btn sys-blocked',
+						disabled: 'disabled'
+					}, t('systemBlocked'));
+				} else {
+					actionBtn = el('button', {
+						type: 'button',
+						class: 'net-act-btn ' + (isCustomBlocked ? 'unblock' : 'block'),
+						onclick: () => {
+							if (isCustomBlocked) {
+								removeCustomBlockedHost(g.hostname);
+								toast(t('toastDomainUnblocked', { domain: g.hostname }));
+							} else {
+								addCustomBlockedHost(g.hostname);
+								toast(t('toastDomainBlocked', { domain: g.hostname }));
+							}
+							renderNetworkList();
+							renderStats();
 						}
-						renderNetworkList();
-						renderStats();
-					}
-				}, isCustomBlocked ? t('unblockDomain') : t('blockDomain'));
+					}, isCustomBlocked ? t('unblockDomain') : t('blockDomain'));
+				}
 
 				const row = el('div', { class: 'net-row' }, info, actionBtn);
 				netListContainer.appendChild(row);
@@ -6373,14 +7226,17 @@
 	}
 
 	function init() {
+		installPreExecutionScriptKiller();
 		installInvisibleTrapInterception();
 		startObserver();
 		if (!D.documentElement) {
-			if (D.readyState === 'loading') {
-				D.addEventListener('DOMContentLoaded', init, { once: true });
-			} else {
-				setTimeout(init, 16);
-			}
+			const docElObs = new MutationObserver(() => {
+				if (D.documentElement) {
+					docElObs.disconnect();
+					init();
+				}
+			});
+			docElObs.observe(D, { childList: true });
 			return;
 		}
 
@@ -6425,6 +7281,16 @@
 				registerMenuCommands();
 
 				try { Updater.schedule(); } catch (e) { log('ERROR', 'update', e && e.message); }
+
+				try {
+					const savedSyncUrl = store.get(K_SYNC_URL, '');
+					const lastSyncTime = Number(store.get(K_SYNC_TIME, 0)) || 0;
+					if (savedSyncUrl && (Date.now() - lastSyncTime > SYNC_INTERVAL_MS)) {
+						setTimeout(() => {
+							syncRulesFromRawUrl(savedSyncUrl, true);
+						}, 2500);
+					}
+				} catch (e) {}
 
 				try {
 					D.addEventListener('fullscreenchange', () => {
