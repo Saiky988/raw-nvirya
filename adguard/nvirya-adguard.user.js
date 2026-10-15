@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.3.3
+// @version      11.5.0
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -21,7 +21,25 @@
 // @connect      *
 // @run-at       document-start
 // @all-frames   true
+// @changelog    Added 10-Layer Anti-Adblock Compatibility Engine with recursive root unmasking & vendor proxies.
+// @changelog    Added Anti-Trap Navigation Lockdown & temporary window.open freeze during Element Picker mode.
+// @changelog    Added interactive "Fling / Toss to Block" gesture with hardware-accelerated physics and haptic feedback.
+// @changelog    Added DOM Bait dimension & getComputedStyle spoofing with adaptive 32x32 image stand-ins and network mocking.
+// @changelog    Fixed false-positive removal of lazy-loaded images (data-src/srcset) and retained editorial thumbnails.
+// @changelog    Fixed Action Sheet first-open frame drop using forced layout reflow, double-rAF, and GPU will-change hints.
+// @changelog    Fixed residual modal backdrops, scroll-lock guards, and Google Search interaction attribute integrity.
 // ==/UserScript==
+/* ==Changelog==
+[11.5.0] Major Milestone Release:
+- Added 10-Layer Anti-Adblock Compatibility Engine (Multi-Signal Classification, wrapper resolution, vendor API proxies, site adapters).
+- Added Anti-Trap Navigation Lockdown freezing window.open, synthetic clicks, and auto-submits during Element Picker inspection.
+- Added interactive "Fling / Toss to Block" gesture with momentum physics and tactile haptic feedback.
+- Added DOM Bait dimension spoofing (300x250), getComputedStyle proxy, 32x32 image stand-in, and adaptive network mocking.
+- Fixed false-positive removal of lazy-loaded images (data-src/srcset) and refined editorial thumbnail heuristics.
+- Fixed Action Sheet first-open frame drop with forced layout reflow pre-warming and double-rAF.
+- Fixed residual backdrop overlays, protected legitimate scroll-locks, and prevented Google Search click breakage.
+==/Changelog== */
+
 (function() {
 	'use strict';
 
@@ -29,16 +47,379 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.3.3';
+	const VERSION = '11.5.0';
 	const SCRIPT_START_TIME = Date.now();
+	const RE_BAIT_ELEMENT = /ads?[-_]?box|adsbygoogle|banner[-_]?ad|ad[-_]?slot|ad[-_]?unit|ad[-_]?placement/i;
 
-	function mainWorldShield() {
-		if (window.__NVIRYA_MAIN_SHIELD__) return;
-		try { Object.defineProperty(window, '__NVIRYA_MAIN_SHIELD__', { value: true }); } catch (e) { window.__NVIRYA_MAIN_SHIELD__ = true; }
+	function mainWorldShield(targetWin) {
+		const W = targetWin || window;
+		const D = W.document || document;
+		if (W.__NVIRYA_MAIN_SHIELD__) return;
+		try { Object.defineProperty(W, '__NVIRYA_MAIN_SHIELD__', { value: true }); } catch (e) { W.__NVIRYA_MAIN_SHIELD__ = true; }
 
-		const W = window;
-		const D = document;
-		const RE_SHIELD_AD_URL = /(?:^|\.|\/\/)(?:highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease|monetag|propellerads|admaven|ad-maven|popads|popcash|adsterra|exoclick|onclickmax|wingsmob)(?:\.|\/|$)|\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[\/:?#]|$)|(?:^|\/)(?:apu\.php|cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
+		const RE_SHIELD_AD_URL = /(?:^|\.|\/\/)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|pagead2?|googletagservices|adsystem\.amazon|amazon-adsystem|adnxs|adsrvr|criteo|taboola|outbrain|outbrainimg|zemanta|mgid|pubmatic|rubiconproject|openx|smartadserver|scorecardresearch|moatads|doubleverify|adsafeprotected|quantserve|quantcast|highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease|monetag|propellerads|admaven|ad-maven|popads|popcash|adsterra|exoclick|onclickmax|wingsmob)(?:\.|\/|$)|\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[\/:?#]|$)|(?:^|\/)(?:pagead\/show_ads\.js|pagead\/js\/adsbygoogle\.js|tag\/js\/gpt\.js|outbrain\.js|apu\.php|cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
+
+		const scheduleAsyncTask = (fn) => {
+			if (typeof queueMicrotask === 'function') queueMicrotask(fn);
+			else setTimeout(fn, 0);
+		};
+
+		const markNativeFn = (fn, name) => {
+			try {
+				const nativeStr = `function ${name || ''}() { [native code] }`;
+				Object.defineProperty(fn, 'toString', {
+					configurable: true,
+					writable: true,
+					enumerable: false,
+					value: () => nativeStr
+				});
+			} catch (e) {}
+			return fn;
+		};
+
+		const createSelfHealingMock = (overrides = {}, nameHint = 'mock', depth = 0) => {
+			const childCache = new Map();
+			const baseFn = markNativeFn(function() {}, nameHint);
+			let proxyRef = null;
+
+			const handler = {
+				get(target, prop, receiver) {
+					if (prop === '__isNviryaMock') return true;
+					if (prop === 'then') return undefined;
+					if (overrides && Object.prototype.hasOwnProperty.call(overrides, prop)) {
+						return overrides[prop];
+					}
+					if (prop === Symbol.toPrimitive) {
+						return (hint) => (hint === 'number' ? 1 : (hint === 'string' ? '' : true));
+					}
+					if (prop === Symbol.iterator) {
+						return function*() {};
+					}
+					if (prop === Symbol.toStringTag) return 'Object';
+					if (prop === 'valueOf') return () => true;
+					if (prop === 'toString') return () => `function ${String(nameHint || '')}() { [native code] }`;
+					if (prop === 'prototype') return target.prototype || Object.prototype;
+					if (prop === 'constructor') return Object;
+
+					if (typeof prop === 'string') {
+						if (/^(?:loaded|ready|apiReady|pubadsReady|isInitialized|enabled|isSupported|active)$/.test(prop)) return true;
+						if (/^(?:isEmpty|isBlocked|adblock|detected|blocked|error)$/.test(prop)) return false;
+						if (prop === 'version') return '2.16.0';
+						if (prop === 'length') return 0;
+						if (prop === 'push') {
+							return markNativeFn(function(...items) {
+								for (let i = 0; i < items.length; i++) {
+									const item = items[i];
+									if (typeof item === 'function') {
+										scheduleAsyncTask(() => { try { item(); } catch (e) {} });
+									}
+								}
+								return items.length;
+							}, 'push');
+						}
+						if (prop === 'catch' || prop === 'finally') {
+							return markNativeFn(() => Promise.resolve(proxyRef), prop);
+						}
+						if (/^(?:forEach|filter|slice|splice|map)$/.test(prop)) {
+							return markNativeFn(() => [], prop);
+						}
+					}
+
+					if (Reflect.has(target, prop)) {
+						return Reflect.get(target, prop, receiver);
+					}
+
+					if (depth > 8) return markNativeFn(() => proxyRef, String(prop));
+					if (!childCache.has(prop)) {
+						childCache.set(prop, createSelfHealingMock({}, typeof prop === 'string' ? prop : 'mock', depth + 1));
+					}
+					return childCache.get(prop);
+				},
+				set(target, prop, value) {
+					try {
+						overrides[prop] = value;
+						target[prop] = value;
+					} catch (e) {}
+					return true;
+				},
+				has() {
+					return true;
+				},
+				apply(target, thisArg, args) {
+					if (overrides && typeof overrides.__call === 'function') {
+						try { return overrides.__call.apply(thisArg, args); } catch (e) {}
+					}
+					if (args && args.length > 0 && /^(?:cmd|ready|fetchBids|onNotDetected|onNotDetectedOnce|check|getAdserverTargeting)$/i.test(String(nameHint || ''))) {
+						for (let i = 0; i < args.length; i++) {
+							if (typeof args[i] === 'function') {
+								const cb = args[i];
+								scheduleAsyncTask(() => { try { cb([]); } catch (e) {} });
+							}
+						}
+					}
+					return proxyRef;
+				},
+				construct() {
+					return proxyRef;
+				},
+				getOwnPropertyDescriptor(target, prop) {
+					if (overrides && Object.prototype.hasOwnProperty.call(overrides, prop)) {
+						return { configurable: true, enumerable: true, writable: true, value: overrides[prop] };
+					}
+					if (Reflect.has(target, prop)) {
+						return Object.getOwnPropertyDescriptor(target, prop);
+					}
+					return { configurable: true, enumerable: true, writable: true, value: handler.get(target, prop, proxyRef) };
+				}
+			};
+
+			proxyRef = new Proxy(baseFn, handler);
+			return proxyRef;
+		};
+
+		const defineResilientGlobal = (prop, stubValue, mergeExisting = false) => {
+			try {
+				let currentVal = stubValue;
+				const existing = W[prop];
+				if (mergeExisting && existing && typeof existing === 'object' && !existing.__isNviryaMock) {
+					try { Object.assign(currentVal, existing); } catch (e) {}
+				}
+				Object.defineProperty(W, prop, {
+					configurable: true,
+					enumerable: true,
+					get: () => currentVal,
+					set: (newVal) => {
+						if (newVal && typeof newVal === 'object') {
+							try {
+								if (Array.isArray(newVal) && Array.isArray(currentVal.cmd)) {
+									for (let i = 0; i < newVal.length; i++) currentVal.cmd.push(newVal[i]);
+								}
+							} catch (e) {}
+						}
+					}
+				});
+			} catch (e) {
+				try { W[prop] = stubValue; } catch (e2) {}
+			}
+		};
+
+		const ensureVendorGlobalsPopulated = () => {
+			try {
+				if (!W.OBR || !W.OBR.__isNviryaMock) {
+					const obrExtern = createSelfHealingMock({
+						researchWidget: markNativeFn(() => true, 'researchWidget'),
+						reloadWidget: markNativeFn(() => true, 'reloadWidget'),
+						refreshWidget: markNativeFn(() => true, 'refreshWidget'),
+						renderSpaWidgets: markNativeFn(() => true, 'renderSpaWidgets'),
+						cancelRecommendation: markNativeFn(() => true, 'cancelRecommendation'),
+						onOdbReturn: markNativeFn(() => true, 'onOdbReturn'),
+						getCountOfCells: markNativeFn(() => 4, 'getCountOfCells'),
+						getStat: markNativeFn(() => ({}), 'getStat'),
+						video: createSelfHealingMock({
+							init: markNativeFn(() => true, 'init'),
+							startPlayer: markNativeFn(() => true, 'startPlayer')
+						}, 'video')
+					}, 'extern');
+					const obrStub = createSelfHealingMock({
+						ready: true,
+						isInitialized: true,
+						version: '2.16.0',
+						extern: obrExtern,
+						controller: createSelfHealingMock({}, 'controller'),
+						display: createSelfHealingMock({}, 'display')
+					}, 'OBR');
+					defineResilientGlobal('OBR', obrStub, true);
+					defineResilientGlobal('outbrain', obrStub, false);
+					defineResilientGlobal('outbrain_rater', createSelfHealingMock({}, 'outbrain_rater'), false);
+					try { W.OB_releaseVer = '20260401'; } catch (e) {}
+				}
+			} catch (e) {}
+
+			try {
+				const existingGpt = W.googletag;
+				const preQueuedCmds = (existingGpt && Array.isArray(existingGpt.cmd)) ? existingGpt.cmd.slice() : [];
+				if (!existingGpt || !existingGpt.__isNviryaMock) {
+					const cmdQueue = [];
+					cmdQueue.push = markNativeFn(function(...fns) {
+						for (let i = 0; i < fns.length; i++) {
+							const fn = fns[i];
+							if (typeof fn === 'function') {
+								scheduleAsyncTask(() => { try { fn(); } catch (err) {} });
+							}
+						}
+						return Array.prototype.push.apply(this, fns);
+					}, 'push');
+
+					const createGptSlot = (adUnitPath, size, optDiv) => {
+						let slotMock = null;
+						slotMock = createSelfHealingMock({
+							addService: markNativeFn(() => slotMock, 'addService'),
+							setTargeting: markNativeFn(() => slotMock, 'setTargeting'),
+							updateTargetingFromMap: markNativeFn(() => slotMock, 'updateTargetingFromMap'),
+							clearTargeting: markNativeFn(() => slotMock, 'clearTargeting'),
+							defineSizeMapping: markNativeFn(() => slotMock, 'defineSizeMapping'),
+							setCollapseEmptyDiv: markNativeFn(() => slotMock, 'setCollapseEmptyDiv'),
+							setCategoryExclusion: markNativeFn(() => slotMock, 'setCategoryExclusion'),
+							setClickUrl: markNativeFn(() => slotMock, 'setClickUrl'),
+							getSlotElementId: markNativeFn(() => optDiv || 'div-gpt-ad-1', 'getSlotElementId'),
+							getAdUnitPath: markNativeFn(() => adUnitPath || '/0/adunit', 'getAdUnitPath'),
+							getTargeting: markNativeFn(() => [], 'getTargeting'),
+							getTargetingKeys: markNativeFn(() => [], 'getTargetingKeys'),
+							getSizes: markNativeFn(() => Array.isArray(size) ? size : [
+								[300, 250]
+							], 'getSizes'),
+							getResponseInformation: markNativeFn(() => ({
+								advertiserId: 1,
+								campaignId: 1,
+								creativeId: 1,
+								lineItemId: 1,
+								sourceAgnosticCreativeId: 1,
+								sourceAgnosticLineItemId: 1
+							}), 'getResponseInformation')
+						}, 'Slot');
+						return slotMock;
+					};
+
+					const slotsList = [createGptSlot('/1/main', [300, 250], 'div-gpt-ad-1')];
+					let pubadsService = null;
+					pubadsService = createSelfHealingMock({
+						addEventListener: markNativeFn((type, listener) => {
+							if (typeof listener === 'function') {
+								const tStr = String(type || '');
+								if (tStr === 'slotRenderEnded' || tStr === 'slotOnload' || tStr === 'impressionViewable' || tStr === 'slotRequested') {
+									setTimeout(() => {
+										try {
+											listener({
+												isEmpty: false,
+												slot: slotsList[0] || createGptSlot(),
+												creativeId: 1001,
+												lineItemId: 2001,
+												serviceName: 'publisher_ads',
+												size: [300, 250],
+												sourceAgnosticCreativeId: 1001,
+												sourceAgnosticLineItemId: 2001
+											});
+										} catch (e) {}
+									}, 15);
+								}
+							}
+							return pubadsService;
+						}, 'addEventListener'),
+						removeEventListener: markNativeFn(() => true, 'removeEventListener'),
+						enableSingleRequest: markNativeFn(() => true, 'enableSingleRequest'),
+						enableAsyncRendering: markNativeFn(() => true, 'enableAsyncRendering'),
+						enableSyncRendering: markNativeFn(() => true, 'enableSyncRendering'),
+						enableLazyLoad: markNativeFn(() => true, 'enableLazyLoad'),
+						collapseEmptyDivs: markNativeFn(() => true, 'collapseEmptyDivs'),
+						disableInitialLoad: markNativeFn(() => true, 'disableInitialLoad'),
+						setTargeting: markNativeFn(() => pubadsService, 'setTargeting'),
+						clearTargeting: markNativeFn(() => pubadsService, 'clearTargeting'),
+						getTargeting: markNativeFn(() => [], 'getTargeting'),
+						getTargetingKeys: markNativeFn(() => [], 'getTargetingKeys'),
+						setCentering: markNativeFn(() => undefined, 'setCentering'),
+						setLocation: markNativeFn(() => pubadsService, 'setLocation'),
+						setPublisherProvidedId: markNativeFn(() => pubadsService, 'setPublisherProvidedId'),
+						setPrivacySettings: markNativeFn(() => pubadsService, 'setPrivacySettings'),
+						setRequestNonPersonalizedAds: markNativeFn(() => pubadsService, 'setRequestNonPersonalizedAds'),
+						getSlots: markNativeFn(() => slotsList, 'getSlots'),
+						getSlotIdMap: markNativeFn(() => ({}), 'getSlotIdMap'),
+						refresh: markNativeFn(() => true, 'refresh'),
+						clear: markNativeFn(() => true, 'clear'),
+						display: markNativeFn(() => true, 'display'),
+						isInitialLoadDisabled: markNativeFn(() => false, 'isInitialLoadDisabled')
+					}, 'PubAdsService');
+
+					const createSizeMappingBuilder = () => {
+						let builder = null;
+						builder = createSelfHealingMock({
+							addSize: markNativeFn(() => builder, 'addSize'),
+							build: markNativeFn(() => [], 'build')
+						}, 'SizeMappingBuilder');
+						return builder;
+					};
+
+					const gptStub = createSelfHealingMock({
+						apiReady: true,
+						pubadsReady: true,
+						cmd: cmdQueue,
+						pubads: markNativeFn(() => pubadsService, 'pubads'),
+						companionAds: markNativeFn(() => createSelfHealingMock({}, 'CompanionAdsService'), 'companionAds'),
+						content: markNativeFn(() => createSelfHealingMock({}, 'ContentService'), 'content'),
+						defineSlot: markNativeFn((adUnitPath, size, optDiv) => {
+							const s = createGptSlot(adUnitPath, size, optDiv);
+							slotsList.push(s);
+							return s;
+						}, 'defineSlot'),
+						defineOutOfPageSlot: markNativeFn((adUnitPath, optDiv) => {
+							const s = createGptSlot(adUnitPath, [1, 1], optDiv);
+							slotsList.push(s);
+							return s;
+						}, 'defineOutOfPageSlot'),
+						defineUnit: markNativeFn((adUnitPath, size, optDiv) => createGptSlot(adUnitPath, size, optDiv), 'defineUnit'),
+						sizeMapping: markNativeFn(createSizeMappingBuilder, 'sizeMapping'),
+						enableServices: markNativeFn(() => true, 'enableServices'),
+						display: markNativeFn(() => true, 'display'),
+						destroySlots: markNativeFn(() => true, 'destroySlots'),
+						openConsole: markNativeFn(() => undefined, 'openConsole'),
+						getVersion: markNativeFn(() => '2026040101', 'getVersion'),
+						enums: createSelfHealingMock({ OutOfPageFormat: { INTERSTITIAL: 1, TOP_ANCHOR: 2, BOTTOM_ANCHOR: 3 } }, 'enums')
+					}, 'googletag');
+
+					defineResilientGlobal('googletag', gptStub, false);
+					for (let i = 0; i < preQueuedCmds.length; i++) {
+						if (typeof preQueuedCmds[i] === 'function') {
+							scheduleAsyncTask(() => { try { preQueuedCmds[i](); } catch (err) {} });
+						}
+					}
+				}
+			} catch (e) {}
+
+			try {
+				if (!W.Criteo || !W.Criteo.__isNviryaMock) {
+					defineResilientGlobal('Criteo', createSelfHealingMock({
+						events: {
+							push: markNativeFn((fn) => {
+								if (typeof fn === 'function') scheduleAsyncTask(() => { try { fn(); } catch (e) {} });
+								return 1;
+							}, 'push')
+						},
+						DisplayAd: markNativeFn(() => true, 'DisplayAd'),
+						DisplayAcceptableAdIfAdblocked: markNativeFn(() => true, 'DisplayAcceptableAdIfAdblocked'),
+						CallRTA: markNativeFn(() => true, 'CallRTA'),
+						ComputeStandalone: markNativeFn(() => true, 'ComputeStandalone'),
+						Passback: createSelfHealingMock({}, 'Passback'),
+						pubTag: createSelfHealingMock({}, 'pubTag')
+					}, 'Criteo'), false);
+				}
+				if (!W._taboola || !W._taboola.__isNviryaMock) {
+					const taboolaArr = [];
+					taboolaArr.__isNviryaMock = true;
+					taboolaArr.push = markNativeFn(function() { return this.length; }, 'push');
+					defineResilientGlobal('_taboola', taboolaArr, false);
+					defineResilientGlobal('TRC', createSelfHealingMock({ ready: true }, 'TRC'), false);
+				}
+				if (!W.apstag || !W.apstag.__isNviryaMock) {
+					defineResilientGlobal('apstag', createSelfHealingMock({
+						init: markNativeFn(() => true, 'init'),
+						fetchBids: markNativeFn((cfg, cb) => {
+							if (typeof cb === 'function') scheduleAsyncTask(() => { try { cb([]); } catch (e) {} });
+							return Promise.resolve([]);
+						}, 'fetchBids'),
+						setDisplayBids: markNativeFn(() => true, 'setDisplayBids'),
+						targetingKeys: markNativeFn(() => [], 'targetingKeys'),
+						cleared: markNativeFn(() => true, 'cleared')
+					}, 'apstag'), false);
+				}
+				if (!W.COMSCORE || !W.COMSCORE.__isNviryaMock) {
+					defineResilientGlobal('COMSCORE', createSelfHealingMock({
+						beacon: markNativeFn(() => true, 'beacon'),
+						purge: markNativeFn(() => [], 'purge')
+					}, 'COMSCORE'), false);
+				}
+			} catch (e) {}
+		};
+
+		ensureVendorGlobalsPopulated();
 		const RE_SHIELD_INLINE = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|znid|zoneid.*\d{5,}|dataset\.zone\s*=|createElement\(['"]script['"]\).*?(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)/i;
 
 		const isAdStack = () => {
@@ -88,7 +469,8 @@
 						if (!isOwnUi && !isDevTool) {
 							const stack = (new Error().stack) || '';
 							if (RE_SHIELD_AD_URL.test(stack)) {
-								try { this.style.setProperty('display', 'none', 'important'); this.remove(); } catch (e) {}
+								try { this.style.setProperty('display', 'none', 'important');
+									this.remove(); } catch (e) {}
 								const dummyHost = D.createElement('div');
 								return origAttachShadow.call(dummyHost, { mode: 'open' });
 							}
@@ -115,14 +497,54 @@
 			return !!(zone || (src && RE_SHIELD_AD_URL.test(src)) || (text && RE_SHIELD_INLINE.test(text)));
 		};
 
+		const hookBlockedScriptListeners = (el) => {
+			if (!el || el.__nvirya_ael_hooked) return;
+			try { el.__nvirya_ael_hooked = true; } catch (e) {}
+			try {
+				const origElAEL = el.addEventListener;
+				if (typeof origElAEL === 'function') {
+					el.addEventListener = function(type, listener, options) {
+						if (String(type || '').toLowerCase() === 'error') return;
+						return origElAEL.apply(this, arguments);
+					};
+				}
+			} catch (e) {}
+		};
+
+		const spoofScriptOnload = (el, spoofUrl) => {
+			if (!el) return;
+			if (spoofUrl) {
+				try { el.__nvirya_spoof_src = String(spoofUrl); } catch (e) {}
+			}
+			hookBlockedScriptListeners(el);
+			try { el.onerror = null; } catch (e) {}
+			if (el.__nvirya_onload_spoofed) return;
+			try { el.__nvirya_onload_spoofed = true; } catch (e) {}
+			const fireLoad = () => {
+				try {
+					ensureVendorGlobalsPopulated();
+					try { el.readyState = 'complete'; } catch (e) {}
+					const evt = typeof CustomEvent === 'function' ?
+						new Event('load', { bubbles: false, cancelable: false }) :
+						new Event('load');
+					if (typeof el.onload === 'function') el.onload.call(el, evt);
+					if (typeof el.dispatchEvent === 'function') el.dispatchEvent(evt);
+				} catch (e) {}
+			};
+			scheduleAsyncTask(() => {
+				setTimeout(fireLoad, 0);
+			});
+		};
+
 		const killScriptNode = (node) => {
 			if (!isBlockedScriptEl(node)) return false;
+			const rawSrc = (node && (node.src || (node.getAttribute && node.getAttribute('src')))) || '';
 			try {
 				node.type = 'javascript/blocked';
 				node.removeAttribute('src');
 				node.removeAttribute('data-zone');
 				node.textContent = '';
-				if (node.parentNode) node.parentNode.removeChild(node);
+				spoofScriptOnload(node, rawSrc);
 			} catch (e) {}
 			return true;
 		};
@@ -175,12 +597,15 @@
 							const sVal = String(val || '');
 							if (!/eruda|vconsole|chobitsu/i.test(sVal) && (RE_SHIELD_AD_URL.test(sVal) || (this.dataset && this.dataset.zone))) {
 								this.type = 'javascript/blocked';
-								try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+								spoofScriptOnload(this, sVal);
 								return;
 							}
 							return origSet.call(this, val);
 						},
-						get: origSrcDesc.get
+						get: function() {
+							if (this.__nvirya_spoof_src) return this.__nvirya_spoof_src;
+							return origSrcDesc.get ? origSrcDesc.get.call(this) : '';
+						}
 					});
 				}
 				const origSetAttr = scriptProto.setAttribute;
@@ -190,11 +615,47 @@
 						const v = String(val || '');
 						if ((n === 'src' && !/eruda|vconsole|chobitsu/i.test(v) && RE_SHIELD_AD_URL.test(v)) || n === 'data-zone') {
 							this.type = 'javascript/blocked';
-							try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+							spoofScriptOnload(this, v);
 							return;
 						}
 						return origSetAttr.apply(this, arguments);
 					};
+				}
+				const origCreateEl = D.createElement;
+				if (typeof origCreateEl === 'function' && !origCreateEl.__nvirya_mw_ce) {
+					const mwCreateEl = function(tagName) {
+						const el = origCreateEl.apply(this, arguments);
+						if (String(tagName || '').toLowerCase() === 'script') {
+							hookBlockedScriptListeners(el);
+						}
+						return el;
+					};
+					try { Object.defineProperty(mwCreateEl, '__nvirya_mw_ce', { value: true }); } catch (e) {}
+					D.createElement = mwCreateEl;
+				}
+				const nodeProto = W.Node && W.Node.prototype;
+				if (nodeProto && !nodeProto.__nvirya_mw_append) {
+					const origAppend = nodeProto.appendChild;
+					const origInsert = nodeProto.insertBefore;
+					nodeProto.appendChild = function(child) {
+						if (child && child.nodeType === 1 && String(child.tagName || '').toLowerCase() === 'script') {
+							if (child.__nvirya_spoof_src || isBlockedScriptEl(child)) {
+								spoofScriptOnload(child, child.__nvirya_spoof_src || child.src);
+								return child;
+							}
+						}
+						return origAppend.apply(this, arguments);
+					};
+					nodeProto.insertBefore = function(child, ref) {
+						if (child && child.nodeType === 1 && String(child.tagName || '').toLowerCase() === 'script') {
+							if (child.__nvirya_spoof_src || isBlockedScriptEl(child)) {
+								spoofScriptOnload(child, child.__nvirya_spoof_src || child.src);
+								return child;
+							}
+						}
+						return origInsert.apply(this, arguments);
+					};
+					try { Object.defineProperty(nodeProto, '__nvirya_mw_append', { value: true }); } catch (e) {}
 				}
 			}
 		} catch (e) {}
@@ -256,24 +717,254 @@
 			}
 		} catch (e) {}
 
+		const spoofAdImageElement = (imgEl, urlStr) => {
+			if (!imgEl) return;
+			try {
+				imgEl.__nvirya_spoof_img = true;
+				imgEl.__nvirya_spoof_src = String(urlStr || '');
+				imgEl.onerror = null;
+				['width', 'height', 'naturalWidth', 'naturalHeight'].forEach((p) => {
+					try { Object.defineProperty(imgEl, p, { configurable: true, get: () => 32 }); } catch (e) {}
+				});
+				try { Object.defineProperty(imgEl, 'complete', { configurable: true, get: () => true }); } catch (e) {}
+			} catch (e) {}
+			if (!imgEl.__nvirya_img_scheduled) {
+				try { imgEl.__nvirya_img_scheduled = true; } catch (e) {}
+				setTimeout(() => {
+					try {
+						const evt = new Event('load');
+						if (typeof imgEl.onload === 'function') imgEl.onload(evt);
+						if (typeof imgEl.dispatchEvent === 'function') imgEl.dispatchEvent(evt);
+					} catch (e) {}
+				}, 5);
+			}
+		};
+
 		try {
 			const imgProto = W.HTMLImageElement && W.HTMLImageElement.prototype;
-			if (imgProto) {
+			if (imgProto && !imgProto.__nvirya_img_proto_hooked) {
 				const origSrcDesc = Object.getOwnPropertyDescriptor(imgProto, 'src');
+				['width', 'height', 'naturalWidth', 'naturalHeight'].forEach((dimProp) => {
+					const dDesc = Object.getOwnPropertyDescriptor(imgProto, dimProp);
+					if (dDesc && typeof dDesc.get === 'function') {
+						const origDimGet = dDesc.get;
+						Object.defineProperty(imgProto, dimProp, {
+							configurable: true,
+							enumerable: dDesc.enumerable,
+							get: function() {
+								if (this.__nvirya_spoof_img) return 32;
+								return origDimGet.call(this);
+							},
+							set: dDesc.set
+						});
+					}
+				});
 				if (origSrcDesc && origSrcDesc.set) {
 					const origSet = origSrcDesc.set;
+					const origGet = origSrcDesc.get;
 					Object.defineProperty(imgProto, 'src', {
 						configurable: true,
 						enumerable: origSrcDesc.enumerable,
 						set: function(val) {
-							if (typeof val === 'string' && RE_SHIELD_AD_URL.test(val)) {
+							const sVal = String(val || '');
+							if (sVal && !sVal.startsWith('data:') && RE_SHIELD_AD_URL.test(sVal)) {
+								spoofAdImageElement(this, sVal);
 								return;
 							}
 							return origSet.call(this, val);
 						},
-						get: origSrcDesc.get
+						get: function() {
+							if (this.__nvirya_spoof_src) return this.__nvirya_spoof_src;
+							return origGet ? origGet.call(this) : '';
+						}
 					});
 				}
+				const origImgSetAttr = imgProto.setAttribute;
+				if (typeof origImgSetAttr === 'function') {
+					imgProto.setAttribute = function(name, val) {
+						if (String(name || '').toLowerCase() === 'src') {
+							const sVal = String(val || '');
+							if (sVal && !sVal.startsWith('data:') && RE_SHIELD_AD_URL.test(sVal)) {
+								spoofAdImageElement(this, sVal);
+								return;
+							}
+						}
+						return origImgSetAttr.apply(this, arguments);
+					};
+				}
+				try { Object.defineProperty(imgProto, '__nvirya_img_proto_hooked', { value: true }); } catch (e) {}
+			}
+		} catch (e) {}
+
+		try {
+			const makeMainFakeResponse = (urlStr, input, init) => {
+				const u = String(urlStr || '');
+				let accept = '';
+				try {
+					const hdrs = (init && init.headers) || (input && typeof input === 'object' && input.headers);
+					if (hdrs) {
+						if (typeof hdrs.get === 'function') accept = String(hdrs.get('accept') || hdrs.get('Accept') || '');
+						else if (typeof hdrs === 'object') {
+							for (const k in hdrs)
+								if (k.toLowerCase() === 'accept') accept = String(hdrs[k] || '');
+						}
+					}
+				} catch (e) {}
+				const isJson = /application\/json|\+json/i.test(accept) || /\.json(?:$|[?#])|[?&](?:format|output|alt)=json\b/i.test(u);
+				const isJs = !isJson && (/javascript|ecmascript/i.test(accept) || /\.(?:m?js)(?:$|[?#])|\/(?:adsbygoogle|show_ads|gpt|pubads|pagead\/js|adserver)/i.test(u));
+				const jsonObj = { status: 'ok', success: true, data: [] };
+				const body = isJson ? JSON.stringify(jsonObj) : (isJs ? '/* Nvirya Stub OK */ window.canRunAds = true;' : '');
+				const ct = isJson ? 'application/json' : (isJs ? 'application/javascript' : 'text/plain');
+				if (typeof Response === 'function') {
+					return new Response(body, { status: 200, statusText: 'OK', headers: { 'Content-Type': ct } });
+				}
+				return {
+					ok: true,
+					status: 200,
+					statusText: 'OK',
+					url: u,
+					text: () => Promise.resolve(body),
+					json: () => Promise.resolve(jsonObj),
+					blob: () => Promise.resolve(typeof Blob === 'function' ? new Blob([body], { type: ct }) : null),
+					arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+					clone: function() { return this; }
+				};
+			};
+
+			if (typeof W.fetch === 'function' && !W.fetch.__nvirya_mw) {
+				const origFetch = W.fetch;
+				const mwFetch = function(input, init) {
+					const urlStr = typeof input === 'string' ? input : (input && input.url) || '';
+					if (urlStr && RE_SHIELD_AD_URL.test(urlStr)) {
+						ensureVendorGlobalsPopulated();
+						return Promise.resolve(makeMainFakeResponse(urlStr, input, init));
+					}
+					return origFetch.apply(this, arguments).catch((err) => {
+						if (urlStr && (RE_SHIELD_AD_URL.test(urlStr) || /(?:doubleclick|googlesyndication|googleadservices|pagead|adservice|adserver|outbrain|taboola|criteo|ads\.|favicon\.ico\?\d+$)/i.test(urlStr))) {
+							ensureVendorGlobalsPopulated();
+							return makeMainFakeResponse(urlStr, input, init);
+						}
+						throw err;
+					});
+				};
+				try { Object.defineProperty(mwFetch, '__nvirya_mw', { value: true }); } catch (e) {}
+				W.fetch = mwFetch;
+			}
+
+			const XHR = W.XMLHttpRequest;
+			if (XHR && XHR.prototype && !XHR.prototype.__nvirya_mw_xhr) {
+				const origOpen = XHR.prototype.open;
+				const origSend = XHR.prototype.send;
+				const origSetHdr = XHR.prototype.setRequestHeader;
+				if (typeof origSetHdr === 'function') {
+					XHR.prototype.setRequestHeader = function(h, v) {
+						if (String(h || '').toLowerCase() === 'accept') this.__nvirya_accept = String(v || '');
+						if (this.__nvirya_mw_blocked) return;
+						return origSetHdr.apply(this, arguments);
+					};
+				}
+				XHR.prototype.open = function(method, url) {
+					const uStr = String(url || '');
+					this.__nvirya_mw_url = uStr;
+					this.__nvirya_mw_blocked = Boolean(uStr && RE_SHIELD_AD_URL.test(uStr));
+					if (this.__nvirya_mw_blocked) {
+						try { return origOpen.call(this, method || 'GET', 'data:text/plain,'); } catch (e) { return; }
+					}
+					return origOpen.apply(this, arguments);
+				};
+				XHR.prototype.send = function() {
+					if (this.__nvirya_mw_blocked) {
+						const xhr = this;
+						ensureVendorGlobalsPopulated();
+						const u = xhr.__nvirya_mw_url || '';
+						const acc = xhr.__nvirya_accept || '';
+						const isJson = xhr.responseType === 'json' || /application\/json|\+json/i.test(acc) || /\.json(?:$|[?#])/i.test(u);
+						const isJs = !isJson && (/javascript|ecmascript/i.test(acc) || /\.(?:m?js)(?:$|[?#])|\/(?:adsbygoogle|show_ads|pagead)/i.test(u));
+						const jsonObj = { status: 'ok', success: true, data: [] };
+						const bodyText = isJson ? JSON.stringify(jsonObj) : (isJs ? '/* Nvirya Stub OK */ window.canRunAds = true;' : '');
+						const respVal = xhr.responseType === 'json' ? jsonObj : bodyText;
+						try {
+							Object.defineProperty(xhr, 'readyState', { configurable: true, get: () => 4 });
+							Object.defineProperty(xhr, 'status', { configurable: true, get: () => 200 });
+							Object.defineProperty(xhr, 'statusText', { configurable: true, get: () => 'OK' });
+							Object.defineProperty(xhr, 'responseText', { configurable: true, get: () => bodyText });
+							Object.defineProperty(xhr, 'response', { configurable: true, get: () => respVal });
+						} catch (e) {}
+						setTimeout(() => {
+							try {
+								if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange(new Event('readystatechange'));
+								xhr.dispatchEvent(new Event('readystatechange'));
+								if (typeof xhr.onload === 'function') xhr.onload(new Event('load'));
+								xhr.dispatchEvent(new Event('load'));
+								if (typeof xhr.onloadend === 'function') xhr.onloadend(new Event('loadend'));
+								xhr.dispatchEvent(new Event('loadend'));
+							} catch (e) {}
+						}, 1);
+						return;
+					}
+					return origSend.apply(this, arguments);
+				};
+				try { Object.defineProperty(XHR.prototype, '__nvirya_mw_xhr', { value: true }); } catch (e) {}
+			}
+		} catch (e) {}
+
+		try {
+			const RE_MW_BAIT = /ads?[-_]?box|adsbygoogle|banner[-_]?ad|ad[-_]?slot|ad[-_]?unit|ad[-_]?placement/i;
+			const isMwBait = (el) => {
+				if (!el || el.nodeType !== 1) return false;
+				const idc = (el.id || '') + ' ' + (typeof el.className === 'string' ? el.className : '');
+				return RE_MW_BAIT.test(idc);
+			};
+			const htmlProto = W.HTMLElement && W.HTMLElement.prototype;
+			if (htmlProto && !htmlProto.__nvirya_mw_dims) {
+				const hookMwDim = (prop, fakeVal) => {
+					const desc = Object.getOwnPropertyDescriptor(htmlProto, prop);
+					if (!desc || typeof desc.get !== 'function') return;
+					const origGet = desc.get;
+					Object.defineProperty(htmlProto, prop, {
+						configurable: true,
+						enumerable: desc.enumerable,
+						get: function() {
+							const val = origGet.call(this);
+							if (val === 0 && isMwBait(this)) return fakeVal;
+							return val;
+						}
+					});
+				};
+				hookMwDim('offsetHeight', 250);
+				hookMwDim('offsetWidth', 300);
+				hookMwDim('clientHeight', 250);
+				hookMwDim('clientWidth', 300);
+				try { Object.defineProperty(htmlProto, '__nvirya_mw_dims', { value: true }); } catch (e) {}
+			}
+			if (typeof W.getComputedStyle === 'function' && !W.getComputedStyle.__nvirya_mw_cs) {
+				const origCS = W.getComputedStyle.bind(W);
+				const mwCS = function(el, pseudo) {
+					const st = origCS(el, pseudo);
+					if (!pseudo && el && el.nodeType === 1 && ((el.hasAttribute && el.hasAttribute('data-nvirya-hidden')) || isMwBait(el))) {
+						return new Proxy(st, {
+							get(target, prop) {
+								if (prop === 'display') return 'block';
+								if (prop === 'visibility') return 'visible';
+								if (prop === 'opacity') return '1';
+								if (prop === 'getPropertyValue') {
+									return function(name) {
+										const n = String(name || '').toLowerCase().trim();
+										if (n === 'display') return 'block';
+										if (n === 'visibility') return 'visible';
+										if (n === 'opacity') return '1';
+										return target.getPropertyValue(name);
+									};
+								}
+								const v = target[prop];
+								return typeof v === 'function' ? v.bind(target) : v;
+							}
+						});
+					}
+					return st;
+				};
+				try { Object.defineProperty(mwCS, '__nvirya_mw_cs', { value: true }); } catch (e) {}
+				W.getComputedStyle = mwCS;
 			}
 		} catch (e) {}
 
@@ -288,6 +979,34 @@
 		} catch (e) {
 			try { W.atOptions = { key: '', format: '', height: 0, width: 0, params: {} }; } catch (e2) {}
 		}
+
+		try {
+			W.canRunAds = true;
+			W.isAdBlockActive = false;
+			W.isAdBlockerActive = false;
+			W.adblock = false;
+			W.adBlockEnabled = false;
+			W.google_ad_status = 1;
+			W.google_ad_client = W.google_ad_client || 'ca-pub-0000000000000000';
+			const defuseGlobalProp = (prop, val) => {
+				try {
+					Object.defineProperty(W, prop, {
+						configurable: true,
+						enumerable: true,
+						get: () => val,
+						set: () => {}
+					});
+				} catch (err) {
+					try { W[prop] = val; } catch (e2) {}
+				}
+			};
+			defuseGlobalProp('canRunAds', true);
+			defuseGlobalProp('isAdBlockActive', false);
+			defuseGlobalProp('isAdBlockerActive', false);
+			defuseGlobalProp('adblock', false);
+			defuseGlobalProp('adBlockEnabled', false);
+			defuseGlobalProp('google_ad_status', 1);
+		} catch (e) {}
 
 		try {
 			const origOpen = W.open;
@@ -334,6 +1053,9 @@
 			});
 
 			W.open = function(url, name, features) {
+				if (W.__NVIRYA_PICKER_ACTIVE__) {
+					return makeDummy();
+				}
 				const urlStr = String(url || '');
 				if (RE_SHIELD_AD_URL.test(urlStr)) {
 					triggerAdvance();
@@ -538,6 +1260,42 @@
 					});
 				} catch (e) { try { W[name] = stub; } catch (e2) {} }
 			});
+
+			try {
+				W.canRunAds = true;
+				W.isAdBlockActive = false;
+				W.isAdBlockerActive = false;
+				W.adblock = false;
+				W.adBlockEnabled = false;
+				W.google_ad_status = 1;
+				W.google_ad_client = W.google_ad_client || 'ca-pub-0000000000000000';
+				const lockGlobalVar = function(prop, val) {
+					try {
+						Object.defineProperty(W, prop, {
+							configurable: true,
+							enumerable: true,
+							get: function() { return val; },
+							set: function() {}
+						});
+					} catch (err) {
+						try { W[prop] = val; } catch (e2) {}
+					}
+				};
+				lockGlobalVar('canRunAds', true);
+				lockGlobalVar('isAdBlockActive', false);
+				lockGlobalVar('isAdBlockerActive', false);
+				lockGlobalVar('adblock', false);
+				lockGlobalVar('adBlockEnabled', false);
+				lockGlobalVar('google_ad_status', 1);
+			} catch (e) {}
+
+			try {
+				if (typeof unsafeWindow !== 'undefined' && unsafeWindow && unsafeWindow !== window) {
+					mainWorldShield(unsafeWindow);
+				}
+			} catch (e) {}
+
+			installBaitDimensionSpoofing();
 		} catch (e) {}
 	}
 
@@ -578,13 +1336,14 @@
 	const SYNC_INTERVAL_MS = 86400000;
 	const K_ST = 'nvirya_x_stats';
 	const K_SESS = 'nvirya_x_session';
-  const K_WEEKLY = 'nvirya_x_weekly_history';
+	const K_WEEKLY = 'nvirya_x_weekly_history';
 	const K_LAST_REP = 'nvirya_x_last_report';
 	const UPDATE_URL = 'https://raw.nvirya.com/adguard/nvirya-adguard.user.js';
 	const STAY_INSTALL_URL = 'stay://x-callback-url/install?scriptURL=' + encodeURIComponent(UPDATE_URL);
 	const INSTALL_URL = isAppleDevice() ? STAY_INSTALL_URL : UPDATE_URL;
 	const K_UPD_LAST = 'nvirya_x_last_update_check';
 	const K_UPD_REMOTE = 'nvirya_x_update_remote';
+	const K_UPD_CHANGELOG = 'nvirya_x_update_changelog';
 	const K_UPD_SNOOZE = 'nvirya_x_update_snooze';
 
 	const UPDATE_CHECK_INTERVAL = 30 * 60 * 1000;
@@ -615,42 +1374,177 @@
 
 	const TRANSLATIONS = {
 		en: {
-			s_stats: 'Blocked Stats', s_week: "This week's activity", s_act: 'Actions', s_set: 'Settings', s_bak: 'Backup & Share Rules', s_data: 'Data', s_dbg: 'Debug',
-			this_page: 'This Page', all_time: 'All Time', ads_rem: 'Ads removed', el_hid: 'Elements hidden', pop_blk: 'Popups blocked', req_blk: 'Requests blocked',
-			all_pre: 'All-time: ', page_pre: 'This page: ', today: 'Today', ads_u: 'ads', days: 'Mon|Tue|Wed|Thu|Fri|Sat|Sun',
-			wl_add: 'Do not block this site', wl_add_s: 'Always allow this site to run unfiltered', wl_rem: 'Remove from whitelist', wl_rem_s: 'Resume blocking on this site',
-			td_off: 'Disable for this session', td_off_s: 'Pause blocking on this site', td_on: 'Enable for this session', td_on_s: 'Turn blocking back on',
-			pick: 'Block element', pick_s: 'Pick an element to hide on this site', clean: 'Clean page', clean_s: 'Hide leftover ad frames now',
-			rep: 'Report broken / Missed ad', rep_s: 'Report missed ads or page breakage', undo: 'Undo last block', undo_s: 'Restore the last removed element',
-			rules: 'Rules of this page', rules_s: 'View and delete each blocked element', peek: 'See the original page', peek_s: 'Temporarily show hidden blocks for 3 seconds',
-			unlock: 'Unlock the page scroll', unlock_s: 'Fix the device freeze due to blocking popup/modal',
-			t_auto: 'Auto', t_light: 'Light', t_dark: 'Dark',
-			shield: 'Smart Shield', shield_s: 'Block popups, instant redirects & stealth ad frames', media: 'Media Guard', media_s: 'Defend video players',
-			strict: 'Strict Network Filter', strict_s: 'Deep network inspection (may break rare websites)', fab: 'Floating Button', fab_s: 'Show quick access widget on the edge of screen',
-			exp: 'Export Rules', exp_s: 'Copy custom site rules to clipboard', imp: 'Import Rules', imp_s: 'Merge rules from JSON or Base64',
-			upd: 'Check for updates', upd_cur: 'Current version v{ver}', upd_new: 'New version v{remote} (now v{ver})', upd_chk: 'Checking...',
-			rst_cfg: 'Reset settings', rst_cfg_s: 'Restore the default options', clr_st: 'Clear statistics', clr_st_s: 'Set all counters back to zero',
-			rst_rl: 'Reset site rules', rst_rl_s: 'Remove all blocked elements on this site', dbg_cp: 'Copy debug info', dbg_cp_s: 'Copy diagnostics to the clipboard',
-			ub_ttl: 'There is a new update! (v{ver})', ub_dsc: 'The update helps improve the ability to block ads.', ub_ltr: 'Later', ub_now: 'Update Now',
-			rp_ttl: 'Report an incident', rp_rsn: 'Reason:', rp_m1: 'Ad not blocked', rp_m2: 'Page layout issue', rp_m3: 'Video player issue', rp_m4: 'Feature request', rp_m5: 'Other',
-			rp_nt: 'Notes (optional):', rp_ph: 'Note more about the location of advertising...', cancel: 'Cancel', rp_send: 'Send a report', rl_empty: 'There are no rules for this page',
-			p_depth: 'Depth', p_par: 'Parent', p_chd: 'Child', p_blk: 'Block', p_all: 'All',
-			ts_pick: 'Tap an element to block', ts_pclose: 'Picker closed', ts_gone: 'Element is no longer on the page', ts_nosel: 'Unable to create selector',
-			ts_ball: 'Blocked all similar elements', ts_bone: 'Blocked element', ts_wla: 'Whitelisted for this site', ts_wlr: 'Removed from whitelist',
-			ts_tdo: 'Protection enabled for this session', ts_tdf: 'Disabled for this session', ts_cln: 'Page cleaned', ts_rst: 'Settings reset',
-			ts_clr: 'Stats cleared', ts_rlc: 'Site rules cleared', ts_dbg: 'Debug info copied', ts_con: 'Logged to console', ts_ulk: 'Unlocked page scroll',
-			ts_pkon: 'Temporarily viewing original page (3s)...', ts_pkoff: 'Restored filter', ts_rm: 'Removed: {sel}', ts_udo: 'Undone: {sel}',
-			ts_udn: 'Restored the element', ts_ud0: 'There is no action to undo', ts_ufail: 'Unable to check for updates', ts_ulat: 'You are using the latest version!',
-			ts_wait: 'Please wait {sec}s before sending again', ts_nohk: 'Webhook is not configured in script', ts_rpok: 'Report sent! Thank you.', ts_rperr: 'Send failed: {msg}',
-			ts_noexp: 'No custom rules to export yet', ts_exp: 'Copied {count} rules as JSON!', ts_ibad: 'Invalid rules format', ts_imp: 'Merged {count} new rule(s)!',
-			pr_json: 'Copy JSON rules:', pr_imp: 'Paste your rules (JSON or Base64):',
-			cf_rst: 'Reset all settings to defaults?', cf_clr: 'Clear all statistics?', cf_rl: 'Clear all manual rules for this site?',
-			cf_plr: 'Element belongs to media player. Blocking may break video. Continue?', cf_ball: 'Block ALL similar elements ({sel})?', cf_bone: 'Block this element?\n\n{sel}',
-			networkRequests: 'Network Requests', networkRequestsSub: 'Inspect and manually block suspicious domains',
-			blockDomain: 'Block', unblockDomain: 'Unblock', blockedBadge: 'Blocked', allowedBadge: 'Allowed',
-			searchDomainPlaceholder: 'Search domains...', noRequestsYet: 'No requests recorded yet',
-			toastDomainBlocked: 'Blocked domain: {domain}', toastDomainUnblocked: 'Unblocked domain: {domain}',
-			netFilterAll: 'All', netClearLog: 'Clear session log',
+			s_stats: 'Blocked Stats',
+			s_week: "This week's activity",
+			s_act: 'Actions',
+			s_set: 'Settings',
+			s_bak: 'Backup & Share Rules',
+			s_data: 'Data',
+			s_dbg: 'Debug',
+			this_page: 'This Page',
+			all_time: 'All Time',
+			ads_rem: 'Ads removed',
+			el_hid: 'Elements hidden',
+			pop_blk: 'Popups blocked',
+			req_blk: 'Requests blocked',
+			all_pre: 'All-time: ',
+			page_pre: 'This page: ',
+			today: 'Today',
+			ads_u: 'ads',
+			days: 'Mon|Tue|Wed|Thu|Fri|Sat|Sun',
+			wl_add: 'Do not block this site',
+			wl_add_s: 'Always allow this site to run unfiltered',
+			wl_rem: 'Remove from whitelist',
+			wl_rem_s: 'Resume blocking on this site',
+			td_off: 'Disable for this session',
+			td_off_s: 'Pause blocking on this site',
+			td_on: 'Enable for this session',
+			td_on_s: 'Turn blocking back on',
+			pick: 'Block element',
+			pick_s: 'Pick an element to hide on this site',
+			clean: 'Clean page',
+			clean_s: 'Hide leftover ad frames now',
+			rep: 'Report broken / Missed ad',
+			rep_s: 'Report missed ads or page breakage',
+			undo: 'Undo last block',
+			undo_s: 'Restore the last removed element',
+			rules: 'Rules of this page',
+			rules_s: 'View and delete each blocked element',
+			peek: 'See the original page',
+			peek_s: 'Temporarily show hidden blocks for 3 seconds',
+			unlock: 'Unlock the page scroll',
+			unlock_s: 'Fix the device freeze due to blocking popup/modal',
+			t_auto: 'Auto',
+			t_light: 'Light',
+			t_dark: 'Dark',
+			shield: 'Smart Shield',
+			shield_s: 'Block popups, instant redirects & stealth ad frames',
+			media: 'Media Guard',
+			media_s: 'Defend video players',
+			strict: 'Strict Network Filter',
+			strict_s: 'Deep network inspection (may break rare websites)',
+			fab: 'Floating Button',
+			fab_s: 'Show quick access widget on the edge of screen',
+			exp: 'Export Rules',
+			exp_s: 'Copy custom site rules to clipboard',
+			imp: 'Import Rules',
+			imp_s: 'Merge rules from JSON or Base64',
+			upd: 'Check for updates',
+			upd_cur: 'Current version v{ver}',
+			upd_new: 'New version v{remote} (now v{ver})',
+			upd_chk: 'Checking...',
+			rst_cfg: 'Reset settings',
+			rst_cfg_s: 'Restore the default options',
+			clr_st: 'Clear statistics',
+			clr_st_s: 'Set all counters back to zero',
+			rst_rl: 'Reset site rules',
+			rst_rl_s: 'Remove all blocked elements on this site',
+			dbg_cp: 'Copy debug info',
+			dbg_cp_s: 'Copy diagnostics to the clipboard',
+			ub_ttl: 'New Update Ready!',
+			ub_dsc: 'The update helps improve the ability to block ads.',
+			ub_ltr: 'Later',
+			ub_now: 'Update Now',
+			ub_whats_new: "What's new in this version:",
+			ub_def_1: 'Optimized ad filters & anti-adblock firewall bypass.',
+			ub_def_2: 'Upgraded startup speed and automatic page scroll unlock.',
+			ub_def_3: 'Fixed compatibility issues across mobile websites.',
+			tabHome: 'Home',
+			tabConfig: 'Features',
+			tabAbout: 'About',
+			badgeSupported: 'supported',
+			badgeUnsupported: 'unsupported',
+			subBypassSupported: 'Spoof adblock inspection scripts on news sites',
+			subBypassUnsupported: 'Unavailable due to WebKit iOS sandbox limitations',
+			systemStatus: 'System Compatibility',
+			contactAuthor: 'Community & Support',
+			systemCompatibility: 'System Compatibility',
+			featureBypass: 'Bypass Ad Blocker',
+			featurePopup: 'Popup Shield',
+			featureOverlay: 'Stealth Overlay Filter',
+			featureNetwork: 'Strict Network Filter',
+			featureClipboard: 'Clipboard & Visibility',
+			statusSupported: 'supported',
+			statusUnsupported: 'unsupported',
+			statusLimited: 'limited (iOS)',
+			compatLimitedNote: 'Limited on iOS WebKit due to sandbox isolation',
+			aboutContact: 'Direct Contact',
+			aboutDesc: 'A lightweight ad-blocking & navigation-guard engine optimized for mobile.',
+			sysPlatform: 'Platform',
+			sysPlatformIOS: 'iOS Safari (Stay)',
+			sysPlatformStd: 'Android (XBrowser) / Desktop',
+			reportBtnShort: 'Report',
+			rp_ttl: 'Report an incident',
+			rp_rsn: 'Reason:',
+			rp_m1: 'Ad not blocked',
+			rp_m2: 'Page layout issue',
+			rp_m3: 'Video player issue',
+			rp_m4: 'Feature request',
+			rp_m5: 'Other',
+			rp_nt: 'Notes (optional):',
+			rp_ph: 'Note more about the location of advertising...',
+			cancel: 'Cancel',
+			rp_send: 'Send a report',
+			rl_empty: 'There are no rules for this page',
+			p_depth: 'Depth',
+			p_par: 'Parent',
+			p_chd: 'Child',
+			p_blk: 'Block',
+			p_all: 'All',
+			ts_pick: 'Tap an element to block',
+			ts_pclose: 'Picker closed',
+			tossedElement: 'Tossed element away!',
+			ts_gone: 'Element is no longer on the page',
+			ts_nosel: 'Unable to create selector',
+			ts_ball: 'Blocked all similar elements',
+			ts_bone: 'Blocked element',
+			ts_wla: 'Whitelisted for this site',
+			ts_wlr: 'Removed from whitelist',
+			ts_tdo: 'Protection enabled for this session',
+			ts_tdf: 'Disabled for this session',
+			ts_cln: 'Page cleaned',
+			ts_rst: 'Settings reset',
+			ts_clr: 'Stats cleared',
+			ts_rlc: 'Site rules cleared',
+			ts_dbg: 'Debug info copied',
+			ts_con: 'Logged to console',
+			ts_ulk: 'Unlocked page scroll',
+			ts_pkon: 'Temporarily viewing original page (3s)...',
+			ts_pkoff: 'Restored filter',
+			ts_rm: 'Removed: {sel}',
+			ts_udo: 'Undone: {sel}',
+			ts_udn: 'Restored the element',
+			ts_ud0: 'There is no action to undo',
+			ts_ufail: 'Unable to check for updates',
+			ts_ulat: 'You are using the latest version!',
+			ts_wait: 'Please wait {sec}s before sending again',
+			ts_nohk: 'Webhook is not configured in script',
+			ts_rpok: 'Report sent! Thank you.',
+			ts_rperr: 'Send failed: {msg}',
+			ts_noexp: 'No custom rules to export yet',
+			ts_exp: 'Copied {count} rules as JSON!',
+			ts_ibad: 'Invalid rules format',
+			ts_imp: 'Merged {count} new rule(s)!',
+			pr_json: 'Copy JSON rules:',
+			pr_imp: 'Paste your rules (JSON or Base64):',
+			cf_rst: 'Reset all settings to defaults?',
+			cf_clr: 'Clear all statistics?',
+			cf_rl: 'Clear all manual rules for this site?',
+			cf_plr: 'Element belongs to media player. Blocking may break video. Continue?',
+			cf_ball: 'Block ALL similar elements ({sel})?',
+			cf_bone: 'Block this element?\n\n{sel}',
+			networkRequests: 'Network Requests',
+			networkRequestsSub: 'Inspect and manually block suspicious domains',
+			blockDomain: 'Block',
+			unblockDomain: 'Unblock',
+			blockedBadge: 'Blocked',
+			allowedBadge: 'Allowed',
+			searchDomainPlaceholder: 'Search domains...',
+			noRequestsYet: 'No requests recorded yet',
+			toastDomainBlocked: 'Blocked domain: {domain}',
+			toastDomainUnblocked: 'Unblocked domain: {domain}',
+			netFilterAll: 'All',
+			netClearLog: 'Clear session log',
 			rep_feat_lbl: 'Description:',
 			placeholderFeature: "Describe the feature or improvement you'd like to suggest...",
 			placeholderBug: 'Describe the issue or ad location...',
@@ -662,42 +1556,177 @@
 			systemBlocked: 'Auto Blocked'
 		},
 		vi: {
-			s_stats: 'Thống kê chặn', s_week: 'Hoạt động tuần này', s_act: 'Tác vụ nhanh', s_set: 'Cài đặt', s_bak: 'Sao lưu & Chia sẻ luật', s_data: 'Dữ liệu', s_dbg: 'Gỡ lỗi',
-			this_page: 'Trang này', all_time: 'Toàn thời gian', ads_rem: 'Quảng cáo đã gỡ', el_hid: 'Phần tử đã ẩn', pop_blk: 'Popup đã chặn', req_blk: 'Truy vấn đã chặn',
-			all_pre: 'Tổng: ', page_pre: 'Trang này: ', today: 'Hôm nay', ads_u: 'QC', days: 'T2|T3|T4|T5|T6|T7|CN',
-			wl_add: 'Không chặn trang này', wl_add_s: 'Luôn cho phép trang chạy không lọc', wl_rem: 'Gỡ khỏi danh sách trắng', wl_rem_s: 'Bật lại bảo vệ trên trang này',
-			td_off: 'Tắt trong phiên này', td_off_s: 'Tạm dừng chặn trên trang này', td_on: 'Bật lại trong phiên này', td_on_s: 'Kích hoạt lại chế độ chặn',
-			pick: 'Chặn phần tử (Picker)', pick_s: 'Chạm chọn phần tử muốn ẩn trên trang', clean: 'Dọn sạch trang', clean_s: 'Ẩn ngay các khung quảng cáo sót',
-			rep: 'Báo lỗi / Lọt quảng cáo', rep_s: 'Báo quảng cáo lọt hoặc vỡ giao diện', undo: 'Hoàn tác lần chặn cuối', undo_s: 'Khôi phục phần tử vừa ẩn/xóa',
-			rules: 'Luật chặn của trang này', rules_s: 'Xem và xóa từng bộ chọn đã chặn', peek: 'Xem trang gốc (3 giây)', peek_s: 'Tạm hiện khối đã ẩn trong 3 giây',
-			unlock: 'Mở khóa cuộn trang', unlock_s: 'Sửa lỗi đơ cuộn trang do popup/modal',
-			t_auto: 'Tự động', t_light: 'Sáng', t_dark: 'Tối',
-			shield: 'Khiên Thông Minh', shield_s: 'Chặn popup, chuyển hướng & khung QC ẩn', media: 'Bảo vệ Trình phát', media_s: 'Bảo vệ trình phát video',
-			strict: 'Lọc mạng nghiêm ngặt', strict_s: 'Kiểm tra sâu request mạng', fab: 'Nút nổi nhanh (FAB)', fab_s: 'Hiện nút điều khiển ở mép màn hình',
-			exp: 'Xuất luật chặn', exp_s: 'Sao chép luật tùy chỉnh vào clipboard', imp: 'Nhập luật chặn', imp_s: 'Gộp luật từ JSON hoặc Base64',
-			upd: 'Kiểm tra cập nhật', upd_cur: 'Phiên bản hiện tại v{ver}', upd_new: 'Có bản mới v{remote} (nay v{ver})', upd_chk: 'Đang kiểm tra...',
-			rst_cfg: 'Đặt lại cài đặt', rst_cfg_s: 'Khôi phục tùy chọn mặc định', clr_st: 'Xóa thống kê', clr_st_s: 'Đặt lại toàn bộ bộ đếm về 0',
-			rst_rl: 'Xóa luật trang này', rst_rl_s: 'Gỡ mọi phần tử chặn trên trang', dbg_cp: 'Chép thông tin gỡ lỗi', dbg_cp_s: 'Sao chép chẩn đoán vào clipboard',
-			ub_ttl: 'Có bản cập nhật mới! (v{ver})', ub_dsc: 'Bản cập nhật giúp tăng khả năng chặn QC.', ub_ltr: 'Để sau', ub_now: 'Cập nhật ngay',
-			rp_ttl: 'Báo cáo sự cố', rp_rsn: 'Lý do:', rp_m1: 'Lọt quảng cáo', rp_m2: 'Vỡ giao diện', rp_m3: 'Lỗi trình phát video', rp_m4: 'Đề xuất tính năng', rp_m5: 'Khác',
-			rp_nt: 'Ghi chú (tùy chọn):', rp_ph: 'Mô tả thêm về vị trí quảng cáo...', cancel: 'Hủy', rp_send: 'Gửi báo cáo', rl_empty: 'Chưa có luật chặn cho trang này',
-			p_depth: 'Cấp độ', p_par: 'Thẻ cha', p_chd: 'Thẻ con', p_blk: 'Chặn', p_all: 'Tất cả',
-			ts_pick: 'Chạm vào phần tử muốn chặn', ts_pclose: 'Đã đóng trình chọn', ts_gone: 'Phần tử không còn trên trang', ts_nosel: 'Không thể tạo bộ chọn',
-			ts_ball: 'Đã chặn mọi phần tử tương tự', ts_bone: 'Đã chặn phần tử', ts_wla: 'Đã thêm vào danh sách trắng', ts_wlr: 'Đã gỡ khỏi danh sách trắng',
-			ts_tdo: 'Đã bật bảo vệ cho phiên này', ts_tdf: 'Đã tạm tắt trong phiên này', ts_cln: 'Đã dọn sạch trang', ts_rst: 'Đã đặt lại cài đặt',
-			ts_clr: 'Đã xóa thống kê', ts_rlc: 'Đã xóa luật của trang', ts_dbg: 'Đã chép thông tin gỡ lỗi', ts_con: 'Đã in ra Console', ts_ulk: 'Đã mở khóa cuộn trang',
-			ts_pkon: 'Đang tạm hiện trang gốc (3s)...', ts_pkoff: 'Đã khôi phục bộ lọc', ts_rm: 'Đã gỡ: {sel}', ts_udo: 'Đã hoàn tác: {sel}',
-			ts_udn: 'Đã khôi phục phần tử', ts_ud0: 'Không có thao tác để hoàn tác', ts_ufail: 'Không thể kiểm tra cập nhật', ts_ulat: 'Bạn đang ở bản mới nhất!',
-			ts_wait: 'Đợi {sec}s trước khi gửi tiếp', ts_nohk: 'Chưa cấu hình webhook', ts_rpok: 'Gửi báo cáo thành công! Cảm ơn bạn.', ts_rperr: 'Gửi lỗi: {msg}',
-			ts_noexp: 'Chưa có luật tùy chỉnh để xuất', ts_exp: 'Đã chép {count} luật JSON!', ts_ibad: 'Định dạng luật không hợp lệ', ts_imp: 'Đã gộp {count} luật mới!',
-			pr_json: 'Sao chép chuỗi JSON:', pr_imp: 'Dán luật (JSON hoặc Base64):',
-			cf_rst: 'Đặt lại cài đặt về mặc định?', cf_clr: 'Xóa toàn bộ thống kê?', cf_rl: 'Xóa mọi luật thủ công của trang này?',
-			cf_plr: 'Phần tử thuộc trình phát video. Chặn có thể gây lỗi phát. Tiếp tục?', cf_ball: 'Chặn TẤT CẢ phần tử tương tự ({sel})?', cf_bone: 'Chặn phần tử này?\n\n{sel}',
-			networkRequests: 'Nhật ký mạng', networkRequestsSub: 'Soi và tự chặn các tên miền quảng cáo bị lọt',
-			blockDomain: 'Chặn', unblockDomain: 'Bỏ chặn', blockedBadge: 'Đã chặn', allowedBadge: 'Cho phép',
-			searchDomainPlaceholder: 'Tìm tên miền...', noRequestsYet: 'Chưa có request nào',
-			toastDomainBlocked: 'Đã chặn tên miền: {domain}', toastDomainUnblocked: 'Đã bỏ chặn: {domain}',
-			netFilterAll: 'Tất cả', netClearLog: 'Xóa nhật ký phiên',
+			s_stats: 'Thống kê chặn',
+			s_week: 'Hoạt động tuần này',
+			s_act: 'Tác vụ nhanh',
+			s_set: 'Cài đặt',
+			s_bak: 'Sao lưu & Chia sẻ luật',
+			s_data: 'Dữ liệu',
+			s_dbg: 'Gỡ lỗi',
+			this_page: 'Trang này',
+			all_time: 'Toàn thời gian',
+			ads_rem: 'Quảng cáo đã gỡ',
+			el_hid: 'Phần tử đã ẩn',
+			pop_blk: 'Popup đã chặn',
+			req_blk: 'Truy vấn đã chặn',
+			all_pre: 'Tổng: ',
+			page_pre: 'Trang này: ',
+			today: 'Hôm nay',
+			ads_u: 'QC',
+			days: 'T2|T3|T4|T5|T6|T7|CN',
+			wl_add: 'Không chặn trang này',
+			wl_add_s: 'Luôn cho phép trang chạy không lọc',
+			wl_rem: 'Gỡ khỏi danh sách trắng',
+			wl_rem_s: 'Bật lại bảo vệ trên trang này',
+			td_off: 'Tắt trong phiên này',
+			td_off_s: 'Tạm dừng chặn trên trang này',
+			td_on: 'Bật lại trong phiên này',
+			td_on_s: 'Kích hoạt lại chế độ chặn',
+			pick: 'Chặn phần tử (Picker)',
+			pick_s: 'Chạm chọn phần tử muốn ẩn trên trang',
+			clean: 'Dọn sạch trang',
+			clean_s: 'Ẩn ngay các khung quảng cáo sót',
+			rep: 'Báo lỗi / Lọt quảng cáo',
+			rep_s: 'Báo quảng cáo lọt hoặc vỡ giao diện',
+			undo: 'Hoàn tác lần chặn cuối',
+			undo_s: 'Khôi phục phần tử vừa ẩn/xóa',
+			rules: 'Luật chặn của trang này',
+			rules_s: 'Xem và xóa từng bộ chọn đã chặn',
+			peek: 'Xem trang gốc (3 giây)',
+			peek_s: 'Tạm hiện khối đã ẩn trong 3 giây',
+			unlock: 'Mở khóa cuộn trang',
+			unlock_s: 'Sửa lỗi đơ cuộn trang do popup/modal',
+			t_auto: 'Tự động',
+			t_light: 'Sáng',
+			t_dark: 'Tối',
+			shield: 'Khiên Thông Minh',
+			shield_s: 'Chặn popup, chuyển hướng & khung QC ẩn',
+			media: 'Bảo vệ Trình phát',
+			media_s: 'Bảo vệ trình phát video',
+			strict: 'Lọc mạng nghiêm ngặt',
+			strict_s: 'Kiểm tra sâu request mạng',
+			fab: 'Nút nổi nhanh (FAB)',
+			fab_s: 'Hiện nút điều khiển ở mép màn hình',
+			exp: 'Xuất luật chặn',
+			exp_s: 'Sao chép luật tùy chỉnh vào clipboard',
+			imp: 'Nhập luật chặn',
+			imp_s: 'Gộp luật từ JSON hoặc Base64',
+			upd: 'Kiểm tra cập nhật',
+			upd_cur: 'Phiên bản hiện tại v{ver}',
+			upd_new: 'Có bản mới v{remote} (nay v{ver})',
+			upd_chk: 'Đang kiểm tra...',
+			rst_cfg: 'Đặt lại cài đặt',
+			rst_cfg_s: 'Khôi phục tùy chọn mặc định',
+			clr_st: 'Xóa thống kê',
+			clr_st_s: 'Đặt lại toàn bộ bộ đếm về 0',
+			rst_rl: 'Xóa luật trang này',
+			rst_rl_s: 'Gỡ mọi phần tử chặn trên trang',
+			dbg_cp: 'Chép thông tin gỡ lỗi',
+			dbg_cp_s: 'Sao chép chẩn đoán vào clipboard',
+			ub_ttl: 'Cập nhật mới sẵn sàng!',
+			ub_dsc: 'Bản cập nhật giúp tăng khả năng chặn QC.',
+			ub_ltr: 'Để sau',
+			ub_now: 'Cập nhật ngay',
+			ub_whats_new: 'Có gì mới trong phiên bản này:',
+			ub_def_1: 'Tối ưu bộ lọc quảng cáo & bypass tường lửa adblock.',
+			ub_def_2: 'Nâng cấp tốc độ khởi động và mở khóa trang.',
+			ub_def_3: 'Sửa lỗi tương thích trên các trang web di động.',
+			tabHome: 'Trang chủ',
+			tabConfig: 'Tính năng',
+			tabAbout: 'Thông tin',
+			badgeSupported: 'supported',
+			badgeUnsupported: 'unsupported',
+			subBypassSupported: 'Đánh lừa script kiểm tra adblock của trang báo',
+			subBypassUnsupported: 'Không khả dụng do rào cản sandbox WebKit iOS',
+			systemStatus: 'Tương thích hệ thống',
+			contactAuthor: 'Cộng đồng & Hỗ trợ',
+			systemCompatibility: 'Tương thích hệ thống',
+			featureBypass: 'Bypass Ad Blocker',
+			featurePopup: 'Popup Shield',
+			featureOverlay: 'Stealth Overlay Filter',
+			featureNetwork: 'Strict Network Filter',
+			featureClipboard: 'Clipboard & Visibility',
+			statusSupported: 'supported',
+			statusUnsupported: 'unsupported',
+			statusLimited: 'limited (iOS)',
+			compatLimitedNote: 'Limited on iOS WebKit due to sandbox isolation',
+			aboutContact: 'Liên hệ trực tiếp',
+			aboutDesc: 'Engine chặn quảng cáo gọn nhẹ & bảo vệ điều hướng tối ưu cho di động.',
+			sysPlatform: 'Nền tảng',
+			sysPlatformIOS: 'iOS Safari (Stay)',
+			sysPlatformStd: 'Android (XBrowser) / Desktop',
+			reportBtnShort: 'Báo lỗi / Góp ý',
+			rp_ttl: 'Báo cáo sự cố',
+			rp_rsn: 'Lý do:',
+			rp_m1: 'Lọt quảng cáo',
+			rp_m2: 'Vỡ giao diện',
+			rp_m3: 'Lỗi trình phát video',
+			rp_m4: 'Đề xuất tính năng',
+			rp_m5: 'Khác',
+			rp_nt: 'Ghi chú (tùy chọn):',
+			rp_ph: 'Mô tả thêm về vị trí quảng cáo...',
+			cancel: 'Hủy',
+			rp_send: 'Gửi báo cáo',
+			rl_empty: 'Chưa có luật chặn cho trang này',
+			p_depth: 'Cấp độ',
+			p_par: 'Thẻ cha',
+			p_chd: 'Thẻ con',
+			p_blk: 'Chặn',
+			p_all: 'Tất cả',
+			ts_pick: 'Chạm vào phần tử muốn chặn',
+			ts_pclose: 'Đã đóng trình chọn',
+			tossedElement: 'Đã ném bay phần tử!',
+			ts_gone: 'Phần tử không còn trên trang',
+			ts_nosel: 'Không thể tạo bộ chọn',
+			ts_ball: 'Đã chặn mọi phần tử tương tự',
+			ts_bone: 'Đã chặn phần tử',
+			ts_wla: 'Đã thêm vào danh sách trắng',
+			ts_wlr: 'Đã gỡ khỏi danh sách trắng',
+			ts_tdo: 'Đã bật bảo vệ cho phiên này',
+			ts_tdf: 'Đã tạm tắt trong phiên này',
+			ts_cln: 'Đã dọn sạch trang',
+			ts_rst: 'Đã đặt lại cài đặt',
+			ts_clr: 'Đã xóa thống kê',
+			ts_rlc: 'Đã xóa luật của trang',
+			ts_dbg: 'Đã chép thông tin gỡ lỗi',
+			ts_con: 'Đã in ra Console',
+			ts_ulk: 'Đã mở khóa cuộn trang',
+			ts_pkon: 'Đang tạm hiện trang gốc (3s)...',
+			ts_pkoff: 'Đã khôi phục bộ lọc',
+			ts_rm: 'Đã gỡ: {sel}',
+			ts_udo: 'Đã hoàn tác: {sel}',
+			ts_udn: 'Đã khôi phục phần tử',
+			ts_ud0: 'Không có thao tác để hoàn tác',
+			ts_ufail: 'Không thể kiểm tra cập nhật',
+			ts_ulat: 'Bạn đang ở bản mới nhất!',
+			ts_wait: 'Đợi {sec}s trước khi gửi tiếp',
+			ts_nohk: 'Chưa cấu hình webhook',
+			ts_rpok: 'Gửi báo cáo thành công! Cảm ơn bạn.',
+			ts_rperr: 'Gửi lỗi: {msg}',
+			ts_noexp: 'Chưa có luật tùy chỉnh để xuất',
+			ts_exp: 'Đã chép {count} luật JSON!',
+			ts_ibad: 'Định dạng luật không hợp lệ',
+			ts_imp: 'Đã gộp {count} luật mới!',
+			pr_json: 'Sao chép chuỗi JSON:',
+			pr_imp: 'Dán luật (JSON hoặc Base64):',
+			cf_rst: 'Đặt lại cài đặt về mặc định?',
+			cf_clr: 'Xóa toàn bộ thống kê?',
+			cf_rl: 'Xóa mọi luật thủ công của trang này?',
+			cf_plr: 'Phần tử thuộc trình phát video. Chặn có thể gây lỗi phát. Tiếp tục?',
+			cf_ball: 'Chặn TẤT CẢ phần tử tương tự ({sel})?',
+			cf_bone: 'Chặn phần tử này?\n\n{sel}',
+			networkRequests: 'Nhật ký mạng',
+			networkRequestsSub: 'Soi và tự chặn các tên miền quảng cáo bị lọt',
+			blockDomain: 'Chặn',
+			unblockDomain: 'Bỏ chặn',
+			blockedBadge: 'Đã chặn',
+			allowedBadge: 'Cho phép',
+			searchDomainPlaceholder: 'Tìm tên miền...',
+			noRequestsYet: 'Chưa có request nào',
+			toastDomainBlocked: 'Đã chặn tên miền: {domain}',
+			toastDomainUnblocked: 'Đã bỏ chặn: {domain}',
+			netFilterAll: 'Tất cả',
+			netClearLog: 'Xóa nhật ký phiên',
 			rep_feat_lbl: 'Ý tưởng / Tính năng:',
 			placeholderFeature: 'Mô tả chi tiết tính năng bạn muốn đề xuất...',
 			placeholderBug: 'Mô tả vị trí quảng cáo hoặc lỗi gặp phải...',
@@ -709,42 +1738,177 @@
 			systemBlocked: 'Tự động chặn'
 		},
 		'zh-CN': {
-			s_stats: '拦截统计', s_week: '本周活动趋势', s_act: '快捷操作', s_set: '设置', s_bak: '备份与分享规则', s_data: '数据管理', s_dbg: '调试',
-			this_page: '当前页面', all_time: '累计总计', ads_rem: '已移除广告', el_hid: '已隐藏元素', pop_blk: '已拦截弹窗', req_blk: '已拦截请求',
-			all_pre: '累计: ', page_pre: '本页: ', today: '今天', ads_u: '条广告', days: '一|二|三|四|五|六|日',
-			wl_add: '在此网站上停用', wl_add_s: '将该域名加入白名单并放行', wl_rem: '从白名单移除', wl_rem_s: '恢复在此网站上的拦截保护',
-			td_off: '当前会话暂停', td_off_s: '临时暂停本页拦截', td_on: '恢复当前会话保护', td_on_s: '重新开启本页广告拦截',
-			pick: '手动点选拦截', pick_s: '点选页面元素将其隐藏', clean: '立即清理页面', clean_s: '立即隐藏残留广告框架',
-			rep: '反馈漏拦 / 页面错位', rep_s: '报告漏拦广告或显示异常', undo: '撤销上次拦截', undo_s: '恢复最近移除或隐藏的元素',
-			rules: '本页自定义规则', rules_s: '查看并管理本页拦截规则', peek: '预览原始页面 (3秒)', peek_s: '临时显示被隐藏元素3秒钟',
-			unlock: '解除页面滚动锁定', unlock_s: '修复因弹窗拦截导致的无法滚动',
-			t_auto: '自动', t_light: '浅色', t_dark: '深色',
-			shield: '智能护盾', shield_s: '拦截弹窗、自动跳转与隐形广告层', media: '媒体播放器保护', media_s: '保护视频播放器',
-			strict: '严格网络过滤', strict_s: '深度拦截广告请求', fab: '悬浮快捷按钮', fab_s: '在屏幕边缘显示快捷按钮',
-			exp: '导出规则', exp_s: '复制自定义规则到剪贴板', imp: '导入规则', imp_s: '从 JSON 或 Base64 合并规则',
-			upd: '检查更新', upd_cur: '当前版本 v{ver}', upd_new: '发现新版 v{remote} (当前 v{ver})', upd_chk: '正在检查...',
-			rst_cfg: '重置设置', rst_cfg_s: '恢复默认配置选项', clr_st: '清空统计数据', clr_st_s: '将所有拦截计数器归零',
-			rst_rl: '清除本页规则', rst_rl_s: '移除本网站的所有手动规则', dbg_cp: '复制调试信息', dbg_cp_s: '复制诊断日志到剪贴板',
-			ub_ttl: '发现新版本！(v{ver})', ub_dsc: '更新可提升广告拦截能力。', ub_ltr: '稍后', ub_now: '立即更新',
-			rp_ttl: '问题反馈', rp_rsn: '原因:', rp_m1: '广告未拦截', rp_m2: '页面排版错乱', rp_m3: '视频播放异常', rp_m4: '功能建议', rp_m5: '其他',
-			rp_nt: '备注（可选）:', rp_ph: '补充说明广告位置或异常...', cancel: '取消', rp_send: '提交反馈', rl_empty: '当前页面暂无自定义规则',
-			p_depth: '层级', p_par: '父级', p_chd: '子级', p_blk: '拦截', p_all: '全部',
-			ts_pick: '请点选要拦截的元素', ts_pclose: '已退出选择器', ts_gone: '该元素已不在页面中', ts_nosel: '无法生成选择器',
-			ts_ball: '已拦截所有同类元素', ts_bone: '已拦截该元素', ts_wla: '已加入网站白名单', ts_wlr: '已从白名单移除',
-			ts_tdo: '已恢复当前会话保护', ts_tdf: '已在当前会话暂停保护', ts_cln: '页面清理完成', ts_rst: '设置已重置',
-			ts_clr: '统计已清空', ts_rlc: '本页规则已清除', ts_dbg: '调试信息已复制', ts_con: '已输出至控制台', ts_ulk: '页面滚动已解锁',
-			ts_pkon: '正在临时预览原始页面 (3秒)...', ts_pkoff: '已恢复过滤规则', ts_rm: '已移除: {sel}', ts_udo: '已撤销: {sel}',
-			ts_udn: '已恢复元素', ts_ud0: '没有可撤销的操作', ts_ufail: '检查更新失败', ts_ulat: '当前已是最新版本！',
-			ts_wait: '请等待 {sec} 秒后再试', ts_nohk: '未配置有效 Webhook', ts_rpok: '反馈发送成功！感谢。', ts_rperr: '发送失败: {msg}',
-			ts_noexp: '暂无可导出的自定义规则', ts_exp: '已复制 {count} 条 JSON 规则！', ts_ibad: '规则格式无效', ts_imp: '成功合并 {count} 条新规则！',
-			pr_json: '复制 JSON 规则:', pr_imp: '粘贴规则（JSON 或 Base64）:',
-			cf_rst: '确定将设置恢复为默认值？', cf_clr: '确定清空所有统计数据？', cf_rl: '确定清除本页所有手动规则？',
-			cf_plr: '该元素属于媒体播放器，拦截可能导致异常。是否继续？', cf_ball: '确定拦截所有同类元素 ({sel})？', cf_bone: '确定拦截该元素？\n\n{sel}',
-			networkRequests: '网络请求日志', networkRequestsSub: '检查并手动屏蔽可疑域名',
-			blockDomain: '屏蔽', unblockDomain: '解封', blockedBadge: '已屏蔽', allowedBadge: '已允许',
-			searchDomainPlaceholder: '搜索域名...', noRequestsYet: '暂无请求记录',
-			toastDomainBlocked: '已屏蔽域名: {domain}', toastDomainUnblocked: '已解封域名: {domain}',
-			netFilterAll: '全部', netClearLog: '清空会话日志',
+			s_stats: '拦截统计',
+			s_week: '本周活动趋势',
+			s_act: '快捷操作',
+			s_set: '设置',
+			s_bak: '备份与分享规则',
+			s_data: '数据管理',
+			s_dbg: '调试',
+			this_page: '当前页面',
+			all_time: '累计总计',
+			ads_rem: '已移除广告',
+			el_hid: '已隐藏元素',
+			pop_blk: '已拦截弹窗',
+			req_blk: '已拦截请求',
+			all_pre: '累计: ',
+			page_pre: '本页: ',
+			today: '今天',
+			ads_u: '条广告',
+			days: '一|二|三|四|五|六|日',
+			wl_add: '在此网站上停用',
+			wl_add_s: '将该域名加入白名单并放行',
+			wl_rem: '从白名单移除',
+			wl_rem_s: '恢复在此网站上的拦截保护',
+			td_off: '当前会话暂停',
+			td_off_s: '临时暂停本页拦截',
+			td_on: '恢复当前会话保护',
+			td_on_s: '重新开启本页广告拦截',
+			pick: '手动点选拦截',
+			pick_s: '点选页面元素将其隐藏',
+			clean: '立即清理页面',
+			clean_s: '立即隐藏残留广告框架',
+			rep: '反馈漏拦 / 页面错位',
+			rep_s: '报告漏拦广告或显示异常',
+			undo: '撤销上次拦截',
+			undo_s: '恢复最近移除或隐藏的元素',
+			rules: '本页自定义规则',
+			rules_s: '查看并管理本页拦截规则',
+			peek: '预览原始页面 (3秒)',
+			peek_s: '临时显示被隐藏元素3秒钟',
+			unlock: '解除页面滚动锁定',
+			unlock_s: '修复因弹窗拦截导致的无法滚动',
+			t_auto: '自动',
+			t_light: '浅色',
+			t_dark: '深色',
+			shield: '智能护盾',
+			shield_s: '拦截弹窗、自动跳转与隐形广告层',
+			media: '媒体播放器保护',
+			media_s: '保护视频播放器',
+			strict: '严格网络过滤',
+			strict_s: '深度拦截广告请求',
+			fab: '悬浮快捷按钮',
+			fab_s: '在屏幕边缘显示快捷按钮',
+			exp: '导出规则',
+			exp_s: '复制自定义规则到剪贴板',
+			imp: '导入规则',
+			imp_s: '从 JSON 或 Base64 合并规则',
+			upd: '检查更新',
+			upd_cur: '当前版本 v{ver}',
+			upd_new: '发现新版 v{remote} (当前 v{ver})',
+			upd_chk: '正在检查...',
+			rst_cfg: '重置设置',
+			rst_cfg_s: '恢复默认配置选项',
+			clr_st: '清空统计数据',
+			clr_st_s: '将所有拦截计数器归零',
+			rst_rl: '清除本页规则',
+			rst_rl_s: '移除本网站的所有手动规则',
+			dbg_cp: '复制调试信息',
+			dbg_cp_s: '复制诊断日志到剪贴板',
+			ub_ttl: '新版本已就绪！',
+			ub_dsc: '更新可提升广告拦截能力。',
+			ub_ltr: '稍后',
+			ub_now: '立即更新',
+			ub_whats_new: '本次更新内容：',
+			ub_def_1: '优化广告过滤规则并绕过反广告拦截防火墙。',
+			ub_def_2: '提升启动速度与页面滚动自动解锁能力。',
+			ub_def_3: '修复移动网页上的兼容性问题。',
+			tabHome: '首页',
+			tabConfig: '功能',
+			tabAbout: '关于',
+			badgeSupported: 'supported',
+			badgeUnsupported: 'unsupported',
+			subBypassSupported: '绕过新闻网站的去广告检测',
+			subBypassUnsupported: '受限于 WebKit iOS 沙盒限制无法使用',
+			systemStatus: '系统兼容性',
+			contactAuthor: '社区与支持',
+			systemCompatibility: '系统兼容性',
+			featureBypass: 'Bypass Ad Blocker',
+			featurePopup: 'Popup Shield',
+			featureOverlay: 'Stealth Overlay Filter',
+			featureNetwork: 'Strict Network Filter',
+			featureClipboard: 'Clipboard & Visibility',
+			statusSupported: 'supported',
+			statusUnsupported: 'unsupported',
+			statusLimited: 'limited (iOS)',
+			compatLimitedNote: 'Limited on iOS WebKit due to sandbox isolation',
+			aboutContact: '直接联系',
+			aboutDesc: '专为移动端优化的轻量级广告拦截与导航保护引擎。',
+			sysPlatform: '运行平台',
+			sysPlatformIOS: 'iOS Safari (Stay)',
+			sysPlatformStd: 'Android (XBrowser) / Desktop',
+			reportBtnShort: '反馈 / 建议',
+			rp_ttl: '问题反馈',
+			rp_rsn: '原因:',
+			rp_m1: '广告未拦截',
+			rp_m2: '页面排版错乱',
+			rp_m3: '视频播放异常',
+			rp_m4: '功能建议',
+			rp_m5: '其他',
+			rp_nt: '备注（可选）:',
+			rp_ph: '补充说明广告位置或异常...',
+			cancel: '取消',
+			rp_send: '提交反馈',
+			rl_empty: '当前页面暂无自定义规则',
+			p_depth: '层级',
+			p_par: '父级',
+			p_chd: '子级',
+			p_blk: '拦截',
+			p_all: '全部',
+			ts_pick: '请点选要拦截的元素',
+			ts_pclose: '已退出选择器',
+			tossedElement: '已抛飞并拦截该元素！',
+			ts_gone: '该元素已不在页面中',
+			ts_nosel: '无法生成选择器',
+			ts_ball: '已拦截所有同类元素',
+			ts_bone: '已拦截该元素',
+			ts_wla: '已加入网站白名单',
+			ts_wlr: '已从白名单移除',
+			ts_tdo: '已恢复当前会话保护',
+			ts_tdf: '已在当前会话暂停保护',
+			ts_cln: '页面清理完成',
+			ts_rst: '设置已重置',
+			ts_clr: '统计已清空',
+			ts_rlc: '本页规则已清除',
+			ts_dbg: '调试信息已复制',
+			ts_con: '已输出至控制台',
+			ts_ulk: '页面滚动已解锁',
+			ts_pkon: '正在临时预览原始页面 (3秒)...',
+			ts_pkoff: '已恢复过滤规则',
+			ts_rm: '已移除: {sel}',
+			ts_udo: '已撤销: {sel}',
+			ts_udn: '已恢复元素',
+			ts_ud0: '没有可撤销的操作',
+			ts_ufail: '检查更新失败',
+			ts_ulat: '当前已是最新版本！',
+			ts_wait: '请等待 {sec} 秒后再试',
+			ts_nohk: '未配置有效 Webhook',
+			ts_rpok: '反馈发送成功！感谢。',
+			ts_rperr: '发送失败: {msg}',
+			ts_noexp: '暂无可导出的自定义规则',
+			ts_exp: '已复制 {count} 条 JSON 规则！',
+			ts_ibad: '规则格式无效',
+			ts_imp: '成功合并 {count} 条新规则！',
+			pr_json: '复制 JSON 规则:',
+			pr_imp: '粘贴规则（JSON 或 Base64）:',
+			cf_rst: '确定将设置恢复为默认值？',
+			cf_clr: '确定清空所有统计数据？',
+			cf_rl: '确定清除本页所有手动规则？',
+			cf_plr: '该元素属于媒体播放器，拦截可能导致异常。是否继续？',
+			cf_ball: '确定拦截所有同类元素 ({sel})？',
+			cf_bone: '确定拦截该元素？\n\n{sel}',
+			networkRequests: '网络请求日志',
+			networkRequestsSub: '检查并手动屏蔽可疑域名',
+			blockDomain: '屏蔽',
+			unblockDomain: '解封',
+			blockedBadge: '已屏蔽',
+			allowedBadge: '已允许',
+			searchDomainPlaceholder: '搜索域名...',
+			noRequestsYet: '暂无请求记录',
+			toastDomainBlocked: '已屏蔽域名: {domain}',
+			toastDomainUnblocked: '已解封域名: {domain}',
+			netFilterAll: '全部',
+			netClearLog: '清空会话日志',
 			rep_feat_lbl: '功能描述:',
 			placeholderFeature: '请详细描述您希望添加的功能或建议...',
 			placeholderBug: '描述广告位置或遇到的问题...',
@@ -851,8 +2015,8 @@
 
 	const customBlockedSet = new Set(
 		(Array.isArray(state.customBlockedHosts) ? state.customBlockedHosts : [])
-			.map(h => String(h || '').toLowerCase().trim().replace(/\.$/, ''))
-			.filter(Boolean)
+		.map(h => String(h || '').toLowerCase().trim().replace(/\.$/, ''))
+		.filter(Boolean)
 	);
 	const networkRingBuffer = [];
 	const MAX_NET_BUFFER = 80;
@@ -1293,6 +2457,10 @@
 	const stats = {
 		session: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
 		lifetime: { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 },
+		antiAdblock: {
+			session: { detections: 0, recoveries: 0, failed: 0, repeated: 0, falsePositives: 0 },
+			lifetime: { detections: 0, recoveries: 0, failed: 0, repeated: 0, falsePositives: 0 }
+		},
 
 		get ads() { return this.session.ads; },
 		set ads(v) {
@@ -1345,6 +2513,12 @@
 			this.lifetime.hidden = (s.hidden | 0);
 			this.lifetime.removed = (s.removed | 0);
 			this.lifetime.requests = (s.requests | 0);
+			const aab = (s.antiAdblock && typeof s.antiAdblock === 'object') ? s.antiAdblock : {};
+			this.antiAdblock.lifetime.detections = (aab.detections | 0);
+			this.antiAdblock.lifetime.recoveries = (aab.recoveries | 0);
+			this.antiAdblock.lifetime.failed = (aab.failed | 0);
+			this.antiAdblock.lifetime.repeated = (aab.repeated | 0);
+			this.antiAdblock.lifetime.falsePositives = (aab.falsePositives | 0);
 		},
 
 		saveImmediate() {
@@ -1358,7 +2532,14 @@
 				redirects: this.lifetime.redirects,
 				hidden: this.lifetime.hidden,
 				removed: this.lifetime.removed,
-				requests: this.lifetime.requests
+				requests: this.lifetime.requests,
+				antiAdblock: {
+					detections: this.antiAdblock.lifetime.detections,
+					recoveries: this.antiAdblock.lifetime.recoveries,
+					failed: this.antiAdblock.lifetime.failed,
+					repeated: this.antiAdblock.lifetime.repeated,
+					falsePositives: this.antiAdblock.lifetime.falsePositives
+				}
 			});
 		},
 
@@ -1380,11 +2561,19 @@
 			}
 		},
 
+		incAntiAdblock(key, delta = 1) {
+			if (this.antiAdblock.session[key] !== undefined) this.antiAdblock.session[key] += delta;
+			if (this.antiAdblock.lifetime[key] !== undefined) this.antiAdblock.lifetime.detections !== undefined && (this.antiAdblock.lifetime[key] += delta);
+			this.scheduleSave();
+		},
+
 		save() { this.saveImmediate(); },
 
 		reset() {
 			this.session = { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 };
 			this.lifetime = { ads: 0, popups: 0, redirects: 0, hidden: 0, removed: 0, requests: 0 };
+			this.antiAdblock.session = { detections: 0, recoveries: 0, failed: 0, repeated: 0, falsePositives: 0 };
+			this.antiAdblock.lifetime = { detections: 0, recoveries: 0, failed: 0, repeated: 0, falsePositives: 0 };
 			this.saveImmediate();
 		}
 	};
@@ -1475,10 +2664,19 @@
 		return isTrustedPopupHost(url.hostname) || sameRootDomain(url.hostname, hostname);
 	}
 
+	const RE_GOOGLE_CORE_HOST = /(?:^|\.)(?:gstatic\.com|googleusercontent\.com|google\.[a-z.]+)$/i;
+
+	function isGoogleCoreHost(host) {
+		if (!host) return false;
+		const h = String(host).toLowerCase().replace(/\.$/, '');
+		if (/^adservice\./i.test(h)) return false;
+		return RE_GOOGLE_CORE_HOST.test(h);
+	}
+
 	function isSuspiciousAdDomain(host) {
 		if (!host) return false;
 		const h = String(host).toLowerCase().replace(/\.$/, '');
-		if (!h || sameRootDomain(h, hostname) || isWhitelisted(h) || isTrustedPopupHost(h)) return false;
+		if (!h || isGoogleCoreHost(h) || sameRootDomain(h, hostname) || isWhitelisted(h) || isTrustedPopupHost(h)) return false;
 		return RE_SUSPECT_TLD.test(h);
 	}
 
@@ -1487,6 +2685,7 @@
 		const h = u.hostname.toLowerCase();
 		const p = u.pathname.toLowerCase();
 		if (isCustomBlockedHost(h)) return true;
+		if (isGoogleCoreHost(h)) return false;
 		if (RE_GAMBLING_HOST.test(h)) return true;
 		if (RE_AD_HOST.test(h)) return true;
 		if (isSuspiciousAdDomain(h)) return true;
@@ -1825,6 +3024,10 @@
 
 		const guarded = function(url, name, features) {
 			try {
+				if (state.pickerActive) {
+					log('BLOCK', 'picker-lock', 'Blocked window.open during active Element Picker');
+					return makeDummyWindow();
+				}
 				if (!config.popupProtection || isDisabledHere()) return origOpen.apply(this, arguments);
 				const rawStr = url == null ? '' : String(url).trim();
 
@@ -1991,6 +3194,29 @@
 		return /(?:^|\.)(?:googletagmanager\.com|wingsmob\.com|monetag\.com|propu\.com|propellerads\.com|adsterra\.com|exoclick\.com|highrevenueformat\.com|cloudiniry\.net|p7jeusk9n\.shop|484r\.com|bvtpk\.com|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads)(?:\.|$)/i.test(h);
 	}
 
+	function triggerFakeScriptLoad(el, spoofUrl) {
+		if (!el) return;
+		if (spoofUrl) {
+			try { el.__nvirya_spoof_src = String(spoofUrl); } catch (e) {}
+		}
+		try { el.onerror = null; } catch (e) {}
+		if (el.__nvirya_load_spoofed) return;
+		try { el.__nvirya_load_spoofed = true; } catch (e) {}
+		const dispatchLoad = () => {
+			try {
+				try { el.readyState = 'complete'; } catch (e) {}
+				const evt = new Event('load', { bubbles: false, cancelable: false });
+				if (typeof el.onload === 'function') el.onload.call(el, evt);
+				if (typeof el.dispatchEvent === 'function') el.dispatchEvent(evt);
+			} catch (e) {}
+		};
+		if (typeof queueMicrotask === 'function') {
+			queueMicrotask(() => setTimeout(dispatchLoad, 0));
+		} else {
+			setTimeout(dispatchLoad, 0);
+		}
+	}
+
 	function neutralizeScriptNode(node) {
 		if (!node || node.nodeType !== 1 || String(node.tagName || '').toLowerCase() !== 'script') return false;
 		if (!config.enabled || isDisabledHere()) return false;
@@ -2006,7 +3232,7 @@
 					node.removeAttribute('src');
 					node.removeAttribute('data-zone');
 					node.textContent = '';
-					if (node.parentNode) node.parentNode.removeChild(node);
+					triggerFakeScriptLoad(node, rawSrc);
 				} catch (e) {}
 				stats.inc('requests');
 				stats.inc('ads');
@@ -2043,7 +3269,8 @@
 							const stack = (new Error().stack) || '';
 							if (isAdCallStack()) {
 								log('BLOCK', 'shadow-ad', 'Blocked adware attachShadow via stack');
-								try { this.style.setProperty('display', 'none', 'important'); this.remove(); } catch (e) {}
+								try { this.style.setProperty('display', 'none', 'important');
+									this.remove(); } catch (e) {}
 								const dummy = D.createElement('div');
 								return origAttach.call(dummy, { mode: 'open' });
 							}
@@ -2078,16 +3305,19 @@
 								if (u) recordNetworkRequest(u, 'script', shouldBlock);
 								if (shouldBlock) {
 									this.type = 'javascript/blocked';
-									try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+									triggerFakeScriptLoad(this, sVal);
 									stats.inc('requests');
 									stats.inc('ads');
-									log('BLOCK', 'script-src', 'Blocked script.src setter:', u ? u.href : sVal);
+									log('BLOCK', 'script-src', 'Blocked script.src setter (spoofed onload):', u ? u.href : sVal);
 									return;
 								}
 							}
 							return origSrcSet.call(this, val);
 						},
-						get: srcDesc.get
+						get: function() {
+							if (this.__nvirya_spoof_src) return this.__nvirya_spoof_src;
+							return srcDesc.get ? srcDesc.get.call(this) : '';
+						}
 					});
 				}
 				const origSetAttr = scriptProto.setAttribute;
@@ -2098,7 +3328,7 @@
 						if ((n === 'src' || n === 'data-zone') && config.enabled && !isDisabledHere() && !/eruda|vconsole|chobitsu/i.test(sVal)) {
 							if (n === 'data-zone') {
 								this.type = 'javascript/blocked';
-								try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+								triggerFakeScriptLoad(this, sVal);
 								return;
 							}
 							const u = safeUrl(sVal);
@@ -2107,10 +3337,10 @@
 								recordNetworkRequest(u, 'script', shouldBlock);
 								if (shouldBlock) {
 									this.type = 'javascript/blocked';
-									try { if (this.parentNode) this.parentNode.removeChild(this); } catch (e) {}
+									triggerFakeScriptLoad(this, sVal);
 									stats.inc('requests');
 									stats.inc('ads');
-									log('BLOCK', 'script-src', 'Blocked script.setAttribute(src):', u.href);
+									log('BLOCK', 'script-src', 'Blocked script.setAttribute(src) (spoofed onload):', u.href);
 									return;
 								}
 							}
@@ -2210,8 +3440,113 @@
 		} catch (e) {}
 	}
 
+	function isBaitElement(el) {
+		if (!el || el.nodeType !== 1 || isNviryaNode(el)) return false;
+		const id = el.id || '';
+		const cls = classString(el);
+		return RE_BAIT_ELEMENT.test(id + ' ' + cls);
+	}
+
+	function isBaitOrHiddenByNvirya(el, currentDim) {
+		if (!el || el.nodeType !== 1 || !config.enabled || isDisabledHere()) return false;
+		if (el.hasAttribute && el.hasAttribute('data-nvirya-hidden')) {
+			return isBaitElement(el);
+		}
+		if (isBaitElement(el)) {
+			if (currentDim === 0 || (state && state.hiddenNodes && state.hiddenNodes.has(el))) return true;
+		}
+		return false;
+	}
+
+	function installBaitDimensionSpoofing() {
+		if (W.__nvirya_bait_spoof_installed) return;
+		try { Object.defineProperty(W, '__nvirya_bait_spoof_installed', { value: true }); } catch (e) { W.__nvirya_bait_spoof_installed = true; }
+
+		try {
+			const htmlProto = W.HTMLElement && W.HTMLElement.prototype;
+			if (htmlProto && !htmlProto.__nvirya_bait_dims) {
+				const hookDimProp = (prop, fakeVal) => {
+					const desc = Object.getOwnPropertyDescriptor(htmlProto, prop);
+					if (!desc || typeof desc.get !== 'function') return;
+					const origGet = desc.get;
+					Object.defineProperty(htmlProto, prop, {
+						configurable: true,
+						enumerable: desc.enumerable,
+						get: function() {
+							const val = origGet.call(this);
+							try {
+								if (val === 0 && isBaitOrHiddenByNvirya(this, val)) {
+									return fakeVal;
+								}
+							} catch (err) {}
+							return val;
+						}
+					});
+				};
+				hookDimProp('offsetHeight', 250);
+				hookDimProp('offsetWidth', 300);
+				hookDimProp('clientHeight', 250);
+				hookDimProp('clientWidth', 300);
+				try { Object.defineProperty(htmlProto, '__nvirya_bait_dims', { value: true }); } catch (e) {}
+			}
+		} catch (e) {}
+
+		try {
+			if (typeof W.getComputedStyle === 'function' && !W.getComputedStyle.__nvirya_bait_style) {
+				const origGetComputedStyle = W.getComputedStyle.bind(W);
+				const patchedGetComputedStyle = function(el, pseudoElt) {
+					const style = origGetComputedStyle(el, pseudoElt);
+					try {
+						if (
+							!pseudoElt &&
+							el &&
+							el.nodeType === 1 &&
+							config.enabled &&
+							!isDisabledHere() &&
+							((el.hasAttribute && el.hasAttribute('data-nvirya-hidden')) || isBaitElement(el))
+						) {
+							return new Proxy(style, {
+								get(target, prop) {
+									if (prop === 'display') return 'block';
+									if (prop === 'visibility') return 'visible';
+									if (prop === 'opacity') return '1';
+									if (prop === 'getPropertyValue') {
+										return function(name) {
+											const n = String(name || '').toLowerCase().trim();
+											if (n === 'display') return 'block';
+											if (n === 'visibility') return 'visible';
+											if (n === 'opacity') return '1';
+											return target.getPropertyValue(name);
+										};
+									}
+									const val = target[prop];
+									return typeof val === 'function' ? val.bind(target) : val;
+								}
+							});
+						}
+					} catch (err) {}
+					return style;
+				};
+				try { Object.defineProperty(patchedGetComputedStyle, '__nvirya_bait_style', { value: true }); } catch (e) {}
+				W.getComputedStyle = patchedGetComputedStyle;
+			}
+		} catch (e) {}
+	}
+
+	function checkBypassSupport() {
+		try {
+			if (isAppleDevice()) {
+				return typeof window.__NVIRYA_MAIN_SHIELD__ !== 'undefined';
+			}
+			return true;
+		} catch (e) {
+			return false;
+		}
+	}
+
 	function installScriptElementGuard() {
 		installPreExecutionScriptKiller();
+		installBaitDimensionSpoofing();
 	}
 
 	function installIframePopupGuard() {
@@ -2364,14 +3699,25 @@
 				if (!config.redirectProtection || isDisabledHere()) return;
 				const path = eventPath(e);
 				if (isExtensionUiPath(path)) return;
+				const isSearch = SEARCH_ENGINES.test(hostname) || isGoogleCoreHost(hostname);
+				if (isSearch && e.isTrusted) {
+					for (let i = 0; i < Math.min(path.length, 8); i++) {
+						const n = path[i];
+						if (n && n.nodeType === 1 && (attr(n, 'jsaction') !== null || attr(n, 'data-ved') !== null || attr(n, 'jscontroller') !== null)) {
+							const aNode = findAnchorInPath(path);
+							const au = aNode ? safeUrl(aNode.href || attr(aNode, 'href')) : null;
+							if (!au || !isAdUrl(au)) return;
+						}
+					}
+				}
 				const anchor = findAnchorInPath(path);
 				if (!anchor) return;
-				if (anchor.hasAttribute('ping')) {
+				if (!isSearch && anchor.hasAttribute('ping')) {
 					anchor.removeAttribute('ping');
 				}
 				let u = safeUrl(anchor.href || attr(anchor, 'href'));
 				if (!u) return;
-				if (e.isTrusted === true) {
+				if (e.isTrusted === true && !isSearch) {
 					const targetUrl = extractUnwrappedRedirectUrl(u);
 					if (targetUrl) {
 						anchor.href = targetUrl.href;
@@ -2385,8 +3731,7 @@
 				const crossRoot = isUntrustedCrossSiteUrl(u);
 				const opensNew = targetOpensNewContext(anchor);
 				const syntheticExternal = e.isTrusted === false && crossRoot;
-				const hijack = crossRoot && isSuspiciousPlayerOverlayClick(e.target, path);
-				const isSearch = SEARCH_ENGINES.test(hostname);
+				const hijack = !isSearch && crossRoot && isSuspiciousPlayerOverlayClick(e.target, path);
 				const blockedNewContext = opensNew && !isAllowedPopupDestination(u) && (!isSearch || e.isTrusted === false);
 
 				if (adLink || blockedNewContext || syntheticExternal || hijack) {
@@ -2476,13 +3821,156 @@
 		} catch (e) { log('WARN', 'redirect', 'window.location descriptor unavailable'); }
 	}
 
+	function extractAcceptHeader(input, init, customAccept) {
+		try {
+			if (customAccept) return String(customAccept);
+			const readHdr = (hdrs) => {
+				if (!hdrs) return '';
+				if (typeof hdrs.get === 'function') return String(hdrs.get('accept') || hdrs.get('Accept') || '');
+				if (Array.isArray(hdrs)) {
+					for (let i = 0; i < hdrs.length; i++) {
+						if (hdrs[i] && String(hdrs[i][0] || '').toLowerCase() === 'accept') return String(hdrs[i][1] || '');
+					}
+					return '';
+				}
+				if (typeof hdrs === 'object') {
+					for (const k in hdrs) {
+						if (k.toLowerCase() === 'accept') return String(hdrs[k] || '');
+					}
+				}
+				return '';
+			};
+			return readHdr(init && init.headers) || readHdr(input && typeof input === 'object' && input.headers) || '';
+		} catch (e) {
+			return '';
+		}
+	}
+
+	function detectMockResponseKind(urlStr, input, init, customAccept) {
+		const u = String(urlStr || '');
+		const accept = extractAcceptHeader(input, init, customAccept);
+		if (/application\/json|\+json/i.test(accept) || /\.json(?:$|[?#])|[?&](?:format|output|alt)=json\b/i.test(u)) {
+			return 'json';
+		}
+		if (
+			/javascript|ecmascript/i.test(accept) ||
+			/\.(?:m?js)(?:$|[?#])|\/(?:adsbygoogle|show_ads|gpt|pubads|pagead\/js|adserver)/i.test(u)
+		) {
+			return 'js';
+		}
+		return 'text';
+	}
+
+	function createFakeFetchResponse(urlStr, input, init) {
+		const kind = detectMockResponseKind(urlStr, input, init, '');
+		const jsonPayload = { status: 'ok', success: true, data: [] };
+		const body = kind === 'json' ?
+			JSON.stringify(jsonPayload) :
+			(kind === 'js' ? '/* Nvirya Stub OK */ window.canRunAds = true;' : '');
+		const contentType = kind === 'json' ?
+			'application/json' :
+			(kind === 'js' ? 'application/javascript' : 'text/plain');
+		try {
+			if (typeof Response === 'function') {
+				return new Response(body, {
+					status: 200,
+					statusText: 'OK',
+					headers: { 'Content-Type': contentType }
+				});
+			}
+		} catch (e) {}
+		return {
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: String(urlStr || ''),
+			text: () => Promise.resolve(body),
+			json: () => Promise.resolve(jsonPayload),
+			blob: () => Promise.resolve(typeof Blob === 'function' ? new Blob([body], { type: contentType }) : null),
+			arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+			clone: function() { return this; }
+		};
+	}
+
 	function installNetworkGuard() {
+		try {
+			const imgProto = W.HTMLImageElement && W.HTMLImageElement.prototype;
+			if (imgProto && !imgProto.__nvirya_img_proto_hooked) {
+				const spoofImg = (imgEl, urlStr) => {
+					if (!imgEl) return;
+					try {
+						imgEl.__nvirya_spoof_img = true;
+						imgEl.__nvirya_spoof_src = String(urlStr || '');
+						imgEl.onerror = null;
+						['width', 'height', 'naturalWidth', 'naturalHeight'].forEach((p) => {
+							try { Object.defineProperty(imgEl, p, { configurable: true, get: () => 32 }); } catch (e) {}
+						});
+						try { Object.defineProperty(imgEl, 'complete', { configurable: true, get: () => true }); } catch (e) {}
+					} catch (e) {}
+					if (!imgEl.__nvirya_img_scheduled) {
+						try { imgEl.__nvirya_img_scheduled = true; } catch (e) {}
+						setTimeout(() => {
+							try {
+								const evt = new Event('load');
+								if (typeof imgEl.onload === 'function') imgEl.onload(evt);
+								if (typeof imgEl.dispatchEvent === 'function') imgEl.dispatchEvent(evt);
+							} catch (e) {}
+						}, 5);
+					}
+				};
+				const origSrcDesc = Object.getOwnPropertyDescriptor(imgProto, 'src');
+				['width', 'height', 'naturalWidth', 'naturalHeight'].forEach((dimProp) => {
+					const dDesc = Object.getOwnPropertyDescriptor(imgProto, dimProp);
+					if (dDesc && typeof dDesc.get === 'function') {
+						const origDimGet = dDesc.get;
+						Object.defineProperty(imgProto, dimProp, {
+							configurable: true,
+							enumerable: dDesc.enumerable,
+							get: function() {
+								if (this.__nvirya_spoof_img) return 32;
+								return origDimGet.call(this);
+							},
+							set: dDesc.set
+						});
+					}
+				});
+				if (origSrcDesc && origSrcDesc.set) {
+					const origSet = origSrcDesc.set;
+					const origGet = origSrcDesc.get;
+					Object.defineProperty(imgProto, 'src', {
+						configurable: true,
+						enumerable: origSrcDesc.enumerable,
+						set: function(val) {
+							try {
+								const sVal = String(val || '');
+								if (sVal && !sVal.startsWith('data:') && config.enabled && !isDisabledHere()) {
+									const u = safeUrl(sVal);
+									if (u && isAdUrl(u)) {
+										recordNetworkRequest(u, 'img', true);
+										stats.inc('requests');
+										spoofImg(this, u.href);
+										return;
+									}
+								}
+							} catch (e) {}
+							return origSet.call(this, val);
+						},
+						get: function() {
+							if (this.__nvirya_spoof_src) return this.__nvirya_spoof_src;
+							return origGet ? origGet.call(this) : '';
+						}
+					});
+				}
+				try { Object.defineProperty(imgProto, '__nvirya_img_proto_hooked', { value: true }); } catch (e) {}
+			}
+		} catch (e) {}
+
 		try {
 			if (typeof W.fetch === 'function' && !W.fetch.__nvirya) {
 				const origFetch = W.fetch;
 				const patched = function(input, init) {
+					const url = typeof input === 'string' ? input : (input && input.url) || '';
 					try {
-						const url = typeof input === 'string' ? input : (input && input.url) || '';
 						const u = safeUrl(url);
 						if (u) {
 							const active = config.enabled && !isDisabledHere();
@@ -2490,12 +3978,17 @@
 							recordNetworkRequest(u, 'fetch', shouldBlock);
 							if (shouldBlock) {
 								stats.inc('requests');
-								log('BLOCK', 'network', 'fetch', u.href);
-								return Promise.reject(new TypeError('Blocked by nvirya AdGuard X'));
+								log('BLOCK', 'network', 'fetch (smart spoofed 200 OK)', u.href);
+								return Promise.resolve(createFakeFetchResponse(u.href, input, init));
 							}
 						}
 					} catch (e) { log('ERROR', 'fetch', e && e.message); }
-					return origFetch.apply(this, arguments);
+					return origFetch.apply(this, arguments).catch((err) => {
+						if (url && /(?:doubleclick|googlesyndication|googleadservices|pagead|adservice|adserver|outbrain|taboola|criteo|ads\.|favicon\.ico\?\d+$)/i.test(url)) {
+							return createFakeFetchResponse(url, input, init);
+						}
+						throw err;
+					});
 				};
 				try { Object.defineProperty(patched, '__nvirya', { value: true }); } catch (e) {}
 				W.fetch = patched;
@@ -2506,28 +3999,73 @@
 			const XHR = W.XMLHttpRequest;
 			if (XHR && XHR.prototype && !XHR.prototype.__nvirya_open) {
 				const origOpen = XHR.prototype.open;
+				const origSetRequestHeader = XHR.prototype.setRequestHeader;
+				if (typeof origSetRequestHeader === 'function') {
+					XHR.prototype.setRequestHeader = function(header, value) {
+						try {
+							if (String(header || '').toLowerCase() === 'accept') {
+								this.__nvirya_accept = String(value || '');
+							}
+						} catch (e) {}
+						if (this.__nvirya_blocked) return;
+						return origSetRequestHeader.apply(this, arguments);
+					};
+				}
 				XHR.prototype.open = function(method, url) {
 					this.__nvirya_blocked = false;
+					this.__nvirya_url = '';
+					this.__nvirya_accept = '';
 					try {
 						const u = safeUrl(url);
 						if (u) {
+							this.__nvirya_url = u.href;
 							const active = config.enabled && !isDisabledHere();
 							const shouldBlock = active && (isAdUrl(u) || (config.strictMode && RE_TRACKER.test(u.hostname)));
 							recordNetworkRequest(u, 'xhr', shouldBlock);
 							if (shouldBlock) {
 								stats.inc('requests');
-								log('BLOCK', 'network', 'xhr', u.href);
+								log('BLOCK', 'network', 'xhr (smart spoofed 200 OK)', u.href);
 								this.__nvirya_blocked = true;
 							}
 						}
 					} catch (e) { log('ERROR', 'xhr', e && e.message); }
-					if (this.__nvirya_blocked) return;
+					if (this.__nvirya_blocked) {
+						try { return origOpen.call(this, method || 'GET', 'data:text/plain,'); } catch (e) { return; }
+					}
 					return origOpen.apply(this, arguments);
 				};
 				try { Object.defineProperty(XHR.prototype, '__nvirya_open', { value: true }); } catch (e) {}
 				const origSend = XHR.prototype.send;
 				XHR.prototype.send = function() {
-					if (this.__nvirya_blocked) return;
+					if (this.__nvirya_blocked) {
+						const xhr = this;
+						const kind = (xhr.responseType === 'json') ?
+							'json' :
+							detectMockResponseKind(xhr.__nvirya_url || '', null, null, xhr.__nvirya_accept || '');
+						const jsonObj = { status: 'ok', success: true, data: [] };
+						const bodyText = kind === 'json' ?
+							JSON.stringify(jsonObj) :
+							(kind === 'js' ? '/* Nvirya Stub OK */ window.canRunAds = true;' : '');
+						const respVal = xhr.responseType === 'json' ? jsonObj : bodyText;
+						try {
+							Object.defineProperty(xhr, 'readyState', { configurable: true, get: () => 4 });
+							Object.defineProperty(xhr, 'status', { configurable: true, get: () => 200 });
+							Object.defineProperty(xhr, 'statusText', { configurable: true, get: () => 'OK' });
+							Object.defineProperty(xhr, 'responseText', { configurable: true, get: () => bodyText });
+							Object.defineProperty(xhr, 'response', { configurable: true, get: () => respVal });
+						} catch (e) {}
+						setTimeout(() => {
+							try {
+								if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange(new Event('readystatechange'));
+								xhr.dispatchEvent(new Event('readystatechange'));
+								if (typeof xhr.onload === 'function') xhr.onload(new Event('load'));
+								xhr.dispatchEvent(new Event('load'));
+								if (typeof xhr.onloadend === 'function') xhr.onloadend(new Event('loadend'));
+								xhr.dispatchEvent(new Event('loadend'));
+							} catch (err) {}
+						}, 1);
+						return;
+					}
 					return origSend.apply(this, arguments);
 				};
 			}
@@ -2546,7 +4084,7 @@
 							if (shouldBlock) {
 								stats.inc('requests');
 								log('BLOCK', 'beacon', u.href);
-								return false;
+								return true;
 							}
 						}
 					} catch (e) {}
@@ -2591,8 +4129,26 @@
 		return urls;
 	}
 
+	const RE_NEWS_ARTICLE_CONTEXT = /also[-_]?read|related|thumb|article|news|story|entry/i;
+
+	function isNewsThumbnailContext(el) {
+		let cur = el;
+		let depth = 0;
+		while (cur && cur.nodeType === 1 && depth < 6) {
+			const tag = String(cur.tagName || '').toLowerCase();
+			if (tag === 'article') return true;
+			const idc = ((cur.id || '') + ' ' + classString(cur)).trim();
+			if (idc && RE_NEWS_ARTICLE_CONTEXT.test(idc)) return true;
+			cur = cur.parentElement;
+			depth++;
+		}
+		return false;
+	}
+
 	function isMatchingAdBannerSize(el) {
 		if (!el || el.nodeType !== 1) return false;
+		if (isNewsThumbnailContext(el)) return false;
+
 		const idc = ((el.id || '') + ' ' + classString(el)).trim();
 		const styleAttr = attr(el, 'style') || '';
 		if (RE_SIZING.test(idc) || RE_SIZING.test(styleAttr)) return true;
@@ -2657,6 +4213,19 @@
 		if (NEVER_REMOVE_TAGS.has(tag)) return { action: 'ignore' };
 		if (isProtectedPlayer(el)) return { action: 'ignore' };
 
+		if (el.__nvirya_spoof_img) return { action: 'ignore' };
+		const isGooglePage = isGoogleCoreHost(hostname);
+		if (tag === 'img' || tag === 'picture' || tag === 'source') {
+			if (isGooglePage) return { action: 'ignore' };
+			const mediaSrc = attr(el, 'src') || attr(el, 'data-src') || attr(el, 'srcset') || '';
+			if (mediaSrc && /(?:gstatic\.com|googleusercontent\.com|google\.[a-z.]+)/i.test(mediaSrc)) {
+				return { action: 'ignore' };
+			}
+		}
+		if (isGooglePage && (attr(el, 'data-ved') !== null || attr(el, 'jsaction') !== null || attr(el, 'jscontroller') !== null || attr(el, 'jsname') !== null)) {
+			return { action: 'ignore' };
+		}
+
 		// <picture>
 		if (tag === 'picture') {
 			let hasAd = false;
@@ -2708,11 +4277,13 @@
 		}
 
 		const idc = ((el.id || '') + ' ' + classString(el)).trim();
-		const src = attr(el, 'src') || attr(el, 'data-src') || attr(el, 'data-original') || attr(el, 'data-lazy-src') || '';
+		const rawSrc = attr(el, 'src') || '';
+		const lazySrc = attr(el, 'data-src') || attr(el, 'data-original') || attr(el, 'data-lazy-src') || attr(el, 'data-src-retina') || '';
+		const src = rawSrc || lazySrc;
 		const href = attr(el, 'href') || '';
 		const style = attr(el, 'style') || '';
 
-		if (src) {
+		if (src && !src.startsWith('data:')) {
 			const u = safeUrl(src);
 			if (u && isAdUrl(u)) return { action: 'remove', reason: 'ad-url' };
 		}
@@ -2727,8 +4298,15 @@
 			if (hasEscape && !hasSameOrigin) return { action: 'remove', reason: 'sandbox-escape' };
 		}
 
-		// Scan srcset on the <img> tag and filter Base64/Data-URI images with link tracking
 		if (tag === 'img') {
+			if (lazySrc) {
+				const realUrl = safeUrl(lazySrc);
+				if (realUrl) {
+					if (isAdUrl(realUrl)) return { action: 'remove', reason: 'ad-lazy-src' };
+					return { action: 'ignore' };
+				}
+			}
+
 			const srcset = attr(el, 'srcset') || attr(el, 'data-srcset') || '';
 			if (srcset) {
 				const urls = extractSrcsetUrls(srcset);
@@ -2745,18 +4323,21 @@
 				}
 			}
 
-			if (src && src.startsWith('data:image/')) {
-				let anchor = el.parentElement;
-				let depth = 0;
-				while (anchor && anchor.nodeType === 1 && depth < 3) {
-					if (anchor.tagName && anchor.tagName.toLowerCase() === 'a') break;
-					anchor = anchor.parentElement;
-					depth++;
-				}
-				if (anchor && anchor.tagName && anchor.tagName.toLowerCase() === 'a') {
-					const aHref = anchor.href || attr(anchor, 'href') || '';
-					const u = safeUrl(aHref);
-					if (u) {
+			let anchor = el.parentElement;
+			let depth = 0;
+			while (anchor && anchor.nodeType === 1 && depth < 4) {
+				if (anchor.tagName && anchor.tagName.toLowerCase() === 'a') break;
+				anchor = anchor.parentElement;
+				depth++;
+			}
+			if (anchor && anchor.tagName && anchor.tagName.toLowerCase() === 'a') {
+				const aHref = anchor.href || attr(anchor, 'href') || '';
+				const u = safeUrl(aHref);
+				if (u) {
+					if (sameRootDomain(u.hostname, hostname) && !isAdUrl(u)) {
+						return { action: 'ignore' };
+					}
+					if (rawSrc && rawSrc.startsWith('data:image/') && !sameRootDomain(u.hostname, hostname)) {
 						const adLink = isAdUrl(u);
 						const crossTracking = isUntrustedCrossSiteUrl(u) && RE_TRACKING_QUERY.test(u.search);
 						const aIdc = ((anchor.id || '') + ' ' + classString(anchor)).trim();
@@ -2766,6 +4347,10 @@
 						}
 					}
 				}
+			}
+
+			if (isNewsThumbnailContext(el)) {
+				return { action: 'ignore' };
 			}
 		}
 
@@ -2826,14 +4411,16 @@
 	}
 
 	function isNviryaNode(el) {
-		if (!el) return false;
+		if (!el || el.nodeType !== 1) return false;
+		const tag = String(el.tagName || '').toLowerCase();
+		if (tag === 'html' || tag === 'body' || tag === 'head') return false;
 		if (hasNviryaAncestor(el)) return true;
 		try {
 			const rootNode = el.getRootNode && el.getRootNode();
 			if (rootNode && rootNode.host && attr(rootNode.host, 'data-nvirya-ui') !== null) return true;
 		} catch (e) {}
 		try {
-			return !!(el && el.querySelector && el.querySelector('[data-nvirya-ui],[data-nvirya-picker]'));
+			return !!(el.querySelector && el.querySelector('[data-nvirya-ui],[data-nvirya-picker]'));
 		} catch (e) { return false; }
 	}
 
@@ -2862,6 +4449,7 @@
 			if (/^(?:dialog|alertdialog|menu|menubar|navigation|button|link|listbox|combobox|search)$/.test(role)) {
 				if (!isAdEvidence(cur)) return true;
 			}
+			if (isGoogleCoreHost(hostname) && (attr(cur, 'jsaction') !== null || attr(cur, 'jscontroller') !== null || attr(cur, 'jsname') !== null || attr(cur, 'data-ved') !== null)) return true;
 			const mark = ((cur.id || '') + ' ' + classString(cur)).toLowerCase();
 			if (/(?:^|[\s_-])(?:navbar|navigation|nav-menu|drawer|sidebar|menu|cookie-consent|login|signin|auth)(?:$|[\s_-])/.test(mark)) return true;
 			cur = cur.parentElement;
@@ -3024,17 +4612,22 @@
 		} catch (e) {}
 	}
 
+	const RE_PAYWALL_OR_CMP_MODAL = /(?:paywall|subscri(?:be|ption)|piano|tp-modal|fc-ab-root|fc-dialog|cmp|consent|quantcast|sp_message|onesignal|adblock|wall|gate|overlay-lock)/i;
+
 	function hasVisibleLegitimateModal() {
 		try {
 			const nodes = D.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"]');
 			for (let i = 0; i < Math.min(nodes.length, 40); i++) {
 				const el = nodes[i];
-				if (el.hasAttribute('data-nvirya-hidden') || isNviryaNode(el)) continue;
+				if (el.hasAttribute('data-nvirya-hidden') || el.hasAttribute('data-nvirya-disarmed') || isNviryaNode(el)) continue;
+				const idc = ((el.id || '') + ' ' + classString(el)).trim();
+				if (RE_ANTIADB.test(idc) || RE_PAYWALL_OR_CMP_MODAL.test(idc) || isAdEvidence(el)) continue;
 				const style = W.getComputedStyle(el);
 				const rect = el.getBoundingClientRect();
 				if (!style || style.display === 'none' || style.visibility === 'hidden' ||
 					parseFloat(style.opacity) === 0 || rect.width < 2 || rect.height < 2) continue;
-				if (meaningfulText(el).length >= 5 || el.querySelector('input,form,button,a[href],video,audio')) {
+				if (isFloatingAdModal(el) || isFakeBotVerificationModal(el) || isInvisibleTrap(el)) continue;
+				if (el.querySelector('input:not([type="hidden"]),textarea,select,video,audio')) {
 					releasePageScrollOverrides();
 					return true;
 				}
@@ -3170,6 +4763,7 @@
 							el.style.setProperty('z-index', '-999999', 'important');
 							state.hiddenNodes.add(el);
 							stats.inc('hidden');
+							scheduleUnlockPageScroll();
 							log('BLOCK', 'dom', 'Disarmed invisible click-trap in-place');
 						}
 					} catch (e) {}
@@ -3414,19 +5008,20 @@
 	function applyAction(el, action, reason) {
 		if (!el || !el.parentNode) return;
 		try {
+			const shouldUnlock = /invisible-click-trap|anti-adblock|floating-ad-modal|suspicious-overlay|max-zindex-ad-overlay|fake-bot-overlay|shadow-dom-ad-host|backdrop-removed|parent-pruned/i.test(reason || '');
 			if (action === 'remove') {
 				const parent = el.parentNode;
 				removePairedBackdrops(el);
 				if (removeTrackedAdNode(el, reason || 'remove')) {
 					pruneAdAncestors(parent);
-					if (/invisible-click-trap|anti-adblock|floating-ad-modal|suspicious-overlay/i.test(reason || '')) scheduleUnlockPageScroll();
+					if (shouldUnlock) scheduleUnlockPageScroll();
 				}
 			} else if (action === 'hide') {
 				if (state.hiddenNodes.has(el)) return;
 				state.hiddenNodes.add(el);
 				el.setAttribute('data-nvirya-hidden', reason || '1');
 				stats.inc('hidden');
-				if (/anti-adblock|floating-ad-modal|suspicious-overlay/i.test(reason || '')) scheduleUnlockPageScroll();
+				if (shouldUnlock) scheduleUnlockPageScroll();
 			}
 		} catch (e) { log('ERROR', 'apply', e && e.message); }
 	}
@@ -3586,6 +5181,15 @@
     [data-nvirya-hidden]${extraSel} {
       display: none !important;
       visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    /* Ẩn khối quảng cáo tài trợ trên Google Search */
+    div[data-text-ad], #tads, #taw, #bottomads,
+    div[aria-label="Ads"], div[aria-label="Sponsored"], div[aria-label="Quảng cáo"],
+    .uEierd, .mnr-c[data-hveid] > div > div[data-text-ad] {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
       pointer-events: none !important;
     }
   `;
@@ -3921,6 +5525,10 @@
 			return;
 		}
 
+		if (config.antiAdblock && AntiAdblockEngine.inspectCandidate(el)) {
+			return;
+		}
+
 		guardMaxZIndexNode(el);
 
 		if (!CANDIDATE_TAGS.has(tag) && !tag.includes('-')) return;
@@ -4011,6 +5619,15 @@
 					} else if (m.type === 'attributes') {
 						const targetNode = m.target;
 						if (targetNode && targetNode.nodeType === 1 && !isNviryaNode(targetNode)) {
+							if ((targetNode === D.documentElement || targetNode === D.body) && (m.attributeName === 'style' || m.attributeName === 'class')) {
+								try {
+									const cs = W.getComputedStyle(targetNode);
+									if (cs && (cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.overflow === 'clip' || cs.overflowY === 'clip' || cs.position === 'fixed')) {
+										unlockPageScroll();
+										scheduleUnlockPageScroll();
+									}
+								} catch (err) {}
+							}
 							guardMaxZIndexNode(targetNode);
 							queueTrapNode(targetNode, false);
 							enqueue(targetNode);
@@ -4078,9 +5695,711 @@
 	}
 	let lastHref = location.href;
 
+	const AntiAdblockEngine = (() => {
+		const CONFIDENCE_THRESHOLD = 65;
+		const MAX_RETRIES_PER_SIG = 5;
+		const RETRY_WINDOW_MS = 30000;
+		const RETRY_DELAYS = [140, 320, 750, 1600, 3000];
+
+		const RE_STRONG_ADB_TEXT = /(?:ad[-\s]?blocker\s+detected|adblock(?:er)?\s+detected|disable\s+(?:your\s+)?ad[-\s]?blocker|turn\s+off\s+(?:your\s+)?ad[-\s]?blocker|allow\s+ads\s+on\s+this\s+site|whitelist\s+(?:us|this\s+site)|it\s+looks\s+like\s+you(?:'re|\s+are)\s+using\s+an?\s+ad[-\s]?blocker|we\s+noticed\s+you(?:'re|\s+are)\s+using\s+an?\s+ad[-\s]?blocker|please\s+disable\s+(?:your\s+)?ad[-\s]?blocker|ad[-\s]?blocker\s+is\s+(?:enabled|active|on)|continue\s+without\s+disabling|vui\s+lòng\s+tắt\s+trình\s+chặn\s+quảng\s+cáo|phát\s+hiện\s+trình\s+chặn\s+quảng\s+cáo)/i;
+		const RE_ACTION_CTA_TEXT = /(?:i(?:'ve|\s+have)\s+disabled\s+(?:my\s+)?ad[-\s]?blocker|allowlist\s+us|refresh\s+page|reload\s+page|verify\s+you\s+disabled|tiếp\s+tục|tôi\s+đã\s+tắt)/i;
+		const RE_KNOWN_ADB_MARKER = /(?:^|[^a-z0-9])(?:fc-ab-root|fc-dialog-container|fc-whitelist-dialog|adblock[-_]?(?:modal|overlay|wrapper|popup|notice|wall|warning|detect|detector|mask|root|box|gate)|anti[-_]?adblock|admiral[-_]?modal|blockadblock|fuckadblock|ab-iam-root|adb[-_]?modal|adblocker[-_]?modal)(?=[^a-z0-9]|$)/i;
+		const RE_WRAPPER_HINT = /(?:modal|overlay|backdrop|popup|dialog|adblock|fc-ab|tp-modal|portal|wrapper|mask|curtain|scrim|fixed|layer|wall|gate)/i;
+		const RE_COOKIE_CMP = /(?:\bcookie(?:s)?\b|\bgdpr\b|\bccpa\b|\bconsent\b|onetrust|cookiebot|trustarc|didomi|accept\s+all\s+cookies|manage\s+(?:cookie\s+)?preferences|privacy\s+preferences|we\s+use\s+cookies)/i;
+		const RE_AUTH_PAYWALL = /(?:\bsign\s*in\b|\blog\s*in\b|create\s+an?\s+account|forgot\s+password|enter\s+your\s+(?:email|password)|subscription\s+required|subscribe\s+to\s+continue|already\s+a\s+subscriber)/i;
+		const SCROLL_LOCK_CLASSES = ['no-scroll', 'noscroll', 'modal-open', 'overflow-hidden', 'lock-scroll', 'adblock-modal-open', 'fc-ab-lock', 'body-lock'];
+
+		const recoveredSet = new WeakSet();
+		const inspectedSignatureByNode = new WeakMap();
+		const signatureHistory = new Map(); // sig -> { count, retryCount, firstSeen, lastSeen, timerId }
+		const recoveryRecords = []; // { target, wrapper, backdrops, hiddenAttr, inlineSnapshot, reason, category, score }
+		const cssStyleSnapshots = new Map(); // el -> { props: { [prop]: { val, pri } }, removedClasses: [] }
+		let debounceTimer = null;
+		let pendingScanNodes = new Set();
+		let fallbackTimers = [];
+
+		const SITE_ADAPTERS = [{
+				name: 'business-standard',
+				matchHost: (h) => /(?:^|\.)business-standard\.com$/i.test(h),
+				confidenceThreshold: 55,
+				detector: (doc) => {
+					const found = [];
+					const candidates = doc.querySelectorAll(
+						'[class*="adblock" i],[id*="adblock" i],[class*="modal" i],[class*="overlay" i],div[style*="fixed"]'
+					);
+					for (let i = 0; i < Math.min(candidates.length, 40); i++) {
+						const n = candidates[i];
+						const txt = normalizeText(n);
+						if (RE_STRONG_ADB_TEXT.test(txt)) found.push(n);
+					}
+					return found;
+				},
+				maxRetries: 5
+			},
+			{
+				name: 'google-funding-choices',
+				matchHost: () => true,
+				confidenceThreshold: 60,
+				detector: (doc) => {
+					const found = [];
+					const fcNodes = doc.querySelectorAll('.fc-ab-root, .fc-dialog-container, .fc-whitelist-dialog');
+					for (let i = 0; i < fcNodes.length; i++) found.push(fcNodes[i]);
+					return found;
+				},
+				maxRetries: 4
+			}
+		];
+
+		function isEngineActive() {
+			return Boolean(config && config.enabled && config.antiAdblock && !isDisabledHere());
+		}
+
+		function normalizeText(el) {
+			if (!el) return '';
+			try {
+				return String(el.textContent || '').replace(/\s+/g, ' ').trim();
+			} catch (e) {
+				return '';
+			}
+		}
+
+		function computeNodeSignature(el, normTxt) {
+			if (!el || el.nodeType !== 1) return 'unknown';
+			const tag = String(el.tagName || '').toLowerCase();
+			const id = el.id || '';
+			const cls = classString(el).split(/\s+/).filter(Boolean).slice(0, 3).join('.');
+			const snippet = String(normTxt || '').slice(0, 80).toLowerCase();
+			return `${tag}#${id}.${cls}:${snippet}`;
+		}
+
+		function isPrimaryContentContainer(el) {
+			if (!el || el.nodeType !== 1) return true;
+			const tag = String(el.tagName || '').toLowerCase();
+			if (/^(?:html|body|main|article|header|footer|nav|script|style|noscript|video|audio)$/.test(tag)) return true;
+			const id = (el.id || '').toLowerCase();
+			if (id === '__next' || id === 'root' || id === 'app' || id === '___gatsby' || id === 'main' || id === 'content') return true;
+			try {
+				if (el.querySelector && el.querySelector('main, article')) return true;
+			} catch (e) {}
+			return false;
+		}
+
+		function getOverlayPositioning(el) {
+			let cur = el;
+			let depth = 0;
+			const vw = W.innerWidth || (D.documentElement && D.documentElement.clientWidth) || 1024;
+			const vh = W.innerHeight || (D.documentElement && D.documentElement.clientHeight) || 768;
+			let best = { positioned: false, position: 'static', zIndex: 0, coversViewport: false, isCenteredModal: false, rect: null };
+
+			while (cur && cur.nodeType === 1 && depth < 5) {
+				const tag = String(cur.tagName || '').toLowerCase();
+				if (tag === 'body' || tag === 'html') break;
+				try {
+					const cs = W.getComputedStyle(cur);
+					const rect = cur.getBoundingClientRect ? cur.getBoundingClientRect() : { width: 0, height: 0, left: 0, top: 0 };
+					if (depth === 0) best.rect = rect;
+					if (cs && (cs.position === 'fixed' || cs.position === 'absolute' || tag === 'dialog' || attr(cur, 'role') === 'dialog' || attr(cur, 'aria-modal') === 'true')) {
+						const z = parseInt(cs.zIndex, 10);
+						const zVal = isFinite(z) ? z : 0;
+						const w = Number(rect.width) || cur.offsetWidth || 0;
+						const h = Number(rect.height) || cur.offsetHeight || 0;
+						const areaRatio = (vw > 0 && vh > 0) ? ((w * h) / (vw * vh)) : 0;
+						const covers = areaRatio >= 0.22 || (w >= vw * 0.85 && h >= vh * 0.85);
+						const centered = w >= 220 && h >= 100 && w <= vw * 1.05;
+						best.positioned = true;
+						best.position = cs.position;
+						if (zVal > best.zIndex) best.zIndex = zVal;
+						if (covers) best.coversViewport = true;
+						if (centered) best.isCenteredModal = true;
+					}
+				} catch (e) {}
+				cur = cur.parentElement;
+				depth++;
+			}
+			return best;
+		}
+
+		function hasPageScrollLockIndicator() {
+			try {
+				for (const rootNode of [D.documentElement, D.body]) {
+					if (!rootNode) continue;
+					const cs = W.getComputedStyle(rootNode);
+					if (cs && (cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.overflow === 'clip' || cs.overflowY === 'clip' || cs.position === 'fixed')) {
+						return true;
+					}
+					if (rootNode.classList) {
+						for (let i = 0; i < SCROLL_LOCK_CLASSES.length; i++) {
+							if (rootNode.classList.contains(SCROLL_LOCK_CLASSES[i])) return true;
+						}
+					}
+				}
+			} catch (e) {}
+			return false;
+		}
+
+		function classifyNode(el) {
+			const result = { confirmed: false, score: 0, category: 'none', reasons: [], signals: {} };
+			if (!el || el.nodeType !== 1 || !el.isConnected) return result;
+			if (isNviryaNode(el) || isProtectedPlayer(el) || hasProtectedPlayerContent(el)) {
+				result.category = 'protected';
+				return result;
+			}
+			if (isPrimaryContentContainer(el)) {
+				result.category = 'page-content';
+				return result;
+			}
+
+			let cs;
+			try {
+				cs = W.getComputedStyle(el);
+				if (cs && (cs.display === 'none' || cs.visibility === 'hidden')) return result;
+			} catch (e) { return result; }
+
+			const idc = ((el.id || '') + ' ' + classString(el) + ' ' + (attr(el, 'data-testid') || '')).trim();
+			const normTxt = normalizeText(el);
+			if (normTxt.length > 2200) {
+				result.category = 'page-content';
+				return result;
+			}
+
+			const hasStrongAdbText = normTxt.length >= 12 && RE_STRONG_ADB_TEXT.test(normTxt);
+			const hasActionCta = normTxt.length >= 12 && RE_ACTION_CTA_TEXT.test(normTxt);
+			const hasKnownMarker = Boolean(idc && (RE_KNOWN_ADB_MARKER.test(idc) || RE_ANTIADB.test(idc)));
+
+			if (!hasStrongAdbText && !hasKnownMarker && (RE_COOKIE_CMP.test(idc) || RE_COOKIE_CMP.test(normTxt))) {
+				result.category = 'cookie-consent';
+				result.reasons.push('cmp-cookie-consent');
+				return result;
+			}
+
+			if (hasFormControls(el) || (!hasStrongAdbText && RE_AUTH_PAYWALL.test(normTxt))) {
+				result.category = 'auth-or-paywall';
+				result.reasons.push('form-or-auth-paywall');
+				return result;
+			}
+
+			const posInfo = getOverlayPositioning(el);
+			let score = 0;
+
+			if (hasStrongAdbText) {
+				score += 45;
+				result.reasons.push('explicit-anti-adblock-text');
+			}
+			if (hasActionCta && (hasStrongAdbText || hasKnownMarker)) {
+				score += 15;
+				result.reasons.push('anti-adblock-cta');
+			}
+			if (hasKnownMarker) {
+				score += 35;
+				result.reasons.push('known-anti-adblock-marker');
+			}
+			if (posInfo.positioned) {
+				score += 20;
+				result.reasons.push('overlay-positioned');
+			}
+			if (posInfo.zIndex >= 99) {
+				score += 15;
+				result.reasons.push('high-z-index');
+			}
+			if (posInfo.coversViewport || posInfo.isCenteredModal) {
+				score += 15;
+				result.reasons.push('modal-geometry');
+			}
+			if (hasPageScrollLockIndicator() && (hasStrongAdbText || hasKnownMarker)) {
+				score += 15;
+				result.reasons.push('scroll-lock-correlated');
+			}
+
+			result.score = score;
+			result.signals = { hasStrongAdbText, hasKnownMarker, posInfo };
+
+			const hasAntiAdbIndicator = hasStrongAdbText || hasKnownMarker;
+			const hasObstructionIndicator = posInfo.positioned || hasKnownMarker;
+
+			if (hasAntiAdbIndicator && hasObstructionIndicator && score >= CONFIDENCE_THRESHOLD) {
+				result.confirmed = true;
+				result.category = hasKnownMarker && !hasStrongAdbText ? 'marker-overlay' : 'anti-adblock-modal';
+			} else {
+				result.category = hasAntiAdbIndicator ? 'inline-mention-only' : 'ordinary-ui';
+			}
+
+			return result;
+		}
+
+		function resolveObstructionRoot(modalEl) {
+			let bestRoot = modalEl;
+			let cur = modalEl && modalEl.parentElement;
+			let depth = 0;
+			const vw = W.innerWidth || (D.documentElement && D.documentElement.clientWidth) || 1024;
+			const vh = W.innerHeight || (D.documentElement && D.documentElement.clientHeight) || 768;
+
+			while (cur && cur.nodeType === 1 && depth < 6) {
+				if (isPrimaryContentContainer(cur) || isNviryaNode(cur) || hasFormControls(cur) || hasProtectedPlayerContent(cur)) {
+					break;
+				}
+				const outsideText = meaningfulText(cur, bestRoot);
+				if (outsideText.length > 35) {
+					break;
+				}
+
+				let isWrapperCandidate = false;
+				try {
+					const cs = W.getComputedStyle(cur);
+					const idc = ((cur.id || '') + ' ' + classString(cur) + ' ' + (attr(cur, 'role') || '')).trim();
+					const rect = cur.getBoundingClientRect ? cur.getBoundingClientRect() : { width: 0, height: 0 };
+					const w = Number(rect.width) || cur.offsetWidth || 0;
+					const h = Number(rect.height) || cur.offsetHeight || 0;
+
+					if (cs && (cs.position === 'fixed' || cs.position === 'absolute')) {
+						isWrapperCandidate = true;
+					} else if (RE_WRAPPER_HINT.test(idc)) {
+						isWrapperCandidate = true;
+					} else if (cur.parentElement === D.body && outsideText.length === 0) {
+						isWrapperCandidate = true;
+					} else if (w >= vw * 0.8 && h >= vh * 0.8 && outsideText.length === 0) {
+						isWrapperCandidate = true;
+					}
+				} catch (e) {}
+
+				if (isWrapperCandidate) {
+					bestRoot = cur;
+					cur = cur.parentElement;
+					depth++;
+				} else {
+					break;
+				}
+			}
+			return bestRoot;
+		}
+
+		function findAssociatedBackdrops(rootObstruction, innerModal) {
+			const backdrops = [];
+			const seen = new Set([rootObstruction, innerModal]);
+			const addIfBackdrop = (node) => {
+				if (!node || node.nodeType !== 1 || seen.has(node) || isNviryaNode(node) || isPrimaryContentContainer(node)) return;
+				if (hasFormControls(node) || hasProtectedPlayerContent(node)) return;
+				if (meaningfulText(node).length > 8) return;
+				if (isBackdropFor(node, rootObstruction) || isBackdropFor(node, innerModal)) {
+					seen.add(node);
+					backdrops.push(node);
+					return;
+				}
+				const idc = ((node.id || '') + ' ' + classString(node)).trim();
+				if (/(?:^|[^a-z])(?:modal[-_]?backdrop|tp[-_]?backdrop|fc[-_]?dialog[-_]?overlay|adblock[-_]?backdrop|overlay[-_]?backdrop|scrim)(?:[^a-z]|$)/i.test(idc)) {
+					try {
+						const cs = W.getComputedStyle(node);
+						if (cs && (cs.position === 'fixed' || cs.position === 'absolute')) {
+							seen.add(node);
+							backdrops.push(node);
+						}
+					} catch (e) {}
+				}
+			};
+
+			if (rootObstruction && rootObstruction.parentElement) {
+				const siblings = rootObstruction.parentElement.children || [];
+				for (let i = 0; i < siblings.length; i++) addIfBackdrop(siblings[i]);
+			}
+			if (D.body && D.body.children) {
+				for (let i = 0; i < D.body.children.length; i++) addIfBackdrop(D.body.children[i]);
+			}
+			return backdrops;
+		}
+
+		function saveStylePropSnapshot(el, prop) {
+			if (!el || !el.style) return;
+			let rec = cssStyleSnapshots.get(el);
+			if (!rec) {
+				rec = { props: {}, removedClasses: [] };
+				cssStyleSnapshots.set(el, rec);
+			}
+			if (!Object.prototype.hasOwnProperty.call(rec.props, prop)) {
+				rec.props[prop] = {
+					val: el.style.getPropertyValue(prop),
+					pri: el.style.getPropertyPriority(prop)
+				};
+			}
+		}
+
+		function applyScopedStyleFix(el, prop, val, pri = 'important') {
+			if (!el || !el.style) return;
+			saveStylePropSnapshot(el, prop);
+			try { el.style.setProperty(prop, val, pri); } catch (e) {}
+		}
+
+		function recoverPageInteractionRestrictions() {
+			if (hasVisibleLegitimateModal()) return;
+			for (const rootNode of [D.documentElement, D.body]) {
+				if (!rootNode) continue;
+				try {
+					const cs = W.getComputedStyle(rootNode);
+					if (cs) {
+						if (cs.overflow === 'hidden' || cs.overflow === 'clip') {
+							applyScopedStyleFix(rootNode, 'overflow', 'auto');
+						}
+						if (cs.overflowY === 'hidden' || cs.overflowY === 'clip') {
+							applyScopedStyleFix(rootNode, 'overflow-y', 'auto');
+						}
+						if (cs.position === 'fixed') {
+							applyScopedStyleFix(rootNode, 'position', 'static');
+						}
+						if (cs.pointerEvents === 'none') {
+							applyScopedStyleFix(rootNode, 'pointer-events', 'auto');
+						}
+					}
+					if (rootNode.classList) {
+						let rec = cssStyleSnapshots.get(rootNode);
+						if (!rec) {
+							rec = { props: {}, removedClasses: [] };
+							cssStyleSnapshots.set(rootNode, rec);
+						}
+						for (let i = 0; i < SCROLL_LOCK_CLASSES.length; i++) {
+							const cls = SCROLL_LOCK_CLASSES[i];
+							if (rootNode.classList.contains(cls)) {
+								rootNode.classList.remove(cls);
+								if (rec.removedClasses.indexOf(cls) === -1) rec.removedClasses.push(cls);
+							}
+						}
+					}
+				} catch (e) {}
+			}
+
+			try {
+				const contentContainers = D.querySelectorAll('main, article, #__next, #root, #app, body > div:not([data-nvirya-ui]):not([data-nvirya-hidden])');
+				for (let i = 0; i < Math.min(contentContainers.length, 16); i++) {
+					const c = contentContainers[i];
+					if (!c || c.hasAttribute('data-nvirya-hidden')) continue;
+					const cs = W.getComputedStyle(c);
+					if (!cs) continue;
+					if (/blur\(/i.test(cs.filter || '') || /blur\(/i.test(c.style.filter || '')) {
+						applyScopedStyleFix(c, 'filter', 'none');
+					}
+					if (cs.pointerEvents === 'none' && meaningfulText(c).length > 200) {
+						applyScopedStyleFix(c, 'pointer-events', 'auto');
+					}
+					if (cs.userSelect === 'none' && meaningfulText(c).length > 200) {
+						applyScopedStyleFix(c, 'user-select', 'auto');
+					}
+				}
+			} catch (e) {}
+
+			scheduleUnlockPageScroll();
+		}
+
+		function hideObstructionNodeReversibly(node, reason) {
+			if (!node || node.nodeType !== 1) return null;
+			const snap = {
+				node,
+				prevHiddenAttr: node.getAttribute('data-nvirya-hidden'),
+				prevDisplay: node.style ? node.style.getPropertyValue('display') : '',
+				prevDisplayPri: node.style ? node.style.getPropertyPriority('display') : '',
+				prevVis: node.style ? node.style.getPropertyValue('visibility') : '',
+				prevVisPri: node.style ? node.style.getPropertyPriority('visibility') : '',
+				prevPe: node.style ? node.style.getPropertyValue('pointer-events') : '',
+				prevPePri: node.style ? node.style.getPropertyPriority('pointer-events') : ''
+			};
+			try {
+				node.setAttribute('data-nvirya-hidden', reason || 'anti-adblock');
+				if (node.style) {
+					node.style.setProperty('display', 'none', 'important');
+					node.style.setProperty('visibility', 'hidden', 'important');
+					node.style.setProperty('pointer-events', 'none', 'important');
+				}
+				state.hiddenNodes.add(node);
+			} catch (e) {}
+			return snap;
+		}
+
+		function hasRecoveredAncestor(node) {
+			let cur = node && node.parentElement;
+			while (cur && cur.nodeType === 1) {
+				if (recoveredSet.has(cur) || cur.hasAttribute('data-nvirya-hidden')) return true;
+				cur = cur.parentElement;
+			}
+			return false;
+		}
+
+		function resolveInnerModal(el, normTxt) {
+			let cur = el;
+			let depth = 0;
+			while (cur && cur.children && cur.children.length === 1 && depth < 4) {
+				const child = cur.children[0];
+				if (!child || child.nodeType !== 1) break;
+				const childTag = String(child.tagName || '').toLowerCase();
+				if (!/^(?:div|section|dialog|aside)$/.test(childTag)) break;
+				if (normalizeText(child) !== normTxt) break;
+				cur = child;
+				depth++;
+			}
+			return cur;
+		}
+
+		function recoverObstruction(el, classification) {
+			if (!el || !isEngineActive()) return false;
+			if (recoveredSet.has(el) || hasRecoveredAncestor(el)) return false;
+
+			const normTxt = normalizeText(el);
+			const rootObstruction = resolveObstructionRoot(el);
+			const modalNode = (el === rootObstruction) ? resolveInnerModal(el, normTxt) : el;
+			if (recoveredSet.has(rootObstruction) || recoveredSet.has(modalNode)) return false;
+
+			const sig = computeNodeSignature(modalNode, normTxt);
+			const now = Date.now();
+
+			let sigEntry = signatureHistory.get(sig);
+			if (sigEntry && (now - sigEntry.firstSeen <= RETRY_WINDOW_MS)) {
+				if (sigEntry.retryCount >= MAX_RETRIES_PER_SIG) {
+					return false;
+				}
+				sigEntry.retryCount++;
+				sigEntry.lastSeen = now;
+				stats.incAntiAdblock('repeated');
+			} else {
+				sigEntry = { count: 1, retryCount: 0, firstSeen: now, lastSeen: now, timerId: null };
+				signatureHistory.set(sig, sigEntry);
+			}
+
+			stats.incAntiAdblock('detections');
+
+			try {
+				const backdrops = findAssociatedBackdrops(rootObstruction, modalNode);
+
+				recoveredSet.add(el);
+				recoveredSet.add(modalNode);
+				recoveredSet.add(rootObstruction);
+
+				const snapshots = [];
+				if (rootObstruction !== modalNode) {
+					const sRoot = hideObstructionNodeReversibly(rootObstruction, 'anti-adblock-wrapper');
+					if (sRoot) snapshots.push(sRoot);
+				}
+				const sEl = hideObstructionNodeReversibly(modalNode, 'anti-adblock');
+				if (sEl) snapshots.push(sEl);
+
+				for (let i = 0; i < backdrops.length; i++) {
+					recoveredSet.add(backdrops[i]);
+					const sb = hideObstructionNodeReversibly(backdrops[i], 'anti-adblock-backdrop');
+					if (sb) snapshots.push(sb);
+				}
+
+				recoveryRecords.push({
+					target: el,
+					wrapper: rootObstruction,
+					backdrops,
+					snapshots,
+					signature: sig,
+					reason: (classification && classification.reasons && classification.reasons.join(',')) || 'anti-adblock',
+					category: (classification && classification.category) || 'anti-adblock-modal',
+					score: (classification && classification.score) || CONFIDENCE_THRESHOLD,
+					time: now
+				});
+				if (recoveryRecords.length > 60) recoveryRecords.shift();
+
+				recoverPageInteractionRestrictions();
+				stats.incAntiAdblock('recoveries');
+				log('BLOCK', 'anti-adblock', `Recovered obstruction (${rootObstruction.tagName}${rootObstruction.id ? '#' + rootObstruction.id : ''}) score=${classification && classification.score}`);
+
+				if (sigEntry.retryCount < MAX_RETRIES_PER_SIG) {
+					const delay = RETRY_DELAYS[Math.min(sigEntry.retryCount, RETRY_DELAYS.length - 1)];
+					if (sigEntry.timerId) clearTimeout(sigEntry.timerId);
+					sigEntry.timerId = setTimeout(() => {
+						sigEntry.timerId = null;
+						if (isEngineActive()) scanRoot(D.body || D.documentElement);
+					}, delay);
+				}
+				return true;
+			} catch (err) {
+				stats.incAntiAdblock('failed');
+				log('WARN', 'anti-adblock', 'Recovery failed:', err && err.message);
+				return false;
+			}
+		}
+
+		function inspectCandidate(el) {
+			if (!el || el.nodeType !== 1 || !isEngineActive()) return false;
+			if (recoveredSet.has(el) || el.hasAttribute('data-nvirya-hidden') || hasRecoveredAncestor(el)) return false;
+			const clsRes = classifyNode(el);
+			if (clsRes.confirmed) {
+				return recoverObstruction(el, clsRes);
+			}
+			return false;
+		}
+
+		function scanRoot(rootScope) {
+			if (!isEngineActive()) return 0;
+			let recoveredCount = 0;
+			try {
+				for (let i = 0; i < SITE_ADAPTERS.length; i++) {
+					const adapter = SITE_ADAPTERS[i];
+					try {
+						if (adapter.matchHost(hostname)) {
+							const targets = adapter.detector(D, W) || [];
+							for (let j = 0; j < targets.length; j++) {
+								const tNode = targets[j];
+								if (!tNode || recoveredSet.has(tNode) || tNode.hasAttribute('data-nvirya-hidden')) continue;
+								const c = classifyNode(tNode);
+								if (c.confirmed || c.score >= (adapter.confidenceThreshold || 55)) {
+									c.confirmed = true;
+									if (recoverObstruction(tNode, c)) recoveredCount++;
+								}
+							}
+						}
+					} catch (adapterErr) {
+						log('WARN', 'adapter', adapter.name + ' error:', adapterErr && adapterErr.message);
+					}
+				}
+
+				const scope = (rootScope && rootScope.querySelectorAll) ? rootScope : D;
+				if (!scope || !scope.querySelectorAll) return recoveredCount;
+				const candidates = scope.querySelectorAll(
+					'[class*="adblock" i],[id*="adblock" i],[class*="adblocker" i],.fc-ab-root,.fc-dialog-container,.tp-modal,[role="dialog"],[aria-modal="true"],dialog[open],div[style*="fixed"],div[class*="modal" i],div[class*="overlay" i],div[class*="popup" i]'
+				);
+				const lim = Math.min(candidates.length, 70);
+				for (let i = 0; i < lim; i++) {
+					if (inspectCandidate(candidates[i])) recoveredCount++;
+				}
+			} catch (e) {}
+			return recoveredCount;
+		}
+
+		function queueMutationNode(node) {
+			if (!node || node.nodeType !== 1 || !isEngineActive() || isNviryaNode(node)) return;
+			pendingScanNodes.add(node);
+			if (debounceTimer) return;
+			debounceTimer = setTimeout(() => {
+				debounceTimer = null;
+				if (!isEngineActive()) {
+					pendingScanNodes.clear();
+					return;
+				}
+				const batch = Array.from(pendingScanNodes);
+				pendingScanNodes.clear();
+				for (let i = 0; i < Math.min(batch.length, 40); i++) {
+					const n = batch[i];
+					if (!n || !n.isConnected) continue;
+					if (!inspectCandidate(n) && n.querySelectorAll) {
+						scanRoot(n);
+					}
+				}
+			}, 60);
+		}
+
+		function scheduleBoundedFallbackScans() {
+			clearFallbackTimers();
+			if (!isEngineActive()) return;
+			[600, 1800, 4200].forEach((delay) => {
+				const tid = setTimeout(() => {
+					if (isEngineActive()) scanRoot(D.body || D.documentElement);
+				}, delay);
+				fallbackTimers.push(tid);
+			});
+		}
+
+		function clearFallbackTimers() {
+			for (let i = 0; i < fallbackTimers.length; i++) clearTimeout(fallbackTimers[i]);
+			fallbackTimers = [];
+			if (debounceTimer) {
+				clearTimeout(debounceTimer);
+				debounceTimer = null;
+			}
+			pendingScanNodes.clear();
+			signatureHistory.forEach((entry) => {
+				if (entry && entry.timerId) clearTimeout(entry.timerId);
+			});
+		}
+
+		function revertAll() {
+			clearFallbackTimers();
+			while (recoveryRecords.length > 0) {
+				const rec = recoveryRecords.pop();
+				if (!rec || !Array.isArray(rec.snapshots)) continue;
+				for (let i = 0; i < rec.snapshots.length; i++) {
+					const s = rec.snapshots[i];
+					if (!s || !s.node) continue;
+					try {
+						if (s.prevHiddenAttr == null) s.node.removeAttribute('data-nvirya-hidden');
+						else s.node.setAttribute('data-nvirya-hidden', s.prevHiddenAttr);
+						if (s.node.style) {
+							if (s.prevDisplay) s.node.style.setProperty('display', s.prevDisplay, s.prevDisplayPri);
+							else s.node.style.removeProperty('display');
+							if (s.prevVis) s.node.style.setProperty('visibility', s.prevVis, s.prevVisPri);
+							else s.node.style.removeProperty('visibility');
+							if (s.prevPe) s.node.style.setProperty('pointer-events', s.prevPe, s.prevPePri);
+							else s.node.style.removeProperty('pointer-events');
+						}
+						state.hiddenNodes.delete(s.node);
+						recoveredSet.delete(s.node);
+					} catch (e) {}
+				}
+			}
+			cssStyleSnapshots.forEach((rec, elNode) => {
+				if (!elNode) return;
+				try {
+					if (rec.props && elNode.style) {
+						for (const prop of Object.keys(rec.props)) {
+							const orig = rec.props[prop];
+							if (orig && orig.val) elNode.style.setProperty(prop, orig.val, orig.pri);
+							else elNode.style.removeProperty(prop);
+						}
+					}
+					if (Array.isArray(rec.removedClasses) && elNode.classList) {
+						for (let i = 0; i < rec.removedClasses.length; i++) {
+							elNode.classList.add(rec.removedClasses[i]);
+						}
+					}
+				} catch (e) {}
+			});
+			cssStyleSnapshots.clear();
+			signatureHistory.clear();
+		}
+
+		function onRouteCleanup() {
+			clearFallbackTimers();
+			signatureHistory.clear();
+			if (isEngineActive()) {
+				scheduleBoundedFallbackScans();
+			}
+		}
+
+		return {
+			classifyNode,
+			resolveObstructionRoot,
+			recoverObstruction,
+			inspectCandidate,
+			scanRoot,
+			queueMutationNode,
+			scheduleBoundedFallbackScans,
+			clearFallbackTimers,
+			revertAll,
+			onRouteCleanup,
+			getDiagnostics: () => ({
+				active: isEngineActive(),
+				stats: stats.antiAdblock,
+				recentRecoveries: recoveryRecords.slice(-5).map((r) => ({
+					category: r.category,
+					score: r.score,
+					reason: r.reason,
+					wrapperTag: r.wrapper && r.wrapper.tagName
+				}))
+			})
+		};
+	})();
+
+	try { W.__NVIRYA_ANTI_ADBLOCK_ENGINE__ = AntiAdblockEngine; } catch (e) {}
+
+	function isAntiAdblockModalNode(el) {
+		return AntiAdblockEngine.classifyNode(el).confirmed;
+	}
+
+	function handleAntiAdblock(rootScope) {
+		if (!config.antiAdblock || isDisabledHere()) return;
+		AntiAdblockEngine.scanRoot(rootScope);
+	}
+
 	function onLocationChange() {
 		if (location.href === lastHref) return;
 		lastHref = location.href;
+		AntiAdblockEngine.onRouteCleanup();
 		if (isDisabledHere()) {
 			if (observer) { try { observer.disconnect(); } catch (e) {} observer = null; }
 		} else {
@@ -4089,34 +6408,6 @@
 			initialScan();
 		}
 		if (typeof UI !== 'undefined' && UI.updateUIStatus) UI.updateUIStatus();
-	}
-
-	function handleAntiAdblock() {
-		if (!config.antiAdblock || isDisabledHere()) return;
-		try {
-			const all = D.querySelectorAll('[class*="adblock" i],[id*="adblock" i],[class*="adblocker" i]');
-			const lim = Math.min(all.length, 30);
-			for (let i = 0; i < lim; i++) {
-				const el = all[i];
-				if (isNviryaNode(el) || hasFormControls(el) || hasProtectedPlayerContent(el)) continue;
-				const idc = ((el.id || '') + ' ' + classString(el));
-				if (!RE_ANTIADB.test(idc)) continue;
-				let cs;
-				try { cs = W.getComputedStyle(el); } catch (e) { continue; }
-				if (!cs) continue;
-				const isOverlay = (cs.position === 'fixed' || cs.position === 'absolute') &&
-					parseInt(cs.zIndex || 0, 10) > 1000 &&
-					el.offsetWidth >= W.innerWidth * 0.5 &&
-					el.offsetHeight >= W.innerHeight * 0.5;
-				if (isOverlay) {
-					el.setAttribute('data-nvirya-hidden', 'anti-adblock');
-					state.hiddenNodes.add(el);
-					stats.inc('hidden');
-					scheduleUnlockPageScroll();
-					log('BLOCK', 'anti-adblock', 'removed overlay');
-				}
-			}
-		} catch (e) {}
 	}
 
 	function getSanitizedUrl() {
@@ -4161,9 +6452,16 @@
 		function getAvailable() {
 			const remote = store.get(K_UPD_REMOTE, null);
 			if (!remote) return null;
-			if (compareVersions(VERSION, remote) < 0) return String(remote);
+			const ver = typeof remote === 'object' && remote.version ? String(remote.version) : String(remote);
+			if (compareVersions(VERSION, ver) < 0) return ver;
 			store.del(K_UPD_REMOTE);
+			store.del(K_UPD_CHANGELOG);
 			return null;
+		}
+
+		function getChangelog() {
+			const list = store.get(K_UPD_CHANGELOG, []);
+			return Array.isArray(list) ? list : [];
 		}
 
 		function isSnoozed() {
@@ -4174,19 +6472,51 @@
 
 		function snooze() { store.set(K_UPD_SNOOZE, Date.now() + UPDATE_SNOOZE_MS); }
 
+		function parseRemoteChangelog(head) {
+			const parsedChangelogArray = [];
+			try {
+				const blockMatch = head.match(/==Changelog==([\s\S]*?)==\/Changelog==/i);
+				if (blockMatch && blockMatch[1]) {
+					const lines = blockMatch[1].split(/\r?\n/);
+					for (let i = 0; i < lines.length; i++) {
+						const cleaned = lines[i]
+							.replace(/^\s*(?:\/\/|\*+)?\s*/, '')
+							.replace(/^[-•*+]\s*/, '')
+							.trim();
+						if (cleaned && !/^==/.test(cleaned)) {
+							parsedChangelogArray.push(cleaned);
+						}
+					}
+				}
+				if (!parsedChangelogArray.length) {
+					const tagRe = /\/\/\s*@changelog\s+(.+)/gi;
+					let tm;
+					while ((tm = tagRe.exec(head)) !== null) {
+						const item = String(tm[1] || '').replace(/^[-•*+]\s*/, '').trim();
+						if (item) parsedChangelogArray.push(item);
+					}
+				}
+			} catch (e) {}
+			return parsedChangelogArray;
+		}
+
 		function fetchRemoteVersion(done) {
 			let finished = false;
-			const finish = (err, ver) => {
+			const finish = (err, payload) => {
 				if (finished) return;
 				finished = true;
-				done(err, ver);
+				done(err, payload);
 			};
 			const parse = (text) => {
-				const head = String(text || '').slice(0, 8192);
+				const head = String(text || '').slice(0, 12288);
 				const m = head.match(/\/\/\s*@version\s+([0-9.]+)/i);
-				const ver = m && m[1].replace(/^\.+|\.+$/g, '');
-				if (ver && /\d/.test(ver)) finish(null, ver);
-				else finish(new Error('no @version in remote file'));
+				const remoteVer = m && m[1].replace(/^\.+|\.+$/g, '');
+				if (remoteVer && /\d/.test(remoteVer)) {
+					const parsedChangelogArray = parseRemoteChangelog(head);
+					finish(null, { version: remoteVer, changelog: parsedChangelogArray });
+				} else {
+					finish(new Error('no @version in remote file'));
+				}
 			};
 
 			if (typeof GM_xmlhttpRequest === 'function') {
@@ -4194,7 +6524,7 @@
 					GM_xmlhttpRequest({
 						method: 'GET',
 						url: UPDATE_URL,
-						headers: { 'Range': 'bytes=0-4095', 'Cache-Control': 'no-cache' },
+						headers: { 'Range': 'bytes=0-8191', 'Cache-Control': 'no-cache' },
 						nocache: true,
 						timeout: UPDATE_TIMEOUT,
 						onload: (res) => {
@@ -4236,32 +6566,36 @@
 			UI.setUpdateChecking(true);
 			if (manual) UI.toast(t('upd_chk'));
 
-			fetchRemoteVersion((err, remote) => {
+			fetchRemoteVersion((err, remoteInfo) => {
 				checking = false;
 				UI.setUpdateChecking(false);
 				try {
-					if (err) {
+					if (err || !remoteInfo) {
 						log('WARN', 'update', 'check failed', err && err.message);
 						store.set(K_UPD_LAST, Date.now() - UPDATE_CHECK_INTERVAL + UPDATE_RETRY_AFTER);
 						if (manual) UI.toast(t('ts_ufail'));
 						return;
 					}
-					if (compareVersions(VERSION, remote) < 0) {
+					const remoteVer = typeof remoteInfo === 'object' ? String(remoteInfo.version || '') : String(remoteInfo || '');
+					const changelog = (typeof remoteInfo === 'object' && Array.isArray(remoteInfo.changelog)) ? remoteInfo.changelog : [];
+					if (compareVersions(VERSION, remoteVer) < 0) {
 						const prevRemote = store.get(K_UPD_REMOTE, null);
 
-						if (prevRemote !== remote || manual) {
+						if (prevRemote !== remoteVer || manual) {
 							store.del(K_UPD_SNOOZE);
 						}
 
-						store.set(K_UPD_REMOTE, remote);
-						UI.setUpdateAvailable(remote);
+						store.set(K_UPD_REMOTE, remoteVer);
+						store.set(K_UPD_CHANGELOG, changelog);
+						UI.setUpdateAvailable(remoteVer, changelog);
 
-						if (manual || !isSnoozed()) UI.showUpdateBanner(remote);
-						log('INFO', 'update', 'new version available', remote);
+						if (manual || !isSnoozed()) UI.showUpdateBanner({ version: remoteVer, changelog });
+						log('INFO', 'update', 'new version available', remoteVer);
 					} else {
 						store.del(K_UPD_REMOTE);
+						store.del(K_UPD_CHANGELOG);
 						store.del(K_UPD_SNOOZE);
-						UI.setUpdateAvailable(null);
+						UI.setUpdateAvailable(null, []);
 						UI.hideUpdateBanner();
 						if (manual) UI.toast(t('ts_ulat'));
 					}
@@ -4275,7 +6609,9 @@
 			const run = () => {
 				try {
 					const avail = getAvailable();
-					if (avail && !isSnoozed()) UI.showUpdateBanner(avail);
+					if (avail && !isSnoozed()) {
+						UI.showUpdateBanner({ version: avail, changelog: getChangelog() });
+					}
 					check(false);
 				} catch (e) { log('ERROR', 'update', e && e.message); }
 			};
@@ -4285,7 +6621,7 @@
 			}, UPDATE_START_DELAY);
 		}
 
-		return { check, schedule, getAvailable, isSnoozed, snooze };
+		return { check, schedule, getAvailable, getChangelog, isSnoozed, snooze };
 	})();
 
 	const UI = (() => {
@@ -4329,12 +6665,20 @@
 			segLifetimeBtn = null;
 		let updateEl = null,
 			ubTitleEl = null,
-			ubDescEl = null,
+			ubCurVerEl = null,
+			ubNewVerEl = null,
+			ubWhatsNewEl = null,
+			ubListEl = null,
 			ubLaterBtn = null,
 			ubGoBtn = null,
 			newBadgeEl = null;
 		let updateAvailable = null,
+			updateChangelog = [],
 			updateChecking = false;
+		let navBarWrapEl = null,
+			activeTab = 'home',
+			tabViews = {},
+			tabBtns = {};
 		let uiReady = false,
 			sheetBuilt = false;
 
@@ -4356,30 +6700,112 @@
 		function clear(n) { while (n && n.firstChild) n.removeChild(n.firstChild); }
 
 		const ICONS = {
-			shield: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
+			shield: [
+				'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z',
+				'm9 12 2 2 4-4'
+			],
+
 			sun: [
-				['c', 12, 12, 4], 'M12 2v2', 'M12 20v2', 'M4.93 4.93l1.41 1.41', 'M17.66 17.66l1.41 1.41', 'M2 12h2', 'M20 12h2', 'M6.34 17.66l-1.41 1.41', 'M19.07 4.93l-1.41 1.41'
+				['c', 12, 12, 4],
+				'M12 2v2',
+				'M12 20v2',
+				'm4.93 4.93 1.41 1.41',
+				'm17.66 17.66 1.41 1.41',
+				'M2 12h2',
+				'M20 12h2',
+				'm6.34 17.66-1.41 1.41',
+				'm19.07 4.93-1.41 1.41'
 			],
-			moon: ['M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'],
-			close: ['M18 6 6 18', 'M6 6l12 12'],
-			chevron: ['m9 18 6-6-6-6'],
+
+			moon: [
+				'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z',
+				'M19 3v4',
+				'M21 5h-4'
+			],
+
+			close: [
+				'M17 7 7 17',
+				'm7 7 10 10'
+			],
+
+			chevron: [
+				'm9 18 6-6-6-6'
+			],
+
 			allow: [
-				['c', 12, 12, 10], 'm8 12 3 3 5-6'
+				['c', 12, 12, 10],
+				'm9 12 2 2 4-4'
 			],
+
 			pause: [
-				['c', 12, 12, 10], 'M10 9v6', 'M14 9v6'
+				['c', 12, 12, 10],
+				'M10 15V9',
+				'M14 15V9'
 			],
+
 			target: [
-				['c', 12, 12, 10], 'M22 12h-4', 'M6 12H2', 'M12 6V2', 'M12 22v-4'
+				['c', 12, 12, 7],
+				['c', 12, 12, 1],
+				'M12 2v3',
+				'M12 19v3',
+				'M2 12h3',
+				'M19 12h3'
 			],
-			wand: ['M15 4V2', 'M15 16v-2', 'M8 9h2', 'M20 9h2', 'M17.8 11.8 19 13', 'M15 9h.01', 'M17.8 6.2 19 5', 'M3 21l9-9', 'M12.2 6.2 11 5'],
-			undo: ['M3 7v6h6', 'M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13'],
+
+			wand: [
+				'm21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z',
+				'm14 7 3 3',
+				'M5 6v4',
+				'M19 14v4',
+				'M10 2v2',
+				'M7 8H3',
+				'M21 16h-4',
+				'M11 3H9'
+			],
+
+			undo: [
+				'M9 14 4 9l5-5',
+				'M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11'
+			],
+
 			copy: [
-				['r', 9, 9, 13, 13, 2], 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'
+				['r', 8, 8, 14, 14, 2],
+				'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'
 			],
-			flag: ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
-			download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm7 10 5 5 5-5', 'M12 15V3'],
-			globe: [['c', 12, 12, 10], 'M2 12h20', 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z']
+
+			flag: [
+				'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z',
+				'M4 22V4'
+			],
+
+			download: [
+				'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
+				'm7 10 5 5 5-5',
+				'M12 15V3'
+			],
+
+			globe: [
+				['c', 12, 12, 10],
+				'M2 12h20',
+				'M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20'
+			],
+
+			telegram: [
+				'm15 10-4 4 6 6 4-16-18 7 4 2 2 6 3-4'
+			],
+
+			discord: [
+				['c', 9, 12, 1],
+				['c', 15, 12, 1],
+				'M7.5 7.5c3.5-1 5.5-1 9 0',
+				'M7 16.5c3.5 1 6.5 1 10 0',
+				'M15.5 17c0 1 1.5 3 2 3 1.5 0 2.833-1.667 3.5-3 .667-1.667.5-5.833-1.5-11.5-1.457-1.015-3-1.34-4.5-1.5l-.972 1.923a11.913 11.913 0 0 0-4.053 0L9 4c-1.5.16-3.043.485-4.5 1.5-2 5.667-2.167 9.833-1.5 11.5.667 1.333 2 3 3.5 3 .5 0 2-2 2-3'
+			],
+
+			github: [
+				'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4',
+				'M9 18c-4.51 2-5-2-7-2'
+			]
 		};
 
 		function icon(name, cls) {
@@ -4524,6 +6950,7 @@
       touch-action: none;
       pointer-events: none;
       transition: opacity .3s ease, visibility 0s linear .3s;
+      will-change: transform, opacity;
       z-index: 2147483000;
     }
     .backdrop.open { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
@@ -4546,7 +6973,7 @@
       visibility: hidden;
       pointer-events: none;
       transition: transform .4s cubic-bezier(.32,.72,0,1), opacity .25s ease, visibility 0s linear .4s;
-      will-change: transform;
+      will-change: transform, opacity;
       z-index: 2147483001;
     }
     .sheet.open { transform: translateY(0); visibility: visible; pointer-events: auto; transition-delay: 0s; }
@@ -4568,12 +6995,17 @@
       .pill { display: none; }
     }
 
-    .grab { flex: none; padding-top: 8px; touch-action: none; }
+    .grab {
+      flex: none; padding-top: 8px; touch-action: none;
+      border-bottom: 1px solid var(--border);
+    }
     .pill { width: 36px; height: 5px; border-radius: 3px; background: var(--pill); margin: 0 auto 8px; }
     .head {
       display: flex; align-items: center; gap: 10px;
-      padding: 6px 16px 12px;
-      border-bottom: 1px solid var(--border);
+      padding: 4px 16px 10px;
+    }
+    .nav-tabs-wrap {
+      padding: 0 16px 12px;
     }
     @media (min-width: 641px) { .head { padding-top: 16px; } }
     .titles { flex: 1; min-width: 0; }
@@ -4702,16 +7134,59 @@
     }
     .new-badge.show { display: inline-block; }
 
+    .sheet {
+      height: 76vh; height: 76dvh;
+    }
+    @media (min-width: 641px) {
+      .sheet {
+        height: 620px; max-height: 82vh; max-height: 82dvh;
+      }
+    }
+
+    .nav-tabs {
+      display: flex; gap: 4px; padding: 3.5px;
+      background: var(--seg-bg);
+      border-radius: 11px;
+    }
+    .nav-tab-btn {
+      flex: 1; padding: 7px 6px;
+      border: none; border-radius: 8px;
+      background: none; color: var(--muted);
+      font-size: 13px; font-weight: 600;
+      cursor: pointer;
+      transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+    }
+    .nav-tab-btn[aria-selected="true"] {
+      background: var(--seg-on);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+    .nav-tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    .tab-view { display: none; }
+    .tab-view.active { display: block; animation: tabFadeIn .16s ease; }
+    .tab-view > .sec-title:first-child { margin-top: 2px; }
+    @keyframes tabFadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .item.disabled {
+      opacity: .46; cursor: not-allowed;
+    }
+    .item.disabled .lbl, .item.disabled .sub { color: var(--muted); }
+    .item.disabled input { cursor: not-allowed; pointer-events: none; }
+
     .update-banner {
       position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px));
-      width: min(92vw, 380px);
-      padding: 14px;
+      width: min(92vw, 390px);
+      padding: 16px;
       background: var(--sheet); color: var(--text);
-      border: 1px solid var(--border); border-radius: 16px;
-      box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.08);
-      -webkit-backdrop-filter: blur(28px) saturate(1.5);
-      backdrop-filter: blur(28px) saturate(1.5);
-      font-size: 14px; line-height: 1.4;
+      border: 1px solid var(--border); border-radius: 18px;
+      box-shadow: 0 16px 44px rgba(0,0,0,.26), 0 2px 10px rgba(0,0,0,.1);
+      -webkit-backdrop-filter: blur(24px) saturate(1.5);
+      backdrop-filter: blur(24px) saturate(1.5);
+      font-size: 14px; line-height: 1.45;
       opacity: 0; visibility: hidden; pointer-events: none;
       transform: translate(-50%, calc(-100% - 24px));
       transition: transform .45s cubic-bezier(.32,.72,0,1), opacity .25s ease, visibility 0s linear .45s;
@@ -4723,26 +7198,145 @@
       transform: translate(-50%, 0);
       transition-delay: 0s;
     }
-    .ub-row { display: flex; align-items: flex-start; gap: 12px; }
-    .ub-icon { width: 36px; height: 36px; border-radius: 10px; }
-    .ub-icon svg { width: 19px; height: 19px; }
+    .ub-row { display: flex; align-items: center; gap: 12px; }
+    .ub-icon {
+      width: 40px; height: 40px; border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(59,130,246,.32);
+    }
+    .ub-icon svg { width: 20px; height: 20px; }
     .ub-txt { flex: 1; min-width: 0; }
-    .ub-title { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
-    .ub-desc { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
-    .ub-close { width: 28px; height: 28px; margin: -2px -2px 0 0; }
+    .ub-title { font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; color: var(--text); }
+    .ub-ver-row {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 5px; flex-wrap: wrap;
+    }
+    .ub-ver-badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 999px;
+      font-size: 11.5px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.01em;
+    }
+    .ub-ver-badge.cur {
+      background: var(--card); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .ub-ver-badge.next {
+      background: rgba(59,130,246,.14); color: var(--accent);
+      border: 1px solid rgba(59,130,246,.3);
+    }
+    .ub-ver-arrow { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+    .ub-close { width: 28px; height: 28px; margin: -4px -4px 0 0; align-self: flex-start; }
+    .ub-body {
+      margin-top: 12px; padding: 10px 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      max-height: 150px;
+      overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+      pointer-events: auto;
+    }
+    .ub-body::-webkit-scrollbar { width: 5px; }
+    .ub-body::-webkit-scrollbar-thumb { background: var(--pill); border-radius: 999px; }
+    .ub-whats-new {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .ub-changelog {
+      margin: 0; padding-left: 16px;
+      font-size: 12.5px; line-height: 1.48; color: var(--text);
+    }
+    .ub-changelog li { margin-bottom: 4px; }
+    .ub-changelog li:last-child { margin-bottom: 0; }
+    .ub-changelog li::marker { color: var(--accent); }
     .ub-actions { display: flex; gap: 8px; margin-top: 12px; }
     .ub-btn {
       flex: 1; display: flex; align-items: center; justify-content: center;
-      min-height: 38px; padding: 0 12px;
+      min-height: 40px; padding: 0 12px;
       border: none; border-radius: 12px;
       font-size: 14px; font-weight: 600;
       cursor: pointer; text-decoration: none;
-      transition: opacity .15s ease;
+      transition: opacity .15s ease, transform .12s ease;
     }
-    .ub-btn:active { opacity: .8; }
+    .ub-btn:active { opacity: .82; transform: scale(.98); }
     .ub-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .ub-btn.later { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-    .ub-btn.go { background: var(--accent); color: #fff; }
+    .ub-btn.go { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(59,130,246,.28); }
+
+    .compat-group {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+    }
+    .compat-row {
+      position: relative;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 10px 14px;
+      font-size: 12px; line-height: 1.35;
+    }
+    .compat-row + .compat-row::before {
+      content: ''; position: absolute; top: 0; left: 14px; right: 0;
+      height: 1px; background: var(--border);
+    }
+    .compat-info { flex: 1; min-width: 0; }
+    .compat-name { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
+    .compat-note { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+    .compat-badge {
+      flex: none; display: inline-flex; align-items: center;
+      padding: 2.5px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; letter-spacing: .01em;
+      white-space: nowrap;
+    }
+    .compat-badge.supported {
+      background: rgba(34,197,94,.14); color: #22c55e;
+      border: 1px solid rgba(34,197,94,.28);
+    }
+    .compat-badge.limited {
+      background: rgba(245,158,11,.14); color: #f59e0b;
+      border: 1px solid rgba(245,158,11,.3);
+    }
+    .compat-badge.unsupported {
+      background: rgba(113,113,122,.16); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .compat-badge.neutral {
+      background: var(--sheet); color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .about-card {
+      margin-top: 8px; padding: 12px 14px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .about-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .about-title { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+    .about-ver {
+      padding: 2px 8px; border-radius: 999px;
+      background: rgba(59,130,246,.14); color: var(--accent);
+      font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    .about-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .about-links {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;
+    }
+    .about-link {
+      flex: 1 1 0; min-width: 88px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 10px; border-radius: 10px;
+      background: var(--sheet); color: var(--text);
+      border: 1px solid var(--border);
+      font-size: 12px; font-weight: 600; text-decoration: none;
+      cursor: pointer;
+      transition: background .15s ease, transform .1s ease;
+    }
+    .about-link svg { width: 14px; height: 14px; color: var(--accent); flex: none; }
+    .about-link:active { transform: scale(.97); background: var(--card-hover); }
+    @media (hover: hover) {
+      .about-link:hover { background: var(--card-hover); }
+    }
 
     .report-modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -4957,10 +7551,11 @@
 
 		function refreshLanguageUI() {
 			if (sheetBuilt && bodyEl) buildBody();
-			if (ubDescEl) ubDescEl.textContent = t('ub_dsc');
+			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl');
+			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new');
 			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
 			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
-			if (ubTitleEl && updateAvailable) ubTitleEl.textContent = t('ub_ttl', { ver: updateAvailable });
+			renderUpdateChangelog(updateChangelog);
 			if (reportModalEl) {
 				const wasOpen = reportModalEl.classList.contains('open');
 				reportModalEl.remove();
@@ -5028,7 +7623,8 @@
 				),
 				el('div', { class: 'head-btns' }, themeBtn, closeBtn)
 			);
-			grabEl = el('div', { class: 'grab' }, el('div', { class: 'pill' }), head);
+			navBarWrapEl = el('div', { class: 'nav-tabs-wrap' });
+			grabEl = el('div', { class: 'grab' }, el('div', { class: 'pill' }), head, navBarWrapEl);
 			bodyEl = el('div', { class: 'body' });
 			sheetEl.appendChild(grabEl);
 			sheetEl.appendChild(bodyEl);
@@ -5068,10 +7664,18 @@
 				el('div', { class: 'ub-row' },
 					el('span', { class: 'tile t-blue ub-icon' }, icon('download')),
 					el('div', { class: 'ub-txt' },
-						ubTitleEl = el('div', { class: 'ub-title' }, t('ub_ttl', { ver: VERSION })),
-						ubDescEl = el('div', { class: 'ub-desc' }, t('ub_dsc'))
+						ubTitleEl = el('div', { class: 'ub-title' }, t('ub_ttl')),
+						el('div', { class: 'ub-ver-row' },
+							ubCurVerEl = el('span', { class: 'ub-ver-badge cur' }, 'v' + VERSION),
+							el('span', { class: 'ub-ver-arrow', 'aria-hidden': 'true' }, '➔'),
+							ubNewVerEl = el('span', { class: 'ub-ver-badge next' }, 'v' + VERSION)
+						)
 					),
 					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': t('ub_ltr'), onclick: () => dismissUpdateBanner() }, icon('close'))
+				),
+				el('div', { class: 'ub-body' },
+					ubWhatsNewEl = el('div', { class: 'ub-whats-new' }, t('ub_whats_new')),
+					ubListEl = el('ul', { class: 'ub-changelog' })
 				),
 				el('div', { class: 'ub-actions' },
 					ubLaterBtn = el('button', { class: 'ub-btn later', type: 'button', onclick: () => dismissUpdateBanner() }, t('ub_ltr')),
@@ -5087,11 +7691,13 @@
 				)
 			);
 			root.appendChild(updateEl);
+			renderUpdateChangelog([]);
 
 			(D.documentElement || D.body).appendChild(host);
 
 			loadFab();
 			updateAvailable = Updater.getAvailable();
+			updateChangelog = Updater.getChangelog ? Updater.getChangelog() : [];
 			applyTheme();
 			applyFab();
 			renderStatus();
@@ -5141,22 +7747,67 @@
 			renderStats();
 		}
 
+		function switchTab(tabId) {
+			const target = (tabId === 'config' || tabId === 'about') ? tabId : 'home';
+			activeTab = target;
+			for (const id of ['home', 'config', 'about']) {
+				if (tabViews[id]) {
+					tabViews[id].classList.toggle('active', id === target);
+				}
+				if (tabBtns[id]) {
+					tabBtns[id].setAttribute('aria-selected', String(id === target));
+				}
+			}
+			if (bodyEl) {
+				try { bodyEl.scrollTop = 0; } catch (e) {}
+			}
+		}
+
 		function buildBody() {
 			if (!bodyEl) return;
 			clear(bodyEl);
+			if (navBarWrapEl) clear(navBarWrapEl);
 
-			bodyEl.appendChild(sectionTitle(t('s_stats')));
+			const navBar = el('div', { class: 'nav-tabs', role: 'tablist', 'aria-label': 'Control Panel Navigation' });
+			tabBtns = {};
+			tabViews = {};
+
+			for (const [id, labelKey] of [
+					['home', 'tabHome'],
+					['config', 'tabConfig'],
+					['about', 'tabAbout']
+				]) {
+				const btn = el('button', {
+					type: 'button',
+					class: 'nav-tab-btn',
+					role: 'tab',
+					'aria-selected': String(activeTab === id),
+					onclick: () => switchTab(id)
+				}, t(labelKey));
+				tabBtns[id] = btn;
+				navBar.appendChild(btn);
+
+				tabViews[id] = el('div', {
+					class: 'tab-view' + (activeTab === id ? ' active' : ''),
+					role: 'tabpanel'
+				});
+			}
+			if (navBarWrapEl) navBarWrapEl.appendChild(navBar);
+			else bodyEl.appendChild(navBar);
+
+			const homeView = tabViews.home;
+			homeView.appendChild(sectionTitle(t('s_stats')));
 			const statSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Stats Mode', style: { marginBottom: '8px' } });
 			segSessionBtn = el('button', { type: 'button', 'aria-pressed': String(statsMode === 'session'), onclick: () => setStatsMode('session') }, t('this_page'));
 			segLifetimeBtn = el('button', { type: 'button', 'aria-pressed': String(statsMode === 'lifetime'), onclick: () => setStatsMode('lifetime') }, t('all_time'));
 			statSeg.appendChild(segSessionBtn);
 			statSeg.appendChild(segLifetimeBtn);
-			bodyEl.appendChild(statSeg);
+			homeView.appendChild(statSeg);
 
 			statsEl = el('div', { class: 'stats' });
-			bodyEl.appendChild(statsEl);
+			homeView.appendChild(statsEl);
 
-			bodyEl.appendChild(sectionTitle(t('s_act')));
+			homeView.appendChild(sectionTitle(t('s_act')));
 			const actions = el('div', { class: 'group icons' });
 
 			actions.appendChild(item({
@@ -5207,31 +7858,12 @@
 				}
 			}));
 			actions.appendChild(item({
-				label: t('clean'),
-				sub: t('clean_s'),
-				tone: 'purple',
-				icon: 'wand',
+				label: t('rules'),
+				sub: t('rules_s'),
+				tone: 'blue',
+				icon: 'copy',
 				chevron: true,
-				onclick: () => {
-					cleanPage();
-					toast(t('ts_cln'));
-				}
-			}));
-			actions.appendChild(item({
-				label: t('rep'),
-				sub: t('rep_s'),
-				tone: 'orange',
-				icon: 'flag',
-				chevron: true,
-				onclick: () => openReportModal()
-			}));
-			actions.appendChild(item({
-				label: t('undo'),
-				sub: t('undo_s'),
-				tone: 'gray',
-				icon: 'undo',
-				chevron: true,
-				onclick: () => undoLast()
+				onclick: () => openRulesModal()
 			}));
 			actions.appendChild(item({
 				label: t('networkRequests'),
@@ -5242,12 +7874,15 @@
 				onclick: () => openNetworkModal()
 			}));
 			actions.appendChild(item({
-				label: t('rules'),
-				sub: t('rules_s'),
-				tone: 'blue',
-				icon: 'copy',
+				label: t('clean'),
+				sub: t('clean_s'),
+				tone: 'purple',
+				icon: 'wand',
 				chevron: true,
-				onclick: () => openRulesModal()
+				onclick: () => {
+					cleanPage();
+					toast(t('ts_cln'));
+				}
 			}));
 			actions.appendChild(item({
 				label: t('peek'),
@@ -5265,9 +7900,18 @@
 				chevron: true,
 				onclick: () => forceUnlockScroll()
 			}));
-			bodyEl.appendChild(actions);
+			actions.appendChild(item({
+				label: t('undo'),
+				sub: t('undo_s'),
+				tone: 'gray',
+				icon: 'undo',
+				chevron: true,
+				onclick: () => undoLast()
+			}));
+			homeView.appendChild(actions);
 
-			bodyEl.appendChild(sectionTitle(t('s_set')));
+			const configView = tabViews.config;
+			configView.appendChild(sectionTitle(t('s_set')));
 			const themeGroup = el('div', { class: 'group pad' });
 			const seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Theme' });
 			segBtns = [];
@@ -5282,7 +7926,7 @@
 				seg.appendChild(b);
 			}
 			themeGroup.appendChild(seg);
-			bodyEl.appendChild(themeGroup);
+			configView.appendChild(themeGroup);
 
 			const langGroup = el('div', { class: 'group pad' });
 			const langSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Language' });
@@ -5304,12 +7948,13 @@
 				langSeg.appendChild(b);
 			}
 			langGroup.appendChild(langSeg);
-			bodyEl.appendChild(langGroup);
+			configView.appendChild(langGroup);
 
-			const swGroup = el('div', { class: 'group' });
+			const swGroup = el('div', { class: 'group', style: { marginTop: '10px' } });
 
-			const createToggleRow = (title, subtitle, isChecked, onChange) => {
-				const row = el('label', { class: 'item' });
+			const createToggleRow = (title, subtitle, isChecked, onChange, opts) => {
+				const disabled = !!(opts && opts.disabled);
+				const row = el('label', { class: 'item' + (disabled ? ' disabled' : '') });
 				const txt = el('span', { class: 'txt' },
 					el('span', { class: 'lbl' }, title),
 					el('span', { class: 'sub' }, subtitle)
@@ -5317,8 +7962,12 @@
 				row.appendChild(txt);
 
 				const inp = el('input', { type: 'checkbox', role: 'switch' });
-				inp.checked = isChecked;
-				inp.addEventListener('change', () => onChange(inp.checked));
+				inp.checked = disabled ? false : isChecked;
+				if (disabled) inp.disabled = true;
+				inp.addEventListener('change', () => {
+					if (disabled) return;
+					onChange(inp.checked);
+				});
 
 				row.appendChild(el('span', { class: 'switch' }, inp, el('span', { class: 'track' })));
 				return row;
@@ -5334,7 +7983,6 @@
 					config.popupProtection = val;
 					config.redirectProtection = val;
 					config.cosmeticFiltering = val;
-					config.antiAdblock = val;
 					saveConfig();
 					refreshProtection();
 					renderStatus();
@@ -5374,9 +8022,59 @@
 				}
 			));
 
-			bodyEl.appendChild(swGroup);
+			const bypassSupported = checkBypassSupport();
+			swGroup.appendChild(createToggleRow(
+				t('featureBypass'),
+				bypassSupported ? t('subBypassSupported') : t('subBypassUnsupported'),
+				bypassSupported && !!config.antiAdblock,
+				(val) => {
+					config.antiAdblock = val;
+					saveConfig();
+					refreshProtection();
+				}, { disabled: !bypassSupported }
+			));
 
-			bodyEl.appendChild(sectionTitle(t('s_bak')));
+			configView.appendChild(swGroup);
+
+			const aboutView = tabViews.about;
+			aboutView.appendChild(sectionTitle(t('systemStatus')));
+			const compatGroup = el('div', { class: 'compat-group' });
+			const createSysRow = (label, valText, toneClass) => {
+				return el('div', { class: 'compat-row' },
+					el('div', { class: 'compat-info' }, el('span', { class: 'compat-name' }, label)),
+					el('span', { class: 'compat-badge ' + (toneClass || 'supported') }, valText)
+				);
+			};
+			compatGroup.append(
+				createSysRow(
+					t('sysPlatform'),
+					isAppleDevice() ? t('sysPlatformIOS') : t('sysPlatformStd'),
+					'neutral'
+				),
+				createSysRow(
+					t('featureBypass'),
+					bypassSupported ? t('statusSupported') : t('statusUnsupported'),
+					bypassSupported ? 'supported' : 'unsupported'
+				),
+				createSysRow(
+					t('featureNetwork'),
+					t('statusSupported'),
+					'supported'
+				),
+				createSysRow(
+					t('featurePopup'),
+					t('statusSupported'),
+					'supported'
+				),
+				createSysRow(
+					t('featureOverlay'),
+					t('statusSupported'),
+					'supported'
+				)
+			);
+			aboutView.appendChild(compatGroup);
+
+			aboutView.appendChild(sectionTitle(t('s_bak')));
 			const shareGroup = el('div', { class: 'group icons' });
 			shareGroup.appendChild(item({
 				label: t('exp'),
@@ -5408,9 +8106,9 @@
 					}
 				}
 			}));
-			bodyEl.appendChild(shareGroup);
+			aboutView.appendChild(shareGroup);
 
-			bodyEl.appendChild(sectionTitle(t('s_data')));
+			aboutView.appendChild(sectionTitle(t('s_data')));
 			const data = el('div', { class: 'group' });
 			data.appendChild(item({
 				role: 'upd',
@@ -5456,9 +8154,9 @@
 					onLocationChange();
 				}
 			}));
-			bodyEl.appendChild(data);
+			aboutView.appendChild(data);
 
-			bodyEl.appendChild(sectionTitle(t('s_dbg')));
+			aboutView.appendChild(sectionTitle(t('s_dbg')));
 			const dbg = el('div', { class: 'group icons' });
 			dbg.appendChild(item({
 				label: t('dbg_cp'),
@@ -5476,9 +8174,39 @@
 					}
 				}
 			}));
-			bodyEl.appendChild(dbg);
+			aboutView.appendChild(dbg);
 
-			bodyEl.appendChild(el('div', { class: 'footer' }, 'Nvirya AdGuard X v' + VERSION));
+			aboutView.appendChild(sectionTitle(t('contactAuthor')));
+			const aboutCard = el('div', { class: 'about-card' },
+				el('div', { class: 'about-head' },
+					el('span', { class: 'about-title' }, 'Nvirya AdGuard'),
+					el('span', { class: 'about-ver' }, 'v' + VERSION)
+				),
+				el('div', { class: 'about-desc' }, t('aboutDesc')),
+				el('div', { class: 'about-links' },
+					el('a', {
+						class: 'about-link',
+						href: 'https://t.me/nvirya',
+						target: '_blank',
+						rel: 'noopener noreferrer'
+					}, icon('telegram'), 'Telegram'),
+					el('a', {
+						class: 'about-link',
+						href: 'https://discord.com/users/572814019929571328',
+						target: '_blank',
+						rel: 'noopener noreferrer'
+					}, icon('discord'), 'Discord'),
+					el('button', {
+						type: 'button',
+						class: 'about-link',
+						onclick: () => openReportModal()
+					}, icon('flag'), t('reportBtnShort'))
+				)
+			);
+			aboutView.appendChild(aboutCard);
+			aboutView.appendChild(el('div', { class: 'footer' }, 'Nvirya AdGuard X v' + VERSION));
+
+			bodyEl.append(homeView, configView, aboutView);
 
 			updateThemeUI();
 			renderStatus();
@@ -5501,8 +8229,25 @@
 			if (newBadgeEl) newBadgeEl.classList.toggle('show', !!updateAvailable);
 		}
 
-		function setUpdateAvailable(ver) {
-			updateAvailable = ver || null;
+		function renderUpdateChangelog(items) {
+			if (!ubListEl) return;
+			clear(ubListEl);
+			const list = (Array.isArray(items) && items.length > 0) ?
+				items :
+				[t('ub_def_1'), t('ub_def_2'), t('ub_def_3')];
+			for (let i = 0; i < list.length; i++) {
+				ubListEl.appendChild(el('li', null, String(list[i])));
+			}
+		}
+
+		function setUpdateAvailable(ver, changelog) {
+			if (ver && typeof ver === 'object') {
+				updateAvailable = ver.version || null;
+				if (Array.isArray(ver.changelog)) updateChangelog = ver.changelog;
+			} else {
+				updateAvailable = ver || null;
+				if (Array.isArray(changelog)) updateChangelog = changelog;
+			}
 			applyUpdateBadge();
 			renderUpdateItem();
 		}
@@ -5512,12 +8257,21 @@
 			renderUpdateItem();
 		}
 
-		function showUpdateBanner(ver) {
+		function showUpdateBanner(verOrPayload, optionalChangelog) {
 			if (!updateEl) return;
-			if (ver) setUpdateAvailable(ver);
+			if (verOrPayload) {
+				if (typeof verOrPayload === 'object') {
+					setUpdateAvailable(verOrPayload.version, verOrPayload.changelog);
+				} else {
+					setUpdateAvailable(verOrPayload, optionalChangelog);
+				}
+			}
 			if (!updateAvailable) return;
-			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl', { ver: updateAvailable });
-			if (ubDescEl) ubDescEl.textContent = t('ub_dsc');
+			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl');
+			if (ubCurVerEl) ubCurVerEl.textContent = 'v' + VERSION;
+			if (ubNewVerEl) ubNewVerEl.textContent = 'v' + String(updateAvailable).replace(/^v/i, '');
+			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new');
+			renderUpdateChangelog(updateChangelog);
 			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
 			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
 			updateEl.classList.add('show');
@@ -5627,18 +8381,18 @@
 
 			weekDays.forEach(day => {
 				const pct = day.count > 0 ? Math.max(16, Math.round((day.count / maxVal) * 100)) : 0;
-				const fill = el('div', { 
-					class: 'chart-bar-fill', 
-					style: { height: pct + '%' } 
+				const fill = el('div', {
+					class: 'chart-bar-fill',
+					style: { height: pct + '%' }
 				});
 				const barBg = el('div', { class: 'chart-bar-bg' }, fill);
 				const dayLabel = el('span', { class: 'chart-day' }, day.label);
-				
+
 				let colClass = 'chart-col';
 				if (day.key === activeDayObj.key) colClass += ' active';
 				if (day.isFuture) colClass += ' future';
 
-				const col = el('div', { 
+				const col = el('div', {
 					class: colClass,
 					onclick: (e) => {
 						if (day.isFuture) return;
@@ -5657,10 +8411,8 @@
 
 		function setMenu(open) {
 			if (open) ensureSheetBuilt();
-			if (!sheetEl) return;
+			if (!sheetEl || !backdropEl) return;
 			menuOpen = !!open;
-			sheetEl.classList.toggle('open', menuOpen);
-			backdropEl.classList.toggle('open', menuOpen);
 			if (host) {
 				host.style.pointerEvents = menuOpen ? 'auto' : 'none';
 			}
@@ -5678,8 +8430,28 @@
 				renderStatus();
 				renderStats();
 				updateThemeUI();
+
+				sheetEl.style.visibility = 'visible';
+				backdropEl.style.visibility = 'visible';
+
+				void sheetEl.offsetHeight;
+				void backdropEl.offsetHeight;
+
+				requestAnimationFrame(() => {
+					requestAnimationFrame(() => {
+						if (!menuOpen) return;
+						sheetEl.classList.add('open');
+						backdropEl.classList.add('open');
+						try { sheetEl.focus({ preventScroll: true }); } catch (e) {}
+					});
+				});
+
 				statsTimer = setInterval(renderStats, 1000);
-				try { sheetEl.focus({ preventScroll: true }); } catch (e) {}
+			} else {
+				sheetEl.classList.remove('open');
+				backdropEl.classList.remove('open');
+				sheetEl.style.visibility = '';
+				backdropEl.style.visibility = '';
 			}
 		}
 
@@ -5699,7 +8471,6 @@
 					if (!drag) lastPageScrollAt = Date.now();
 				}, { passive: true, capture: true });
 
-				// Bypass Overlay on FAB Tap (30px radius protection for APK sites)
 				D.addEventListener('pointerdown', (e) => {
 					if (!e.isTrusted || !handleEl || !config.showFloatingButton || menuOpen) return;
 					if (handleEl.classList.contains('hidden') || handleEl.classList.contains('away')) return;
@@ -5956,9 +8727,9 @@
 			);
 
 			reportReasonSelect = el('select', {
-				class: 'report-select',
-				onchange: () => syncReportFormMode()
-			},
+					class: 'report-select',
+					onchange: () => syncReportFormMode()
+				},
 				el('option', { value: 'Missed ad' }, t('rp_m1')),
 				el('option', { value: 'Broken layout' }, t('rp_m2')),
 				el('option', { value: 'Player issue' }, t('rp_m3')),
@@ -6480,24 +9251,314 @@
 			targetRoot.appendChild(pickerBarEl);
 		}
 
+		const PICKER_LOCK_EVENTS = ['click', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'pointerdown', 'pointerup'];
+		let savedWindowOpen = null;
+		let touchstartX = 0,
+			touchstartY = 0,
+			touchstartTime = 0,
+			touchStartedOnTarget = false,
+			touchMovedDuringGesture = false,
+			pickerFlinging = false,
+			boundFlingTarget = null,
+			pickerScrollRaf = 0;
+
+		function isPickerToolbarEvent(e) {
+			if (!e) return false;
+			if (typeof e.composedPath === 'function') {
+				const path = e.composedPath();
+				for (let i = 0; i < path.length; i++) {
+					const n = path[i];
+					if (n === pickerBarEl || n === host) return true;
+					if (n && n.nodeType === 1 && (attr(n, 'data-nvirya-picker') !== null || attr(n, 'data-nvirya-ui') !== null)) {
+						return true;
+					}
+				}
+			}
+			const tNode = e.target;
+			if (tNode && tNode.nodeType === 1) {
+				if (tNode === host || (pickerBarEl && pickerBarEl.contains(tNode)) || hasNviryaAncestor(tNode)) return true;
+			}
+			return false;
+		}
+
+		function isPointOnPickerTarget(clientX, clientY, touchedNode) {
+			if (!pickerTarget || !pickerTarget.isConnected) return false;
+			if (touchedNode && (touchedNode === pickerTarget || (pickerTarget.contains && pickerTarget.contains(touchedNode)))) {
+				return true;
+			}
+			try {
+				const r = pickerTarget.getBoundingClientRect();
+				return clientX >= r.left - 8 && clientX <= r.right + 8 &&
+					clientY >= r.top - 8 && clientY <= r.bottom + 8;
+			} catch (e) {
+				return false;
+			}
+		}
+
+		function updatePickerOverlayPosition() {
+			pickerScrollRaf = 0;
+			if (!pickerActive || pickerFlinging) return;
+			const activeEl = pickerTarget || pickerHover;
+			if (!activeEl || !activeEl.isConnected) {
+				if (pickerEl) pickerEl.style.display = 'none';
+				if (pickerLabelEl) pickerLabelEl.style.display = 'none';
+				return;
+			}
+			let rect;
+			try {
+				rect = activeEl.getBoundingClientRect();
+			} catch (e) {
+				return;
+			}
+			if (!rect || (rect.width <= 0 && rect.height <= 0)) {
+				if (pickerEl) pickerEl.style.display = 'none';
+				if (pickerLabelEl) pickerLabelEl.style.display = 'none';
+				return;
+			}
+			if (pickerEl) {
+				pickerEl.style.display = 'block';
+				pickerEl.style.left = rect.left + 'px';
+				pickerEl.style.top = rect.top + 'px';
+				pickerEl.style.width = rect.width + 'px';
+				pickerEl.style.height = rect.height + 'px';
+			}
+			if (pickerLabelEl) {
+				pickerLabelEl.style.display = 'block';
+				pickerLabelEl.textContent = describe(activeEl);
+				const vw = W.innerWidth || D.documentElement.clientWidth || 360;
+				const vh = W.innerHeight || D.documentElement.clientHeight || 640;
+				const labelTop = rect.top >= 26 ? (rect.top - 22) : Math.min(vh - 26, Math.max(4, rect.bottom + 4));
+				pickerLabelEl.style.left = Math.max(4, Math.min(vw - 160, rect.left)) + 'px';
+				pickerLabelEl.style.top = labelTop + 'px';
+			}
+		}
+
+		function onPickerViewportChange() {
+			if (!pickerActive || pickerFlinging) return;
+			if (pickerEl) pickerEl.style.transition = 'none';
+			updatePickerOverlayPosition();
+			if (!pickerScrollRaf) {
+				pickerScrollRaf = requestAnimationFrame(updatePickerOverlayPosition);
+			}
+		}
+
+		function onTargetFlingStart(e) {
+			if (!pickerActive || pickerFlinging || !e.touches || e.touches.length !== 1) return;
+			const touch = e.touches[0];
+			touchstartX = touch.clientX;
+			touchstartY = touch.clientY;
+			touchstartTime = Date.now();
+			touchMovedDuringGesture = false;
+			const startNode = D.elementFromPoint(touch.clientX, touch.clientY) || e.target;
+			touchStartedOnTarget = isPointOnPickerTarget(touch.clientX, touch.clientY, startNode);
+		}
+
+		function onTargetFlingEnd(e) {
+			if (!pickerActive || pickerFlinging || !e.changedTouches || !e.changedTouches.length) return false;
+			const touch = e.changedTouches[0];
+			const endX = touch.clientX;
+			const endY = touch.clientY;
+			const dx = endX - touchstartX;
+			const dy = endY - touchstartY;
+			const distance = Math.hypot(dx, dy);
+			const time = Math.max(1, Date.now() - touchstartTime);
+			const velocity = distance / time;
+
+			if (pickerTarget && touchStartedOnTarget && (distance > 60 || velocity > 0.4)) {
+				touchStartedOnTarget = false;
+				triggerPickerFling(pickerTarget, dx, dy);
+				return true;
+			}
+			touchStartedOnTarget = false;
+			return false;
+		}
+
+		function bindPickerTargetFling(el) {
+			if (boundFlingTarget && boundFlingTarget !== el) {
+				try {
+					boundFlingTarget.removeEventListener('touchstart', onTargetFlingStart, true);
+					boundFlingTarget.removeEventListener('touchend', onTargetFlingEnd, true);
+				} catch (e) {}
+				boundFlingTarget = null;
+			}
+			if (el && el.nodeType === 1) {
+				boundFlingTarget = el;
+				try {
+					el.addEventListener('touchstart', onTargetFlingStart, { capture: true, passive: false });
+					el.addEventListener('touchend', onTargetFlingEnd, { capture: true, passive: false });
+				} catch (e) {}
+			}
+		}
+
+		function triggerPickerFling(targetEl, dx, dy) {
+			if (!targetEl || pickerFlinging) return;
+			if (isProtectedPlayer(targetEl) && !confirm(t('cf_plr'))) {
+				exitPicker(true);
+				return;
+			}
+			pickerFlinging = true;
+
+			if (pickerEl) pickerEl.style.display = 'none';
+			if (pickerLabelEl) pickerLabelEl.style.display = 'none';
+			if (pickerBarEl) pickerBarEl.style.display = 'none';
+
+			targetEl.style.transition = 'transform .35s cubic-bezier(.2,.8,.2,1), opacity .35s ease';
+			targetEl.style.transform = `translate(${dx * 2.5}px, ${dy * 2.5}px) rotate(${dx > 0 ? 25 : -25}deg)`;
+			targetEl.style.opacity = '0';
+			targetEl.style.pointerEvents = 'none';
+
+			try {
+				if (navigator.vibrate) navigator.vibrate([30, 40]);
+			} catch (e) {}
+
+			toast(t('tossedElement') || 'Đã ném bay phần tử!');
+
+			let completed = false;
+			const finishFling = () => {
+				if (completed) return;
+				completed = true;
+				targetEl.removeEventListener('transitionend', onTransitionEnd);
+				confirmPickerSelection(false);
+				try {
+					targetEl.style.transition = '';
+					targetEl.style.transform = '';
+					targetEl.style.opacity = '';
+					targetEl.style.pointerEvents = '';
+				} catch (e) {}
+			};
+			const onTransitionEnd = (ev) => {
+				if (ev && ev.target !== targetEl) return;
+				finishFling();
+			};
+			targetEl.addEventListener('transitionend', onTransitionEnd);
+			setTimeout(finishFling, 380);
+		}
+
+		function pickerLockdownHandler(e) {
+			if (!pickerActive) return;
+			if (isPickerToolbarEvent(e)) return;
+
+			const type = e.type;
+			if (!pickerFlinging) {
+				if (type === 'touchstart') {
+					onTargetFlingStart(e);
+				} else if (type === 'touchend') {
+					lastPickerTouchAt = Date.now();
+					const flung = onTargetFlingEnd(e);
+					if (!flung && !touchMovedDuringGesture && e.changedTouches && e.changedTouches.length > 0) {
+						const tTouch = e.changedTouches[0];
+						const elAtPoint = D.elementFromPoint(tTouch.clientX, tTouch.clientY);
+						if (elAtPoint && !isNviryaNode(elAtPoint)) {
+							selectElement(elAtPoint);
+						}
+					}
+					touchMovedDuringGesture = false;
+				} else if (type === 'click') {
+					if (Date.now() - lastPickerTouchAt >= 650) {
+						const elAtPoint = D.elementFromPoint(e.clientX, e.clientY);
+						if (elAtPoint && !isNviryaNode(elAtPoint)) {
+							selectElement(elAtPoint);
+						}
+					}
+				}
+			}
+
+			try {
+				const allowScrollStart = (type === 'touchstart' || type === 'pointerdown') && !touchStartedOnTarget;
+				if (!allowScrollStart && e.cancelable !== false) {
+					e.preventDefault();
+				}
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+			} catch (err) {}
+		}
+
+		function resetPickerBarEmptyState() {
+			if (!pickerBarEl) return;
+			if (pickerSliderEl) {
+				pickerSliderEl.min = '0';
+				pickerSliderEl.max = '0';
+				pickerSliderEl.value = '0';
+				pickerSliderEl.disabled = true;
+			}
+			syncPickerSliderVisual(0, 0);
+			const buttons = pickerBarEl.querySelectorAll('button');
+			if (buttons.length >= 2) {
+				buttons[0].disabled = true;
+				buttons[1].disabled = true;
+			}
+			if (blockBtn) blockBtn.disabled = true;
+			if (blockAllBtn) {
+				blockAllBtn.disabled = true;
+				blockAllBtn.style.display = 'none';
+			}
+			pickerBarEl.style.display = 'flex';
+		}
+
 		function enterPicker() {
 			if (!config.elementPicker) return;
 			buildPicker();
 			pickerActive = true;
+			state.pickerActive = true;
+			pickerFlinging = false;
+			touchStartedOnTarget = false;
+			touchMovedDuringGesture = false;
+			try { W.__NVIRYA_PICKER_ACTIVE__ = true; } catch (e) {}
+
+			if (!savedWindowOpen) {
+				savedWindowOpen = W.open;
+			}
+			const blockedOpen = function() {
+				log('BLOCK', 'picker-lock', 'Blocked popup while Element Picker is active');
+				return makeDummyWindow();
+			};
+			try { W.open = blockedOpen; } catch (e) {}
+			try { if (typeof window !== 'undefined' && window !== W) window.open = blockedOpen; } catch (e) {}
+
 			pickerChain = [];
-			pickerEl.style.display = 'block';
-			pickerLabelEl.style.display = 'block';
-			if (pickerBarEl) pickerBarEl.style.display = 'none';
 			pickerTarget = null;
+			pickerHover = null;
+			if (pickerEl) pickerEl.style.display = 'none';
+			if (pickerLabelEl) pickerLabelEl.style.display = 'none';
+			resetPickerBarEmptyState();
+
+			PICKER_LOCK_EVENTS.forEach((evt) => {
+				W.addEventListener(evt, pickerLockdownHandler, { capture: true, passive: false });
+				D.addEventListener(evt, pickerLockdownHandler, { capture: true, passive: false });
+			});
 			D.addEventListener('mousemove', pickerMove, true);
-			D.addEventListener('click', pickerClick, true);
-			D.addEventListener('touchmove', pickerTouchMove, true);
-			D.addEventListener('touchend', pickerTouchEnd, true);
+			D.addEventListener('touchmove', pickerTouchMove, { capture: true, passive: false });
+			W.addEventListener('scroll', onPickerViewportChange, { capture: true, passive: true });
+			D.addEventListener('scroll', onPickerViewportChange, { capture: true, passive: true });
+			W.addEventListener('resize', onPickerViewportChange, { capture: true, passive: true });
+			try {
+				if (W.visualViewport) {
+					W.visualViewport.addEventListener('scroll', onPickerViewportChange, { passive: true });
+					W.visualViewport.addEventListener('resize', onPickerViewportChange, { passive: true });
+				}
+			} catch (e) {}
 			toast(t('ts_pick'));
 		}
 
 		function exitPicker(silent) {
 			pickerActive = false;
+			state.pickerActive = false;
+			pickerFlinging = false;
+			touchStartedOnTarget = false;
+			touchMovedDuringGesture = false;
+			if (pickerScrollRaf) {
+				cancelAnimationFrame(pickerScrollRaf);
+				pickerScrollRaf = 0;
+			}
+			bindPickerTargetFling(null);
+			try { W.__NVIRYA_PICKER_ACTIVE__ = false; } catch (e) {}
+
+			if (savedWindowOpen) {
+				try { W.open = savedWindowOpen; } catch (e) {}
+				try { if (typeof window !== 'undefined' && window !== W) window.open = savedWindowOpen; } catch (e) {}
+				savedWindowOpen = null;
+			}
+
 			pickerChain = [];
 			if (pickerSliderEl) {
 				pickerSliderEl.min = '0';
@@ -6509,10 +9570,23 @@
 			if (pickerLabelEl) pickerLabelEl.style.display = 'none';
 			if (pickerBarEl) pickerBarEl.style.display = 'none';
 			pickerTarget = null;
+			pickerHover = null;
+
+			PICKER_LOCK_EVENTS.forEach((evt) => {
+				W.removeEventListener(evt, pickerLockdownHandler, true);
+				D.removeEventListener(evt, pickerLockdownHandler, true);
+			});
 			D.removeEventListener('mousemove', pickerMove, true);
-			D.removeEventListener('click', pickerClick, true);
 			D.removeEventListener('touchmove', pickerTouchMove, true);
-			D.removeEventListener('touchend', pickerTouchEnd, true);
+			W.removeEventListener('scroll', onPickerViewportChange, true);
+			D.removeEventListener('scroll', onPickerViewportChange, true);
+			W.removeEventListener('resize', onPickerViewportChange, true);
+			try {
+				if (W.visualViewport) {
+					W.visualViewport.removeEventListener('scroll', onPickerViewportChange);
+					W.visualViewport.removeEventListener('resize', onPickerViewportChange);
+				}
+			} catch (e) {}
 			if (!silent) toast(t('ts_pclose'));
 		}
 
@@ -6532,6 +9606,7 @@
 			}
 			pickerTarget = el;
 			pickerHover = el;
+			bindPickerTargetFling(el);
 			const chainIdx = Math.max(0, pickerChain.indexOf(el));
 			const maxIdx = Math.max(0, pickerChain.length - 1);
 			if (pickerSliderEl) {
@@ -6542,14 +9617,8 @@
 			}
 			syncPickerSliderVisual(chainIdx, maxIdx);
 
-			const rect = el.getBoundingClientRect();
-			pickerEl.style.left = rect.left + 'px';
-			pickerEl.style.top = rect.top + 'px';
-			pickerEl.style.width = rect.width + 'px';
-			pickerEl.style.height = rect.height + 'px';
-			pickerLabelEl.textContent = describe(el);
-			pickerLabelEl.style.left = Math.max(4, rect.left) + 'px';
-			pickerLabelEl.style.top = Math.max(4, rect.top - 22) + 'px';
+			if (pickerEl) pickerEl.style.transition = 'all .06s ease';
+			updatePickerOverlayPosition();
 
 			const buttons = pickerBarEl ? pickerBarEl.querySelectorAll('button') : [];
 			if (buttons.length >= 2) {
@@ -6558,6 +9627,7 @@
 				buttons[0].disabled = !canGoParent;
 				buttons[1].disabled = !canGoChild;
 			}
+			if (blockBtn) blockBtn.disabled = false;
 
 			const simSel = makeSimilarSelector(el);
 			let simCount = 1;
@@ -6565,6 +9635,7 @@
 				try { simCount = D.querySelectorAll(simSel).length; } catch (e) {}
 			}
 			if (blockAllBtn) {
+				blockAllBtn.disabled = simCount <= 1;
 				blockAllBtn.textContent = simCount > 1 ? `${t('p_all')} (${simCount})` : t('p_all');
 				blockAllBtn.style.display = simCount > 1 ? 'inline-flex' : 'none';
 			}
@@ -6575,50 +9646,30 @@
 		}
 
 		function pickerMove(e) {
-			if (!pickerActive) return;
+			if (!pickerActive || pickerFlinging) return;
 			if (pickerTarget) return;
-			if (e.composedPath && e.composedPath().indexOf(host) !== -1) return;
+			if (isPickerToolbarEvent(e)) return;
 			const el = D.elementFromPoint(e.clientX, e.clientY);
-			if (!el || el === pickerEl || el === pickerLabelEl) return;
-			if (el === pickerHover && pickerTarget) return;
+			if (!el || el === pickerEl || el === pickerLabelEl || isNviryaNode(el)) return;
 			pickerHover = el;
-			const r = el.getBoundingClientRect();
-			pickerEl.style.left = r.left + 'px';
-			pickerEl.style.top = r.top + 'px';
-			pickerEl.style.width = r.width + 'px';
-			pickerEl.style.height = r.height + 'px';
-			pickerLabelEl.textContent = describe(el);
-			pickerLabelEl.style.left = Math.max(4, r.left) + 'px';
-			pickerLabelEl.style.top = Math.max(4, r.top - 22) + 'px';
+			if (pickerEl) pickerEl.style.transition = 'all .06s ease';
+			updatePickerOverlayPosition();
 		}
 
 		function pickerTouchMove(e) {
+			if (!pickerActive || pickerFlinging) return;
+			if (isPickerToolbarEvent(e)) return;
 			if (!e.touches || e.touches.length !== 1) return;
-			pickerMove({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY });
-		}
-
-		function pickerTouchEnd(e) {
-			if (e.composedPath && e.composedPath().indexOf(host) !== -1) return;
-			if (!e.changedTouches || !e.changedTouches.length) return;
-			const t = e.changedTouches[0];
-			const el = D.elementFromPoint(t.clientX, t.clientY);
-			if (el) {
-				e.preventDefault();
-				e.stopPropagation();
-				lastPickerTouchAt = Date.now();
-				selectElement(el);
+			const touch = e.touches[0];
+			const dist = Math.hypot(touch.clientX - touchstartX, touch.clientY - touchstartY);
+			if (dist > 10) {
+				touchMovedDuringGesture = true;
 			}
-		}
-
-		function pickerClick(e) {
-			if (!pickerActive) return;
-			if (e.composedPath && e.composedPath().indexOf(host) !== -1) return;
-			e.preventDefault();
-			e.stopPropagation();
-			e.stopImmediatePropagation();
-			if (Date.now() - lastPickerTouchAt < 650) return;
-			const el = D.elementFromPoint(e.clientX, e.clientY);
-			if (el) selectElement(el);
+			if (pickerTarget && touchStartedOnTarget) {
+				if (e.cancelable !== false) e.preventDefault();
+				return;
+			}
+			onPickerViewportChange();
 		}
 
 		function isStableToken(value) {
@@ -6724,8 +9775,13 @@
 
 		function confirmPickerSelection(isAll) {
 			const selected = pickerTarget;
-			if (!selected || !selected.isConnected) { toast(t('ts_gone')); return; }
-			if (isProtectedPlayer(selected) && !confirm(t('cf_plr'))) {
+			const wasFlinging = pickerFlinging;
+			if (!selected || !selected.isConnected) {
+				exitPicker(true);
+				toast(t('ts_gone'));
+				return;
+			}
+			if (!wasFlinging && isProtectedPlayer(selected) && !confirm(t('cf_plr'))) {
 				exitPicker(true);
 				return;
 			}
@@ -6737,8 +9793,10 @@
 				return;
 			}
 
-			const promptMsg = isAll ? t('cf_ball', { sel }) : t('cf_bone', { sel });
-			if (!confirm(promptMsg)) { exitPicker(true); return; }
+			if (!wasFlinging) {
+				const promptMsg = isAll ? t('cf_ball', { sel }) : t('cf_bone', { sel });
+				if (!confirm(promptMsg)) { exitPicker(true); return; }
+			}
 
 			if (!state.siteRules[hostname]) state.siteRules[hostname] = [];
 			state.siteRules[hostname].push({ selector: sel, action: 'hide', created: Date.now() });
@@ -6755,7 +9813,9 @@
 
 			installSiteRulesCSS();
 			scheduleUnlockPageScroll();
-			toast(isAll ? t('ts_ball') : t('ts_bone'));
+			if (!wasFlinging) {
+				toast(isAll ? t('ts_ball') : t('ts_bone'));
+			}
 			exitPicker(true);
 		}
 
@@ -6773,6 +9833,7 @@
 			lines.push('Queue length: ' + pendingQueue.length);
 			lines.push('Stats (Session): ' + JSON.stringify(stats.session));
 			lines.push('Stats (Lifetime): ' + JSON.stringify(stats.lifetime));
+			lines.push('Anti-Adblock Diagnostics: ' + JSON.stringify(AntiAdblockEngine.getDiagnostics()));
 			lines.push('Recent events:');
 			const tail = logRing.slice(-15);
 			for (const e of tail) lines.push('  ' + e.level + ' ' + e.type + ' ' + e.msg + (e.extra ? ' ' + e.extra : ''));
@@ -7189,9 +10250,12 @@
 
 	function refreshProtection() {
 		if (isDisabledHere()) {
+			AntiAdblockEngine.revertAll();
 			if (observer) { try { observer.disconnect(); } catch (e) {} observer = null; }
 			if (cosmeticStyleEl) cosmeticStyleEl.disabled = true;
 		} else {
+			if (!config.antiAdblock) AntiAdblockEngine.revertAll();
+			else AntiAdblockEngine.scheduleBoundedFallbackScans();
 			if (cosmeticStyleEl) cosmeticStyleEl.disabled = false;
 			if (!observer) startObserver();
 			initialScan();
@@ -7262,8 +10326,7 @@
 			initialScan();
 			scheduleVideoAdScan();
 
-			setTimeout(handleAntiAdblock, 1500);
-			setTimeout(handleAntiAdblock, 4000);
+			AntiAdblockEngine.scheduleBoundedFallbackScans();
 
 			installSPAHooks();
 
