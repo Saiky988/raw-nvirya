@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.5.1
+// @version      11.5.2
 // @updateURL    https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @downloadURL  https://raw.nvirya.com/adguard/nvirya-adguard.user.js
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
@@ -21,18 +21,17 @@
 // @connect      *
 // @run-at       document-start
 // @all-frames   true
-// @changelog    Fixed YouTube Mobile (m.youtube.com) infinite buffering & blank feed by whitelisting video CDNs and bypassing aggressive DOM/feed hooks.
-// @changelog    Integrated non-destructive YouTube Player JSON Pruning (adPlacements, playerAds, adSlots) without mutating browse/feed items.
-// @changelog    Eliminated Action Sheet menu open stutter by removing nested GPU backdrop-filter blur, keeping layers pre-composited, and updating stats in-place.
-// @changelog    Overhauled Vietnamese (vi) & English (en) localization following Apple Human Interface Guidelines.
+// @changelog    Restored YouTube Mobile (m.youtube.com) mid-roll & video ad blocking (ad_break, doubleclick, pagead, and .ytp-skip-ad-button) while keeping video streams and feeds whitelisted.
+// @changelog    Fixed Cloudflare / DDoS security verification failures (e.g. modder.me) by preserving closed Shadow DOMs, allowing same-origin meta-refreshes, and removing destructive fab-overlay-trap deletion.
+// @changelog    Fixed unblocked ad overlays (e.g. speedtest.net) by collapsing floating/sticky ad ancestor containers when inner ad links are removed.
+// @changelog    Optimized mobile CPU & battery performance by caching overlay inspections, skipping SVG/leaf DOM subtrees, and avoiding Error.stack allocations on non-trap events.
 // ==/UserScript==
 /* ==Changelog==
-- Fixed YouTube Mobile (m.youtube.com) infinite buffering & blank feed by whitelisting video CDNs and bypassing aggressive DOM/feed hooks.
-- Integrated non-destructive YouTube Player JSON Pruning (adPlacements, playerAds, adSlots) without mutating browse/feed items.
-- Eliminated Action Sheet menu open stutter by removing nested GPU backdrop-filter blur, keeping layers pre-composited, and updating stats in-place.
-- Overhauled Vietnamese (vi) & English (en) localization following Apple Human Interface Guidelines.
+- Restored YouTube Mobile (m.youtube.com) mid-roll & video ad blocking (ad_break, doubleclick, pagead, and .ytp-skip-ad-button) while keeping video streams and feeds whitelisted.
+- Fixed Cloudflare / DDoS security verification failures (e.g. modder.me) by preserving closed Shadow DOMs, allowing same-origin meta-refreshes, and removing destructive fab-overlay-trap deletion.
+- Fixed unblocked ad overlays (e.g. speedtest.net) by collapsing floating/sticky ad ancestor containers when inner ad links are removed.
+- Optimized mobile CPU & battery performance by caching overlay inspections, skipping SVG/leaf DOM subtrees, and avoiding Error.stack allocations on non-trap events.
 ==/Changelog== */
-
 (function() {
 	'use strict';
 
@@ -40,10 +39,12 @@
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.5.1';
+	const VERSION = '11.5.2';
 	const RE_GOOGLE_CORE_HOST = /(?:^|\.)(?:gstatic\.com|googleusercontent\.com|google\.[a-z.]+)$/i;
 	const RE_YOUTUBE_HOST = /(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$/i;
-	const RE_YOUTUBE_CDN_WHITELIST = /(?:googlevideo\.com|ytimg\.com|youtube\.com\/videoplayback|youtube\.com\/api\/stats|youtube\.com\/youtubei\/|youtube\.com\/ptracking|youtube\.com\/s\/player|yt3\.ggpht\.com|youtube-nocookie\.com|instream\/ad_status\.js|youtube\.com\/pagead\/)/i;
+	const RE_YOUTUBE_AD_ENDPOINT = /(?:youtube\.com\/(?:api\/stats\/ads|pagead\/(?!ad_status)|get_midroll_|pcs\/activeview|youtubei\/v1\/player\/ad_break)|doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google)/i;
+	const RE_YOUTUBE_CDN_WHITELIST = /(?:googlevideo\.com|ytimg\.com|yt3\.ggpht\.com|youtube-nocookie\.com|youtube\.com\/(?:videoplayback|s\/player|yts\/|ptracking|api\/stats\/(?:playback|watchtime|qoe|atr)|youtubei\/v1\/(?!player\/ad_break))|instream\/ad_status\.js)/i;
+	const RE_SECURITY_CHALLENGE = /(?:challenges\.cloudflare\.com|\bcdn-cgi\/(?:challenge-platform|images\/trace)|cf-turnstile|cf_chl_|__cf_chl|hcaptcha\.com|recaptcha\.net|google\.com\/recaptcha|ddos-guard)/i;
 	const SCRIPT_START_TIME = Date.now();
 	const RE_BAIT_ELEMENT = /ads?[-_]?box|adsbygoogle|banner[-_]?ad|ad[-_]?slot|ad[-_]?unit|ad[-_]?placement/i;
 
@@ -55,10 +56,12 @@
 
 		const mwHost = String((W.location && W.location.hostname) || '').toLowerCase();
 		const isYouTube = /(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$/i.test(mwHost);
-		const RE_YT_STREAM_SAFE = /(?:googlevideo\.com|ytimg\.com|youtube\.com\/videoplayback|youtube\.com\/api\/stats|youtube\.com\/youtubei\/|youtube\.com\/ptracking|youtube\.com\/s\/player|yt3\.ggpht\.com|instream\/ad_status\.js|youtube\.com\/pagead\/)/i;
+		const RE_YT_AD_BLOCK = /(?:youtube\.com\/(?:api\/stats\/ads|pagead\/(?!ad_status)|get_midroll_|pcs\/activeview|youtubei\/v1\/player\/ad_break)|doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google)/i;
+		const RE_YT_STREAM_SAFE = /(?:googlevideo\.com|ytimg\.com|yt3\.ggpht\.com|youtube-nocookie\.com|youtube\.com\/(?:videoplayback|s\/player|yts\/|ptracking|api\/stats\/(?:playback|watchtime|qoe|atr)|youtubei\/v1\/(?!player\/ad_break))|instream\/ad_status\.js)/i;
 
 		if (isYouTube) {
-			const YT_PLAYER_ENDPOINT_RE = /youtubei\/v1\/(?:player|watch)(?:[/?#]|$)/;
+			const YT_PLAYER_ENDPOINT_RE = /youtubei\/v1\/(?:player|watch|next)(?:[/?#]|$)/i;
+			const YT_AD_KEYS_FAST_RE = /"(?:adPlacements|playerAds|adSlots|adBreakHeartbeatParams|adBreakRenderer)"/;
 
 			const cleanYoutubePlayerObj = (obj) => {
 				if (!obj || typeof obj !== 'object') return false;
@@ -77,15 +80,30 @@
 						target.adSlots = [];
 						altered = true;
 					}
+					if ('adBreakHeartbeatParams' in target) {
+						delete target.adBreakHeartbeatParams;
+						altered = true;
+					}
+					if ('adBreakRenderer' in target) {
+						delete target.adBreakRenderer;
+						altered = true;
+					}
 				};
 				stripKeys(obj);
 				if (obj.playerResponse && typeof obj.playerResponse === 'object') {
 					stripKeys(obj.playerResponse);
 				}
+				if (Array.isArray(obj.onResponseReceivedEndpoints)) {
+					for (let i = 0; i < obj.onResponseReceivedEndpoints.length; i++) {
+						const ep = obj.onResponseReceivedEndpoints[i];
+						if (ep && typeof ep === 'object') stripKeys(ep);
+					}
+				}
 				return altered;
 			};
 
 			try {
+				W.google_ad_status = 1;
 				let _ytInitialPlayerResponse = W.ytInitialPlayerResponse;
 				if (_ytInitialPlayerResponse && typeof _ytInitialPlayerResponse === 'object') {
 					cleanYoutubePlayerObj(_ytInitialPlayerResponse);
@@ -101,6 +119,34 @@
 			} catch (e) {}
 
 			try {
+				if (typeof W.fetch === 'function' && !W.fetch.__nvirya_yt_mw) {
+					const origYtFetch = W.fetch;
+					const ytFetch = function(input, init) {
+						let urlStr = '';
+						try {
+							urlStr = typeof input === 'string' ? input : (input && input.url) || String(input || '');
+						} catch (e) {}
+						if (urlStr && RE_YT_AD_BLOCK.test(urlStr)) {
+							const isAdBreak = /youtubei\/v1\/player\/ad_break/i.test(urlStr);
+							const body = isAdBreak ? '{}' : '';
+							const ct = isAdBreak ? 'application/json' : 'text/plain';
+							if (typeof Response === 'function') {
+								return Promise.resolve(new Response(body, { status: 200, statusText: 'OK', headers: { 'Content-Type': ct } }));
+							}
+						}
+						const p = origYtFetch.apply(this, arguments);
+						if (!urlStr || !YT_PLAYER_ENDPOINT_RE.test(urlStr)) return p;
+						return p.then((resp) => {
+							try { if (resp) resp.__nvirya_yt_target = true; } catch (e) {}
+							return resp;
+						});
+					};
+					try { Object.defineProperty(ytFetch, '__nvirya_yt_mw', { value: true }); } catch (e) {}
+					W.fetch = ytFetch;
+				}
+			} catch (e) {}
+
+			try {
 				const rProto = W.Response && W.Response.prototype;
 				if (rProto && !rProto.__nvirya_yt_resp) {
 					const origJson = rProto.json;
@@ -108,7 +154,7 @@
 					if (typeof origJson === 'function') {
 						rProto.json = function() {
 							const p = origJson.call(this);
-							if (!YT_PLAYER_ENDPOINT_RE.test(this.url || '')) return p;
+							if (!this.__nvirya_yt_target && !YT_PLAYER_ENDPOINT_RE.test(this.url || '')) return p;
 							return p.then((d) => {
 								try { cleanYoutubePlayerObj(d); } catch (e) {}
 								return d;
@@ -118,9 +164,9 @@
 					if (typeof origText === 'function') {
 						rProto.text = function() {
 							const p = origText.call(this);
-							if (!YT_PLAYER_ENDPOINT_RE.test(this.url || '')) return p;
+							if (!this.__nvirya_yt_target && !YT_PLAYER_ENDPOINT_RE.test(this.url || '')) return p;
 							return p.then((tStr) => {
-								if (typeof tStr !== 'string' || !/"(?:adPlacements|playerAds|adSlots)"/.test(tStr)) return tStr;
+								if (typeof tStr !== 'string' || !YT_AD_KEYS_FAST_RE.test(tStr)) return tStr;
 								try {
 									const o = JSON.parse(tStr);
 									if (cleanYoutubePlayerObj(o)) return JSON.stringify(o);
@@ -137,20 +183,53 @@
 				const XHRProto = W.XMLHttpRequest && W.XMLHttpRequest.prototype;
 				if (XHRProto && !XHRProto.__nvirya_yt_xhr_proto) {
 					const origOpen = XHRProto.open;
+					const origSend = XHRProto.send;
 					const origRespTextDesc = Object.getOwnPropertyDescriptor(XHRProto, 'responseText');
 					const origRespDesc = Object.getOwnPropertyDescriptor(XHRProto, 'response');
 
 					XHRProto.open = function(method, url) {
-						this.__nvirya_yt_url = typeof url === 'string' ? url : String(url || '');
+						const uStr = typeof url === 'string' ? url : String(url || '');
+						this.__nvirya_yt_url = uStr;
 						this.__nvirya_yt_cache = null;
+						this.__nvirya_yt_ad_blocked = Boolean(uStr && RE_YT_AD_BLOCK.test(uStr));
+						if (this.__nvirya_yt_ad_blocked) {
+							try { return origOpen.call(this, method || 'GET', 'data:application/json,%7B%7D'); } catch (e) {}
+						}
 						return origOpen.apply(this, arguments);
+					};
+
+					XHRProto.send = function() {
+						if (this.__nvirya_yt_ad_blocked) {
+							const xhr = this;
+							const emptyJson = '{}';
+							const respVal = xhr.responseType === 'json' ? {} : emptyJson;
+							try {
+								Object.defineProperty(xhr, 'readyState', { configurable: true, get: () => 4 });
+								Object.defineProperty(xhr, 'status', { configurable: true, get: () => 200 });
+								Object.defineProperty(xhr, 'statusText', { configurable: true, get: () => 'OK' });
+								Object.defineProperty(xhr, 'responseText', { configurable: true, get: () => emptyJson });
+								Object.defineProperty(xhr, 'response', { configurable: true, get: () => respVal });
+							} catch (e) {}
+							setTimeout(() => {
+								try {
+									if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange(new Event('readystatechange'));
+									xhr.dispatchEvent(new Event('readystatechange'));
+									if (typeof xhr.onload === 'function') xhr.onload(new Event('load'));
+									xhr.dispatchEvent(new Event('load'));
+									if (typeof xhr.onloadend === 'function') xhr.onloadend(new Event('loadend'));
+									xhr.dispatchEvent(new Event('loadend'));
+								} catch (e) {}
+							}, 1);
+							return;
+						}
+						return origSend.apply(this, arguments);
 					};
 
 					const pruneRawPlayerText = (xhr, raw) => {
 						if (typeof raw !== 'string' || !xhr.__nvirya_yt_url || !YT_PLAYER_ENDPOINT_RE.test(xhr.__nvirya_yt_url)) {
 							return raw;
 						}
-						if (!/"(?:adPlacements|playerAds|adSlots)"/.test(raw)) return raw;
+						if (!YT_AD_KEYS_FAST_RE.test(raw)) return raw;
 						if (xhr.__nvirya_yt_cache && xhr.__nvirya_yt_cache.raw === raw) {
 							return xhr.__nvirya_yt_cache.out;
 						}
@@ -169,6 +248,7 @@
 							configurable: true,
 							enumerable: origRespTextDesc.enumerable,
 							get: function() {
+								if (this.__nvirya_yt_ad_blocked) return '{}';
 								const raw = origRespTextDesc.get.call(this);
 								if (this.responseType && this.responseType !== '' && this.responseType !== 'text') return raw;
 								return pruneRawPlayerText(this, raw);
@@ -181,6 +261,7 @@
 							configurable: true,
 							enumerable: origRespDesc.enumerable,
 							get: function() {
+								if (this.__nvirya_yt_ad_blocked) return this.responseType === 'json' ? {} : '{}';
 								const res = origRespDesc.get.call(this);
 								if (!this.__nvirya_yt_url || !YT_PLAYER_ENDPOINT_RE.test(this.__nvirya_yt_url)) return res;
 								if (typeof res === 'string') return pruneRawPlayerText(this, res);
@@ -564,10 +645,17 @@
 		ensureVendorGlobalsPopulated();
 		const RE_SHIELD_INLINE = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|znid|zoneid.*\d{5,}|dataset\.zone\s*=|createElement\(['"]script['"]\).*?(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)/i;
 
+		const RE_TRAP_EVENT_TYPES = /^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend|contextmenu|blur|focus|beforeunload)$/i;
+
 		const isAdStack = () => {
 			try {
+				const cs = D.currentScript;
+				if (cs) {
+					const src = cs.src || (cs.getAttribute && cs.getAttribute('src')) || '';
+					if (src) return !/eruda|vconsole|chobitsu|challenge-platform|turnstile/i.test(src) && RE_SHIELD_AD_URL.test(src);
+				}
 				const st = (new Error().stack) || '';
-				if (!st || /eruda|vconsole|chobitsu/i.test(st)) return false;
+				if (!st || /eruda|vconsole|chobitsu|challenge-platform|turnstile|hcaptcha|recaptcha/i.test(st)) return false;
 				return RE_SHIELD_AD_URL.test(st);
 			} catch (e) { return false; }
 		};
@@ -577,13 +665,21 @@
 			const origSI = W.setInterval;
 			if (typeof origST === 'function') {
 				W.setTimeout = function(fn, delay) {
-					if (isAdStack() || (typeof fn === 'string' && RE_SHIELD_INLINE.test(fn))) return 0;
+					if (typeof fn === 'string') {
+						if (RE_SHIELD_INLINE.test(fn)) return 0;
+					} else if (D.currentScript && isAdStack()) {
+						return 0;
+					}
 					return origST.apply(this, arguments);
 				};
 			}
 			if (typeof origSI === 'function') {
 				W.setInterval = function(fn, delay) {
-					if (isAdStack() || (typeof fn === 'string' && RE_SHIELD_INLINE.test(fn))) return 0;
+					if (typeof fn === 'string') {
+						if (RE_SHIELD_INLINE.test(fn)) return 0;
+					} else if (D.currentScript && isAdStack()) {
+						return 0;
+					}
 					return origSI.apply(this, arguments);
 				};
 			}
@@ -593,7 +689,7 @@
 			const origAEL = W.EventTarget && W.EventTarget.prototype && W.EventTarget.prototype.addEventListener;
 			if (typeof origAEL === 'function') {
 				W.EventTarget.prototype.addEventListener = function(type, listener, options) {
-					if (isAdStack()) return;
+					if (RE_TRAP_EVENT_TYPES.test(String(type || '')) && isAdStack()) return;
 					return origAEL.apply(this, arguments);
 				};
 			}
@@ -606,20 +702,13 @@
 				const patchedAttachShadow = function(init) {
 					try {
 						const isOwnUi = this.hasAttribute && (this.hasAttribute('data-nvirya-ui') || this.hasAttribute('data-nvirya-picker'));
-						const idc = ((this.id || '') + ' ' + (typeof this.className === 'string' ? this.className : '')).toLowerCase();
-						const isDevTool = /eruda|__chobitsu|vconsole/i.test(idc);
-						if (!isOwnUi && !isDevTool) {
-							const stack = (new Error().stack) || '';
-							if (RE_SHIELD_AD_URL.test(stack)) {
-								try { this.style.setProperty('display', 'none', 'important');
-									this.remove(); } catch (e) {}
-								const dummyHost = D.createElement('div');
-								return origAttachShadow.call(dummyHost, { mode: 'open' });
-							}
-							const forcedInit = Object.assign({}, init || {}, { mode: 'open' });
-							const sr = origAttachShadow.call(this, forcedInit);
-							try { this.__nvirya_sr = sr; } catch (e) {}
-							return sr;
+						if (!isOwnUi && isAdStack()) {
+							try {
+								this.style.setProperty('display', 'none', 'important');
+								this.remove();
+							} catch (e) {}
+							const dummyHost = D.createElement('div');
+							return origAttachShadow.call(dummyHost, { mode: 'open' });
 						}
 					} catch (e) {}
 					return origAttachShadow.apply(this, arguments);
@@ -724,6 +813,9 @@
 			scriptKillerObs.observe(D, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'data-zone'] });
 			const existingScripts = D.querySelectorAll ? D.querySelectorAll('script') : [];
 			for (let i = 0; i < existingScripts.length; i++) killScriptNode(existingScripts[i]);
+			W.addEventListener('load', () => {
+				setTimeout(() => { try { scriptKillerObs.disconnect(); } catch (e) {} }, 6000);
+			}, { once: true });
 		} catch (e) {}
 
 		try {
@@ -1240,63 +1332,62 @@
 		} catch (e) {}
 	}
 
-	// injectMainWorldShield moved after const/let init
-
 	function isEarlyPageLoad(thresholdMs) {
 		return (Date.now() - SCRIPT_START_TIME) < (thresholdMs || 6000);
 	}
 
+	function isSecurityVerificationPage() {
+		try {
+			if (RE_SECURITY_CHALLENGE.test(location.href || '')) return true;
+			if (D.title && /^(?:Just a moment|Attention Required|Checking your browser|Security Verification|DDoS-Guard|One moment, please)/i.test(D.title.trim())) return true;
+			if (D.querySelector && D.querySelector('#challenge-running, #challenge-stage, #cf-wrapper, .cf-turnstile, iframe[src*="challenges.cloudflare.com"], script[src*="/cdn-cgi/challenge-platform/"]')) return true;
+		} catch (e) {}
+		return false;
+	}
+
+	function isMaliciousMetaRefresh(metaEl) {
+		if (!metaEl || metaEl.nodeType !== 1) return false;
+		if (isSecurityVerificationPage()) return false;
+		try {
+			if (metaEl.closest && metaEl.closest('noscript')) return false;
+		} catch (e) {}
+		const content = String(attr(metaEl, 'content') || metaEl.content || '').trim();
+		if (!content) return false;
+		const urlMatch = content.match(/;\s*url\s*=\s*['"]?([^'"]+?)['"]?\s*$/i);
+		if (!urlMatch || !urlMatch[1]) {
+			return false;
+		}
+		const rawTarget = urlMatch[1].trim();
+		if (!rawTarget || RE_SECURITY_CHALLENGE.test(rawTarget)) return false;
+		const u = safeUrl(rawTarget);
+		if (!u) return false;
+		if (isAdUrl(u)) return true;
+		if (!sameRootDomain(u.hostname, hostname) && !isTrustedPopupHost(u.hostname)) return true;
+		return false;
+	}
+
 	function neutralizeMetaRefresh(node) {
-		if (!node) return;
+		if (!node || isSecurityVerificationPage()) return;
 		try {
 			const isMeta = node.nodeType === 1 && String(node.tagName || '').toLowerCase() === 'meta';
 			const metas = isMeta ? [node] : (node.querySelectorAll ? node.querySelectorAll('meta[http-equiv]') : []);
 			for (let i = 0; i < metas.length; i++) {
 				const m = metas[i];
 				const equiv = (attr(m, 'http-equiv') || m.httpEquiv || '').trim().toLowerCase();
-				if (equiv === 'refresh') {
+				if (equiv === 'refresh' && isMaliciousMetaRefresh(m)) {
+					const c = attr(m, 'content') || '';
 					m.removeAttribute('http-equiv');
 					m.setAttribute('content', '');
 					if (m.parentNode) {
 						try { m.parentNode.removeChild(m); } catch (err) {}
 					}
-					recordBlocked('redirect', 'meta-refresh', 'neutralized');
+					recordBlocked('redirect', 'meta-refresh', c || 'neutralized');
 				}
 			}
 		} catch (e) {}
 	}
 
 	function installEarlyMetaRefreshGuard() {
-		try {
-			const metaProto = W.HTMLMetaElement && W.HTMLMetaElement.prototype;
-			if (metaProto && !metaProto.__nvirya_hooked) {
-				const origSetAttribute = metaProto.setAttribute;
-				metaProto.setAttribute = function(name, val) {
-					if (typeof name === 'string' && name.toLowerCase() === 'http-equiv' && typeof val === 'string' && val.toLowerCase() === 'refresh') {
-						recordBlocked('redirect', 'meta.setAttribute(refresh)', String(val));
-						return;
-					}
-					return origSetAttribute.apply(this, arguments);
-				};
-				const desc = Object.getOwnPropertyDescriptor(metaProto, 'httpEquiv');
-				if (desc && desc.configurable && desc.set) {
-					const origSet = desc.set;
-					Object.defineProperty(metaProto, 'httpEquiv', {
-						configurable: true,
-						set: function(val) {
-							if (typeof val === 'string' && val.toLowerCase() === 'refresh') {
-								recordBlocked('redirect', 'meta.httpEquiv=refresh', String(val));
-								return;
-							}
-							return origSet.call(this, val);
-						},
-						get: desc.get
-					});
-				}
-				metaProto.__nvirya_hooked = true;
-			}
-		} catch (e) {}
-
 		if (D.documentElement) neutralizeMetaRefresh(D.documentElement);
 	}
 
@@ -1460,6 +1551,8 @@
 		} catch (e) {}
 	}
 
+	// early guards moved after const/let init
+
 	const isAppleDevice = () => {
 		const ua = navigator.userAgent || '';
 		const isIOS = /iPad|iPhone|iPod/i.test(ua);
@@ -1543,7 +1636,7 @@
 			td_on: 'Resume Session Protection',
 			td_on_s: 'Turn filtering back on immediately',
 			pick: 'Hide Page Element',
-			pick_s: 'Tap or fling any unwanted element away',
+			pick_s: 'Tap or swipe any unwanted element to hide it',
 			clean: 'Clean Leftover Frames',
 			clean_s: 'Collapse empty ad placeholders immediately',
 			rep: 'Report an Issue',
@@ -1565,7 +1658,7 @@
 			media_s: 'Optimize video players & auto-skip ads',
 			strict: 'Deep Network Filter',
 			strict_s: 'Strictly block tracking & analytics domains',
-			fab: 'Quick Assistive Button',
+			fab: 'Quick Action Button',
 			fab_s: 'Automatically dock to the screen edge',
 			exp: 'Export Filter Rules',
 			exp_s: 'Copy custom site rules to clipboard',
@@ -1611,7 +1704,7 @@
 			statusLimited: 'limited (iOS)',
 			compatLimitedNote: 'Limited on iOS WebKit due to sandbox isolation',
 			aboutContact: 'Direct Contact',
-			aboutDesc: 'A lightweight ad-blocking & navigation-guard engine crafted for mobile browsers.',
+			aboutDesc: 'A lightweight ad-blocking & navigation-guard engine built for mobile browsers.',
 			sysPlatform: 'Platform',
 			sysPlatformIOS: 'iOS Safari (Stay)',
 			sysPlatformStd: 'Android (XBrowser) / Desktop',
@@ -1633,15 +1726,15 @@
 			p_chd: 'Narrow',
 			p_blk: 'Hide Element',
 			p_all: 'Hide All ({count})',
-			ts_pick: 'Tap an element to select, or swipe to toss it away',
+			ts_pick: 'Tap an element to select it, or swipe to hide it',
 			ts_pclose: 'Element picker closed',
 			tossedElement: 'Element hidden',
 			ts_gone: 'Element is no longer on the page',
 			ts_nosel: 'Could not generate a selector for this element',
 			ts_ball: 'Hidden all matching elements',
 			ts_bone: 'Element hidden',
-			ts_wla: 'Added site to allowlist',
-			ts_wlr: 'Resumed protection on this site',
+			ts_wla: 'Site added to allowlist',
+			ts_wlr: 'Protection resumed on this site',
 			ts_tdo: 'Protection resumed for this session',
 			ts_tdf: 'Protection paused for this session',
 			ts_cln: 'Cleaned leftover frames',
@@ -1659,10 +1752,10 @@
 			ts_ud0: 'Nothing to undo',
 			ts_ufail: 'Could not check for updates',
 			ts_ulat: 'You are up to date',
-			ts_wait: 'Please wait {sec}s before sending another report',
+			ts_wait: 'Please wait {sec}s before sending more feedback',
 			ts_nohk: 'Feedback endpoint is not configured',
 			ts_rpok: 'Feedback sent. Thank you!',
-			ts_rperr: 'Could not send report: {msg}',
+			ts_rperr: 'Could not send feedback: {msg}',
 			ts_noexp: 'No custom rules to export yet',
 			ts_exp: 'Copied {count} rules to clipboard',
 			ts_ibad: 'Invalid rule format',
@@ -1699,369 +1792,369 @@
 		},
 		vi: {
 			s_stats: 'Thống kê bảo vệ',
-			s_week: 'Hoạt động trong tuần',
+			s_week: 'Hoạt động tuần này',
 			s_act: 'Thao tác nhanh',
-			s_set: 'Giao diện & Ngôn ngữ',
-			s_bak: 'Sao lưu & Đồng bộ',
-			s_data: 'Dữ liệu & Cập nhật',
+			s_set: 'Giao diện & ngôn ngữ',
+			s_bak: 'Sao lưu & đồng bộ',
+			s_data: 'Dữ liệu & cập nhật',
 			s_dbg: 'Chẩn đoán',
 			this_page: 'Trang này',
-			all_time: 'Tổng cộng',
+			all_time: 'Tất cả',
 			ads_rem: 'Quảng cáo',
-			ads_rem_s: 'Đã dọn sạch',
-			el_hid: 'Khối đã ẩn',
-			pop_blk: 'Cửa sổ bật lên',
-			req_blk: 'Yêu cầu theo dõi',
-			all_pre: 'Tổng cộng: ',
+			ads_rem_s: 'Đã dọn',
+			el_hid: 'Phần tử đã ẩn',
+			pop_blk: 'Pop-up đã chặn',
+			req_blk: 'Trình theo dõi đã chặn',
+			all_pre: 'Tất cả: ',
 			page_pre: 'Trang này: ',
 			today: 'Hôm nay',
 			ads_u: 'quảng cáo',
 			days: 'T2|T3|T4|T5|T6|T7|CN',
 			wl_add: 'Cho phép trang này',
 			wl_add_s: 'Tạm dừng lọc trên tên miền hiện tại',
-			wl_rem: 'Bật lại lọc cho trang này',
-			wl_rem_s: 'Khôi phục chặn quảng cáo trên tên miền này',
-			td_off: 'Tạm dừng trong phiên này',
-			td_off_s: 'Tắt bộ lọc cho đến khi đóng tab',
+			wl_rem: 'Bật lại bảo vệ cho trang này',
+			wl_rem_s: 'Bật lại chặn quảng cáo trên tên miền này',
+			td_off: 'Tạm dừng phiên này',
+			td_off_s: 'Tắt bộ lọc đến khi đóng tab',
 			td_on: 'Tiếp tục bảo vệ phiên này',
-			td_on_s: 'Kích hoạt lại bộ lọc ngay lập tức',
-			pick: 'Chọn phần tử để ẩn',
-			pick_s: 'Chạm chọn hoặc vuốt để ẩn khối bất kỳ',
+			td_on_s: 'Bật lại bộ lọc ngay',
+			pick: 'Ẩn phần tử trên trang',
+			pick_s: 'Chạm hoặc vuốt để ẩn phần tử bất kỳ',
 			clean: 'Dọn khung trống',
-			clean_s: 'Thu gọn ngay các vùng quảng cáo còn sót',
-			rep: 'Báo lỗi hiển thị',
-			rep_s: 'Báo quảng cáo lọt hoặc lỗi giao diện trang',
+			clean_s: 'Thu gọn ngay các khung quảng cáo còn sót',
+			rep: 'Báo lỗi',
+			rep_s: 'Báo quảng cáo bị sót hoặc lỗi bố cục trang',
 			undo: 'Hoàn tác (Ctrl+Z)',
-			undo_s: 'Khôi phục khối vừa ẩn gần nhất',
-			rules: 'Bộ lọc trang này',
-			rules_s: 'Quản lý danh sách các khối đã ẩn thủ công',
-			peek: 'Xem trước trang gốc (3s)',
-			peek_s: 'Tạm thời hiển thị lại các khối đã ẩn',
+			undo_s: 'Khôi phục phần tử vừa ẩn',
+			rules: 'Quy tắc lọc của trang',
+			rules_s: 'Quản lý các phần tử đã ẩn thủ công trên trang này',
+			peek: 'Xem trang gốc (3 giây)',
+			peek_s: 'Hiện tạm thời các phần tử đã ẩn trong 3 giây',
 			unlock: 'Mở khóa cuộn trang',
-			unlock_s: 'Khắc phục lỗi đứng trang do hộp thoại ẩn',
+			unlock_s: 'Khôi phục cuộn trang bị lớp phủ ẩn khóa',
 			t_auto: 'Tự động',
 			t_light: 'Sáng',
 			t_dark: 'Tối',
-			shield: 'Khiên thông minh',
-			shield_s: 'Chặn pop-up, chuyển hướng & bẫy ẩn',
+			shield: 'Lá chắn thông minh',
+			shield_s: 'Chặn pop-up, chuyển hướng và bẫy ẩn',
 			media: 'Bảo vệ video',
-			media_s: 'Tối ưu trình phát & bỏ qua quảng cáo',
+			media_s: 'Tối ưu trình phát video và tự động bỏ qua quảng cáo',
 			strict: 'Lọc kết nối sâu',
-			strict_s: 'Chặn triệt để tên miền theo dõi',
-			fab: 'Nút nổi thao tác nhanh',
-			fab_s: 'Tự động thu gọn vào mép màn hình',
-			exp: 'Xuất bộ lọc tùy chỉnh',
-			exp_s: 'Sao chép danh sách bộ lọc vào bộ nhớ tạm',
-			imp: 'Nhập bộ lọc tùy chỉnh',
-			imp_s: 'Hợp nhất bộ lọc từ chuỗi JSON hoặc Base64',
+			strict_s: 'Chặn triệt để các tên miền theo dõi và phân tích',
+			fab: 'Nút thao tác nhanh',
+			fab_s: 'Tự động thu vào cạnh màn hình',
+			exp: 'Xuất quy tắc lọc',
+			exp_s: 'Sao chép quy tắc tùy chỉnh vào bộ nhớ tạm',
+			imp: 'Nhập quy tắc lọc',
+			imp_s: 'Gộp quy tắc từ JSON hoặc Base64',
 			upd: 'Kiểm tra cập nhật',
 			upd_cur: 'Phiên bản hiện tại v{ver}',
 			upd_new: 'Có bản cập nhật v{remote} (đang dùng v{ver})',
 			upd_chk: 'Đang kiểm tra cập nhật...',
-			rst_cfg: 'Đặt lại mặc định',
-			rst_cfg_s: 'Khôi phục toàn bộ thiết lập ban đầu',
-			clr_st: 'Xóa số liệu thống kê',
-			clr_st_s: 'Đặt lại tất cả bộ đếm bảo vệ về 0',
-			rst_rl: 'Xóa bộ lọc trang này',
-			rst_rl_s: 'Khôi phục mọi khối đã ẩn thủ công trên trang',
-			dbg_cp: 'Sao chép thông tin chẩn đoán',
-			dbg_cp_s: 'Chép nhật ký hệ thống để hỗ trợ kỹ thuật',
-			ub_ttl: 'Đã có bản cập nhật mới',
-			ub_dsc: 'Phiên bản mới giúp tối ưu hiệu năng và bộ lọc quảng cáo.',
+			rst_cfg: 'Đặt lại mọi cài đặt',
+			rst_cfg_s: 'Khôi phục cài đặt bảo vệ mặc định',
+			clr_st: 'Xóa thống kê',
+			clr_st_s: 'Đặt lại mọi bộ đếm về 0',
+			rst_rl: 'Xóa quy tắc của trang',
+			rst_rl_s: 'Khôi phục mọi phần tử đã ẩn thủ công trên trang này',
+			dbg_cp: 'Sao chép nhật ký chẩn đoán',
+			dbg_cp_s: 'Sao chép nhật ký hệ thống và bộ lọc vào bộ nhớ tạm',
+			ub_ttl: 'Có bản cập nhật',
+			ub_dsc: 'Đã có phiên bản mới với quy tắc lọc được cải thiện.',
 			ub_ltr: 'Để sau',
 			ub_now: 'Cập nhật ngay',
-			ub_whats_new: 'Điểm mới trong phiên bản này:',
-			ub_def_1: 'Tối ưu bộ lọc quảng cáo & vượt tường lửa chống adblock.',
-			ub_def_2: 'Tăng tốc độ phản hồi và tự động mở khóa cuộn trang.',
-			ub_def_3: 'Khắc phục lỗi tương thích trình phát video trên di động.',
+			ub_whats_new: 'Có gì mới:',
+			ub_def_1: 'Cải thiện lọc quảng cáo và khả năng tương thích với anti-adblock.',
+			ub_def_2: 'Khởi động nhanh hơn, tự động khôi phục cuộn trang.',
+			ub_def_3: 'Ổn định hơn trên video di động và trang tin tức.',
 			tabHome: 'Tổng quan',
-			tabConfig: 'Cấu hình',
+			tabConfig: 'Cài đặt',
 			tabAbout: 'Giới thiệu',
 			badgeSupported: 'hỗ trợ',
 			badgeUnsupported: 'không hỗ trợ',
-			subBypassSupported: 'Vô hiệu hóa hộp thoại yêu cầu tắt trình chặn',
-			subBypassUnsupported: 'Không khả dụng do giới hạn sandbox trên iOS',
-			systemStatus: 'Tương thích hệ thống',
-			contactAuthor: 'Cộng đồng & Hỗ trợ',
-			systemCompatibility: 'Tương thích hệ thống',
-			featureBypass: 'Vượt tường lửa Adblock',
-			featurePopup: 'Chặn cửa sổ bật lên',
-			featureOverlay: 'Lọc lớp phủ vô hình',
+			subBypassSupported: 'Vô hiệu hóa tường chặn adblock trên trang tin tức',
+			subBypassUnsupported: 'Không khả dụng do giới hạn sandbox của iOS WebKit',
+			systemStatus: 'Khả năng hỗ trợ',
+			contactAuthor: 'Cộng đồng & hỗ trợ',
+			systemCompatibility: 'Khả năng hỗ trợ',
+			featureBypass: 'Vượt chặn anti-adblock',
+			featurePopup: 'Chặn pop-up',
+			featureOverlay: 'Chặn lớp phủ ẩn',
 			featureNetwork: 'Lọc kết nối sâu',
-			featureClipboard: 'Bảo vệ bộ nhớ tạm & thẻ',
+			featureClipboard: 'Bảo vệ bộ nhớ tạm & tiêu điểm',
 			statusSupported: 'hỗ trợ',
 			statusUnsupported: 'không hỗ trợ',
 			statusLimited: 'giới hạn (iOS)',
-			compatLimitedNote: 'Giới hạn bởi cơ chế cô lập sandbox của WebKit iOS',
+			compatLimitedNote: 'Bị giới hạn trên iOS WebKit do cơ chế cô lập sandbox',
 			aboutContact: 'Liên hệ trực tiếp',
-			aboutDesc: 'Trình chặn quảng cáo và bảo vệ điều hướng gọn nhẹ, tối ưu chuyên sâu cho trình duyệt di động.',
+			aboutDesc: 'Trình chặn quảng cáo và bảo vệ điều hướng gọn nhẹ dành cho trình duyệt di động.',
 			sysPlatform: 'Nền tảng',
 			sysPlatformIOS: 'iOS Safari (Stay)',
 			sysPlatformStd: 'Android (XBrowser) / Desktop',
-			reportBtnShort: 'Góp ý / Báo lỗi',
+			reportBtnShort: 'Góp ý',
 			rp_ttl: 'Gửi phản hồi',
-			rp_rsn: 'Phân loại:',
-			rp_m1: 'Quảng cáo chưa bị chặn',
-			rp_m2: 'Lỗi hiển thị trang',
+			rp_rsn: 'Loại:',
+			rp_m1: 'Quảng cáo bị sót',
+			rp_m2: 'Lỗi bố cục trang',
 			rp_m3: 'Lỗi phát video',
 			rp_m4: 'Đề xuất tính năng',
 			rp_m5: 'Khác',
 			rp_nt: 'Chi tiết (tùy chọn):',
-			rp_ph: 'Mô tả vị trí quảng cáo hoặc lỗi hiển thị...',
+			rp_ph: 'Mô tả vị trí quảng cáo hoặc lỗi gặp phải...',
 			cancel: 'Hủy',
-			rp_send: 'Gửi phản hồi',
-			rl_empty: 'Chưa có bộ lọc tùy chỉnh nào trên trang này',
-			p_depth: 'Cấp độ {current}/{total}',
+			rp_send: 'Gửi',
+			rl_empty: 'Trang này chưa có quy tắc tùy chỉnh',
+			p_depth: 'Cấp {current}/{total}',
 			p_par: 'Mở rộng',
-			p_chd: 'Thu nhỏ',
-			p_blk: 'Ẩn khối này',
+			p_chd: 'Thu hẹp',
+			p_blk: 'Ẩn phần tử',
 			p_all: 'Ẩn tất cả ({count})',
-			ts_pick: 'Chạm để chọn phần tử, hoặc vuốt nhanh để ẩn',
-			ts_pclose: 'Đã đóng công cụ chọn',
-			tossedElement: 'Đã ẩn khối được chọn',
-			ts_gone: 'Phần tử không còn tồn tại trên trang',
-			ts_nosel: 'Không thể tạo bộ lọc cho phần tử này',
-			ts_ball: 'Đã ẩn tất cả các khối tương tự',
-			ts_bone: 'Đã ẩn khối được chọn',
-			ts_wla: 'Đã cho phép trang web này',
-			ts_wlr: 'Đã bật lại bảo vệ trên trang này',
-			ts_tdo: 'Đã tiếp tục bảo vệ trong phiên này',
-			ts_tdf: 'Đã tạm dừng bảo vệ trong phiên này',
-			ts_cln: 'Đã dọn sạch các khung trống',
-			ts_rst: 'Đã khôi phục thiết lập mặc định',
-			ts_clr: 'Đã xóa số liệu thống kê',
-			ts_rlc: 'Đã xóa bộ lọc của trang này',
-			ts_dbg: 'Đã sao chép thông tin chẩn đoán',
-			ts_con: 'Đã ghi thông tin chẩn đoán ra Console',
+			ts_pick: 'Chạm để chọn phần tử hoặc vuốt để ẩn',
+			ts_pclose: 'Đã đóng bộ chọn phần tử',
+			tossedElement: 'Đã ẩn phần tử',
+			ts_gone: 'Phần tử không còn trên trang',
+			ts_nosel: 'Không thể tạo bộ chọn cho phần tử này',
+			ts_ball: 'Đã ẩn tất cả phần tử khớp',
+			ts_bone: 'Đã ẩn phần tử',
+			ts_wla: 'Đã thêm trang vào danh sách cho phép',
+			ts_wlr: 'Đã bật lại bảo vệ cho trang này',
+			ts_tdo: 'Đã tiếp tục bảo vệ phiên này',
+			ts_tdf: 'Đã tạm dừng bảo vệ phiên này',
+			ts_cln: 'Đã dọn các khung trống',
+			ts_rst: 'Đã khôi phục cài đặt mặc định',
+			ts_clr: 'Đã xóa thống kê',
+			ts_rlc: 'Đã xóa quy tắc của trang này',
+			ts_dbg: 'Đã sao chép nhật ký chẩn đoán',
+			ts_con: 'Đã ghi nhật ký chẩn đoán ra console',
 			ts_ulk: 'Đã mở khóa cuộn trang',
-			ts_pkon: 'Đang xem trước trang gốc (3s)...',
-			ts_pkoff: 'Đã áp dụng lại bộ lọc',
-			ts_rm: 'Đã xóa bộ lọc: {sel}',
-			ts_udo: 'Đã hoàn tác: {sel}',
+			ts_pkon: 'Đang xem trang gốc (3 giây)...',
+			ts_pkoff: 'Đã bật lại bộ lọc',
+			ts_rm: 'Đã xóa quy tắc: {sel}',
+			ts_udo: 'Đã khôi phục: {sel}',
 			ts_udn: 'Đã khôi phục phần tử',
-			ts_ud0: 'Không có thao tác nào để hoàn tác',
-			ts_ufail: 'Không thể kiểm tra bản cập nhật',
-			ts_ulat: 'Bạn đang sử dụng phiên bản mới nhất',
+			ts_ud0: 'Không có gì để hoàn tác',
+			ts_ufail: 'Không thể kiểm tra cập nhật',
+			ts_ulat: 'Bạn đang dùng phiên bản mới nhất',
 			ts_wait: 'Vui lòng đợi {sec} giây trước khi gửi tiếp',
-			ts_nohk: 'Chưa cấu hình máy chủ nhận phản hồi',
+			ts_nohk: 'Chưa cấu hình điểm nhận phản hồi',
 			ts_rpok: 'Đã gửi phản hồi. Cảm ơn bạn!',
 			ts_rperr: 'Không thể gửi phản hồi: {msg}',
-			ts_noexp: 'Chưa có bộ lọc tùy chỉnh nào để xuất',
-			ts_exp: 'Đã sao chép {count} bộ lọc vào bộ nhớ tạm',
-			ts_ibad: 'Định dạng dữ liệu bộ lọc không hợp lệ',
-			ts_imp: 'Đã nhập thêm {count} bộ lọc mới',
-			pr_json: 'Sao chép dữ liệu JSON bên dưới:',
-			pr_imp: 'Dán dữ liệu bộ lọc (JSON hoặc Base64):',
-			cf_rst: 'Khôi phục toàn bộ thiết lập về mặc định?',
-			cf_clr: 'Đặt lại toàn bộ số liệu thống kê về 0?',
-			cf_rl: 'Xóa tất cả các khối đã ẩn thủ công trên trang này?',
-			cf_plr: 'Phần tử này nằm trong trình phát video. Ẩn nó có thể gây gián đoạn phát. Bạn vẫn muốn tiếp tục?',
-			cf_ball: 'Ẩn tất cả các khối tương tự ({sel})?',
-			cf_bone: 'Ẩn khối này?\n\n{sel}',
+			ts_noexp: 'Chưa có quy tắc tùy chỉnh để xuất',
+			ts_exp: 'Đã sao chép {count} quy tắc vào bộ nhớ tạm',
+			ts_ibad: 'Định dạng quy tắc không hợp lệ',
+			ts_imp: 'Đã nhập {count} quy tắc mới',
+			pr_json: 'Sao chép quy tắc JSON:',
+			pr_imp: 'Dán quy tắc (JSON hoặc Base64):',
+			cf_rst: 'Khôi phục mọi cài đặt về mặc định?',
+			cf_clr: 'Đặt lại mọi thống kê về 0?',
+			cf_rl: 'Xóa mọi quy tắc tùy chỉnh của trang này?',
+			cf_plr: 'Phần tử này thuộc trình phát video. Ẩn nó có thể làm gián đoạn phát. Tiếp tục?',
+			cf_ball: 'Ẩn tất cả phần tử khớp ({sel})?',
+			cf_bone: 'Ẩn phần tử này?\n\n{sel}',
 			networkRequests: 'Nhật ký kết nối',
-			networkRequestsSub: 'Kiểm tra và chặn tên miền theo dõi',
+			networkRequestsSub: 'Xem và chặn tên miền bên thứ ba',
 			blockDomain: 'Chặn',
 			unblockDomain: 'Cho phép',
 			blockedBadge: 'Đã chặn',
-			allowedBadge: 'Cho phép',
-			searchDomainPlaceholder: 'Tìm kiếm tên miền...',
+			allowedBadge: 'Đã cho phép',
+			searchDomainPlaceholder: 'Lọc tên miền...',
 			noRequestsYet: 'Chưa ghi nhận kết nối bên thứ ba nào',
 			toastDomainBlocked: 'Đã chặn {domain}',
 			toastDomainUnblocked: 'Đã cho phép {domain}',
 			netFilterAll: 'Tất cả',
 			netClearLog: 'Xóa nhật ký phiên',
-			rep_feat_lbl: 'Nội dung đề xuất:',
-			placeholderFeature: 'Mô tả tính năng hoặc cải tiến bạn mong muốn...',
-			placeholderBug: 'Mô tả vị trí quảng cáo hoặc lỗi hiển thị...',
-			toastEmptyNote: 'Vui lòng nhập nội dung trước khi gửi',
-			syncRemoteRules: 'Đồng bộ từ liên kết ngoài',
-			syncRemoteRulesSub: 'Tự động cập nhật danh sách chặn từ URL',
-			promptSyncUrl: 'Nhập liên kết danh sách chặn (.txt hoặc .json):',
-			toastSyncSuccess: 'Đã đồng bộ thêm {count} tên miền mới',
-			systemBlocked: 'Hệ thống'
+			rep_feat_lbl: 'Đề xuất:',
+			placeholderFeature: 'Mô tả tính năng hoặc cải tiến bạn muốn...',
+			placeholderBug: 'Mô tả vị trí quảng cáo hoặc lỗi gặp phải...',
+			toastEmptyNote: 'Vui lòng nhập mô tả ngắn trước',
+			syncRemoteRules: 'Đồng bộ từ URL',
+			syncRemoteRulesSub: 'Nhập tên miền chặn từ danh sách host thô',
+			promptSyncUrl: 'Nhập URL danh sách thô (.txt hoặc .json):',
+			toastSyncSuccess: 'Đã đồng bộ {count} tên miền mới',
+			systemBlocked: 'Tích hợp sẵn'
 		},
 		'zh-CN': {
-			s_stats: '拦截统计',
-			s_week: '本周活动趋势',
+			s_stats: '防护统计',
+			s_week: '本周活动',
 			s_act: '快捷操作',
-			s_set: '设置',
-			s_bak: '备份与分享规则',
-			s_data: '数据管理',
-			s_dbg: '调试',
-			this_page: '当前页面',
-			all_time: '累计总计',
-			ads_rem: '已移除广告',
+			s_set: '外观与语言',
+			s_bak: '备份与同步',
+			s_data: '存储与更新',
+			s_dbg: '诊断',
+			this_page: '本页',
+			all_time: '累计',
+			ads_rem: '广告',
 			ads_rem_s: '已清理',
 			el_hid: '已隐藏元素',
 			pop_blk: '已拦截弹窗',
-			req_blk: '已拦截请求',
-			all_pre: '累计: ',
-			page_pre: '本页: ',
+			req_blk: '已拦截跟踪器',
+			all_pre: '累计：',
+			page_pre: '本页：',
 			today: '今天',
 			ads_u: '条广告',
 			days: '一|二|三|四|五|六|日',
-			wl_add: '在此网站上停用',
-			wl_add_s: '将该域名加入白名单并放行',
-			wl_rem: '从白名单移除',
-			wl_rem_s: '恢复在此网站上的拦截保护',
-			td_off: '当前会话暂停',
-			td_off_s: '临时暂停本页拦截',
-			td_on: '恢复当前会话保护',
-			td_on_s: '重新开启本页广告拦截',
-			pick: '手动点选拦截',
-			pick_s: '点选页面元素将其隐藏',
-			clean: '立即清理页面',
-			clean_s: '立即隐藏残留广告框架',
-			rep: '反馈漏拦 / 页面错位',
-			rep_s: '报告漏拦广告或显示异常',
-			undo: '撤销上次拦截 (Ctrl+Z)',
-			undo_s: '恢复最近移除或隐藏的元素',
-			rules: '本页自定义规则',
-			rules_s: '查看并管理本页拦截规则',
-			peek: '预览原始页面 (3秒)',
-			peek_s: '临时显示被隐藏元素3秒钟',
+			wl_add: '允许此网站',
+			wl_add_s: '暂停对当前域名的过滤',
+			wl_rem: '恢复此网站的防护',
+			wl_rem_s: '重新启用此域名的广告过滤',
+			td_off: '本次会话暂停',
+			td_off_s: '关闭标签页前停用过滤',
+			td_on: '恢复本次会话防护',
+			td_on_s: '立即重新启用过滤',
+			pick: '隐藏页面元素',
+			pick_s: '点按或滑动即可隐藏任意元素',
+			clean: '清理残留框架',
+			clean_s: '立即折叠空白广告占位',
+			rep: '反馈问题',
+			rep_s: '反馈漏拦广告或页面布局异常',
+			undo: '撤销 (Ctrl+Z)',
+			undo_s: '恢复最近隐藏的元素',
+			rules: '本站过滤规则',
+			rules_s: '管理此网站的自定义隐藏元素',
+			peek: '预览原始页面（3 秒）',
+			peek_s: '临时显示被隐藏的元素 3 秒',
 			unlock: '解除页面滚动锁定',
-			unlock_s: '修复因弹窗拦截导致的无法滚动',
+			unlock_s: '恢复被隐藏遮罩锁定的滚动',
 			t_auto: '自动',
 			t_light: '浅色',
 			t_dark: '深色',
 			shield: '智能护盾',
-			shield_s: '拦截弹窗、自动跳转与隐形广告层',
-			media: '媒体播放器保护',
-			media_s: '保护视频播放器',
-			strict: '严格网络过滤',
-			strict_s: '深度拦截广告请求',
-			fab: '悬浮快捷按钮',
-			fab_s: '在屏幕边缘显示快捷按钮',
-			exp: '导出规则',
+			shield_s: '拦截弹窗、跳转和隐形陷阱',
+			media: '视频保护',
+			media_s: '优化视频播放器并自动跳过广告',
+			strict: '深度网络过滤',
+			strict_s: '严格拦截跟踪和统计域名',
+			fab: '快捷悬浮按钮',
+			fab_s: '自动吸附到屏幕边缘',
+			exp: '导出过滤规则',
 			exp_s: '复制自定义规则到剪贴板',
-			imp: '导入规则',
+			imp: '导入过滤规则',
 			imp_s: '从 JSON 或 Base64 合并规则',
 			upd: '检查更新',
 			upd_cur: '当前版本 v{ver}',
-			upd_new: '发现新版 v{remote} (当前 v{ver})',
-			upd_chk: '正在检查...',
-			rst_cfg: '重置设置',
-			rst_cfg_s: '恢复默认配置选项',
-			clr_st: '清空统计数据',
-			clr_st_s: '将所有拦截计数器归零',
-			rst_rl: '清除本页规则',
-			rst_rl_s: '移除本网站的所有手动规则',
-			dbg_cp: '复制调试信息',
-			dbg_cp_s: '复制诊断日志到剪贴板',
-			ub_ttl: '新版本已就绪！',
-			ub_dsc: '更新可提升广告拦截能力。',
+			upd_new: '发现新版本 v{remote}（当前 v{ver}）',
+			upd_chk: '正在检查更新...',
+			rst_cfg: '重置所有设置',
+			rst_cfg_s: '恢复默认防护设置',
+			clr_st: '清除统计',
+			clr_st_s: '将所有计数归零',
+			rst_rl: '清除本站规则',
+			rst_rl_s: '恢复此网站上所有手动隐藏的元素',
+			dbg_cp: '复制诊断信息',
+			dbg_cp_s: '复制系统和过滤日志到剪贴板',
+			ub_ttl: '发现新版本',
+			ub_dsc: '新版本带来了改进的过滤规则。',
 			ub_ltr: '稍后',
 			ub_now: '立即更新',
-			ub_whats_new: '本次更新内容：',
-			ub_def_1: '优化广告过滤规则并绕过反广告拦截防火墙。',
-			ub_def_2: '提升启动速度与页面滚动自动解锁能力。',
-			ub_def_3: '修复移动网页上的兼容性问题。',
-			tabHome: '首页',
-			tabConfig: '功能',
+			ub_whats_new: '更新内容：',
+			ub_def_1: '改进广告过滤，提升反广告拦截兼容性。',
+			ub_def_2: '启动更快，并可自动恢复页面滚动。',
+			ub_def_3: '提升移动端视频和新闻网站的稳定性。',
+			tabHome: '概览',
+			tabConfig: '设置',
 			tabAbout: '关于',
-			badgeSupported: 'supported',
-			badgeUnsupported: 'unsupported',
-			subBypassSupported: '绕过新闻网站的去广告检测',
-			subBypassUnsupported: '受限于 WebKit iOS 沙盒限制无法使用',
-			systemStatus: '系统兼容性',
+			badgeSupported: '支持',
+			badgeUnsupported: '不支持',
+			subBypassSupported: '绕过新闻网站的反广告拦截墙',
+			subBypassUnsupported: '受 iOS WebKit 沙盒限制，无法使用',
+			systemStatus: '系统功能',
 			contactAuthor: '社区与支持',
-			systemCompatibility: '系统兼容性',
-			featureBypass: 'Bypass Ad Blocker',
-			featurePopup: 'Popup Shield',
-			featureOverlay: 'Stealth Overlay Filter',
-			featureNetwork: 'Strict Network Filter',
-			featureClipboard: 'Clipboard & Visibility',
-			statusSupported: 'supported',
-			statusUnsupported: 'unsupported',
-			statusLimited: 'limited (iOS)',
-			compatLimitedNote: 'Limited on iOS WebKit due to sandbox isolation',
+			systemCompatibility: '系统功能',
+			featureBypass: '绕过反广告拦截',
+			featurePopup: '弹窗护盾',
+			featureOverlay: '隐形遮罩防护',
+			featureNetwork: '深度网络过滤',
+			featureClipboard: '剪贴板与焦点保护',
+			statusSupported: '支持',
+			statusUnsupported: '不支持',
+			statusLimited: '受限 (iOS)',
+			compatLimitedNote: '受 iOS WebKit 沙盒隔离影响，功能受限',
 			aboutContact: '直接联系',
-			aboutDesc: '专为移动端优化的轻量级广告拦截与导航保护引擎。',
-			sysPlatform: '运行平台',
+			aboutDesc: '专为移动浏览器打造的轻量级广告拦截与导航保护引擎。',
+			sysPlatform: '平台',
 			sysPlatformIOS: 'iOS Safari (Stay)',
 			sysPlatformStd: 'Android (XBrowser) / Desktop',
-			reportBtnShort: '反馈 / 建议',
-			rp_ttl: '问题反馈',
-			rp_rsn: '原因:',
-			rp_m1: '广告未拦截',
-			rp_m2: '页面排版错乱',
-			rp_m3: '视频播放异常',
+			reportBtnShort: '反馈',
+			rp_ttl: '发送反馈',
+			rp_rsn: '分类：',
+			rp_m1: '漏拦广告',
+			rp_m2: '页面布局异常',
+			rp_m3: '视频播放问题',
 			rp_m4: '功能建议',
 			rp_m5: '其他',
-			rp_nt: '备注（可选）:',
-			rp_ph: '补充说明广告位置或异常...',
+			rp_nt: '详情（可选）：',
+			rp_ph: '描述广告出现的位置或遇到的问题...',
 			cancel: '取消',
-			rp_send: '提交反馈',
-			rl_empty: '当前页面暂无自定义规则',
+			rp_send: '提交',
+			rl_empty: '此网站暂无自定义过滤规则',
 			p_depth: '层级 {current}/{total}',
 			p_par: '扩大',
 			p_chd: '缩小',
-			p_blk: '隐藏此项',
-			p_all: '隐藏全部 ({count})',
-			ts_pick: '请点选要拦截的元素',
-			ts_pclose: '已退出选择器',
-			tossedElement: '已抛飞并拦截该元素！',
-			ts_gone: '该元素已不在页面中',
-			ts_nosel: '无法生成选择器',
-			ts_ball: '已拦截所有同类元素',
-			ts_bone: '已拦截该元素',
-			ts_wla: '已加入网站白名单',
-			ts_wlr: '已从白名单移除',
-			ts_tdo: '已恢复当前会话保护',
-			ts_tdf: '已在当前会话暂停保护',
-			ts_cln: '页面清理完成',
-			ts_rst: '设置已重置',
-			ts_clr: '统计已清空',
-			ts_rlc: '本页规则已清除',
-			ts_dbg: '调试信息已复制',
-			ts_con: '已输出至控制台',
-			ts_ulk: '页面滚动已解锁',
-			ts_pkon: '正在临时预览原始页面 (3秒)...',
-			ts_pkoff: '已恢复过滤规则',
-			ts_rm: '已移除: {sel}',
-			ts_udo: '已撤销: {sel}',
+			p_blk: '隐藏元素',
+			p_all: '全部隐藏 ({count})',
+			ts_pick: '点按选择元素，或滑动将其隐藏',
+			ts_pclose: '已关闭元素选择器',
+			tossedElement: '已隐藏元素',
+			ts_gone: '该元素已不在页面上',
+			ts_nosel: '无法为该元素生成选择器',
+			ts_ball: '已隐藏所有匹配元素',
+			ts_bone: '已隐藏元素',
+			ts_wla: '已将网站加入白名单',
+			ts_wlr: '已恢复此网站的防护',
+			ts_tdo: '已恢复本次会话防护',
+			ts_tdf: '已暂停本次会话防护',
+			ts_cln: '已清理残留框架',
+			ts_rst: '已恢复默认设置',
+			ts_clr: '统计已清除',
+			ts_rlc: '已清除此网站的自定义规则',
+			ts_dbg: '诊断信息已复制到剪贴板',
+			ts_con: '诊断信息已输出到控制台',
+			ts_ulk: '已解除页面滚动锁定',
+			ts_pkon: '正在预览原始页面（3 秒）...',
+			ts_pkoff: '已恢复过滤',
+			ts_rm: '已移除规则：{sel}',
+			ts_udo: '已恢复：{sel}',
 			ts_udn: '已恢复元素',
 			ts_ud0: '没有可撤销的操作',
-			ts_ufail: '检查更新失败',
-			ts_ulat: '当前已是最新版本！',
-			ts_wait: '请等待 {sec} 秒后再试',
-			ts_nohk: '未配置有效 Webhook',
-			ts_rpok: '反馈发送成功！感谢。',
-			ts_rperr: '发送失败: {msg}',
+			ts_ufail: '无法检查更新',
+			ts_ulat: '已是最新版本',
+			ts_wait: '请等待 {sec} 秒后再发送',
+			ts_nohk: '未配置反馈接口',
+			ts_rpok: '反馈已发送，谢谢！',
+			ts_rperr: '发送反馈失败：{msg}',
 			ts_noexp: '暂无可导出的自定义规则',
-			ts_exp: '已复制 {count} 条 JSON 规则！',
+			ts_exp: '已复制 {count} 条规则到剪贴板',
 			ts_ibad: '规则格式无效',
-			ts_imp: '成功合并 {count} 条新规则！',
-			pr_json: '复制 JSON 规则:',
-			pr_imp: '粘贴规则（JSON 或 Base64）:',
-			cf_rst: '确定将设置恢复为默认值？',
-			cf_clr: '确定清空所有统计数据？',
-			cf_rl: '确定清除本页所有手动规则？',
-			cf_plr: '该元素属于媒体播放器，拦截可能导致异常。是否继续？',
-			cf_ball: '确定拦截所有同类元素 ({sel})？',
-			cf_bone: '确定拦截该元素？\n\n{sel}',
-			networkRequests: '网络请求日志',
-			networkRequestsSub: '检查并手动屏蔽可疑域名',
-			blockDomain: '屏蔽',
-			unblockDomain: '解封',
-			blockedBadge: '已屏蔽',
+			ts_imp: '已导入 {count} 条新规则',
+			pr_json: '复制 JSON 规则：',
+			pr_imp: '粘贴规则（JSON 或 Base64）：',
+			cf_rst: '确定恢复所有默认设置？',
+			cf_clr: '确定将所有统计清零？',
+			cf_rl: '确定移除此网站的所有自定义规则？',
+			cf_plr: '该元素属于视频播放器，隐藏后可能中断播放。是否继续？',
+			cf_ball: '隐藏所有匹配元素 ({sel})？',
+			cf_bone: '隐藏此元素？\n\n{sel}',
+			networkRequests: '连接日志',
+			networkRequestsSub: '查看并拦截第三方域名',
+			blockDomain: '拦截',
+			unblockDomain: '允许',
+			blockedBadge: '已拦截',
 			allowedBadge: '已允许',
-			searchDomainPlaceholder: '搜索域名...',
-			noRequestsYet: '暂无请求记录',
-			toastDomainBlocked: '已屏蔽域名: {domain}',
-			toastDomainUnblocked: '已解封域名: {domain}',
+			searchDomainPlaceholder: '筛选域名...',
+			noRequestsYet: '尚未记录第三方连接',
+			toastDomainBlocked: '已拦截 {domain}',
+			toastDomainUnblocked: '已允许 {domain}',
 			netFilterAll: '全部',
-			netClearLog: '清空会话日志',
-			rep_feat_lbl: '功能描述:',
-			placeholderFeature: '请详细描述您希望添加的功能或建议...',
-			placeholderBug: '描述广告位置或遇到的问题...',
-			toastEmptyNote: '请输入建议内容',
-			syncRemoteRules: '从原始链接同步',
-			syncRemoteRulesSub: '自动从外部列表获取并屏蔽域名',
-			promptSyncUrl: '输入原始规则链接 (.txt 或 .json):',
-			toastSyncSuccess: '成功同步并屏蔽了 {count} 个新域名！',
-			systemBlocked: '自动屏蔽'
+			netClearLog: '清除会话日志',
+			rep_feat_lbl: '建议：',
+			placeholderFeature: '描述你希望新增或改进的功能...',
+			placeholderBug: '描述广告出现的位置或遇到的问题...',
+			toastEmptyNote: '请先填写简要说明',
+			syncRemoteRules: '从远程 URL 同步',
+			syncRemoteRulesSub: '从原始 host 列表导入拦截域名',
+			promptSyncUrl: '输入原始列表 URL (.txt 或 .json)：',
+			toastSyncSuccess: '已同步 {count} 个新域名',
+			systemBlocked: '内置'
 		}
 	};
 
@@ -2745,7 +2838,7 @@
 		}, true);
 	} catch (e) {}
 
-// network/script guards moved after const/let init
+	// network/script guards moved after const/let init
 
 	function safeUrl(input) {
 		if (!input) return null;
@@ -2809,14 +2902,17 @@
 
 	function isYouTubeWhitelistedRequest(uOrStr) {
 		if (!uOrStr) return false;
-		if (typeof uOrStr === 'string') {
-			return RE_YOUTUBE_CDN_WHITELIST.test(uOrStr);
+		const s = typeof uOrStr === 'string' ? uOrStr : String(uOrStr.href || '');
+		if (RE_YOUTUBE_AD_ENDPOINT.test(s) || RE_SECURITY_CHALLENGE.test(s)) {
+			return RE_SECURITY_CHALLENGE.test(s);
 		}
-		const h = String(uOrStr.hostname || '').toLowerCase();
-		if (/(?:^|\.)(?:googlevideo\.com|ytimg\.com|yt3\.ggpht\.com|youtube-nocookie\.com)$/i.test(h)) {
-			return true;
+		if (typeof uOrStr === 'object' && uOrStr.hostname) {
+			const h = String(uOrStr.hostname).toLowerCase();
+			if (/(?:^|\.)(?:googlevideo\.com|ytimg\.com|yt3\.ggpht\.com|youtube-nocookie\.com)$/i.test(h)) {
+				return true;
+			}
 		}
-		return RE_YOUTUBE_CDN_WHITELIST.test(String(uOrStr.href || ''));
+		return RE_YOUTUBE_CDN_WHITELIST.test(s);
 	}
 
 	function isGoogleCoreHost(host) {
@@ -2835,10 +2931,13 @@
 
 	function isAdUrl(u) {
 		if (!u) return false;
+		const href = String(u.href || '');
+		if (RE_SECURITY_CHALLENGE.test(href)) return false;
+		if (RE_YOUTUBE_AD_ENDPOINT.test(href)) return true;
 		if (isYouTubeWhitelistedRequest(u)) return false;
 		const h = u.hostname.toLowerCase();
 		const p = u.pathname.toLowerCase();
-		if (isYouTubeDomain(hostname) && isYouTubeDomain(h)) return false;
+		if (isYouTubeDomain(h)) return false;
 		if (isCustomBlockedHost(h)) return true;
 		if (isGoogleCoreHost(h)) return false;
 		if (RE_GAMBLING_HOST.test(h)) return true;
@@ -2973,23 +3072,40 @@
 		return makeDummyWindow();
 	}
 
+	const RE_GUARDED_EVENT_TYPES = /^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend|contextmenu|blur|focus|beforeunload)$/i;
+
 	function isAdCallStack() {
 		try {
+			if (isYouTubeDomain(hostname)) return false;
+			const cs = D.currentScript;
+			if (cs) {
+				const src = cs.src || attr(cs, 'src') || '';
+				if (src) {
+					if (/eruda|vconsole|chobitsu|challenge-platform|turnstile/i.test(src)) return false;
+					return RE_AD_STACK.test(src) || /wingsmob/i.test(src);
+				}
+			}
 			const stack = (new Error().stack) || '';
-			if (!stack || /eruda|vconsole|chobitsu/i.test(stack)) return false;
-			return RE_AD_STACK.test(stack) || /wingsmob|cloudfront/i.test(stack);
+			if (!stack || /eruda|vconsole|chobitsu|challenge-platform|turnstile|hcaptcha|recaptcha/i.test(stack)) return false;
+			return RE_AD_STACK.test(stack) || /wingsmob/i.test(stack);
 		} catch (e) {
 			return false;
 		}
 	}
 
 	function installEventListenerGuard() {
+		if (isYouTubeDomain(hostname)) return;
 		try {
 			const origAEL = EventTarget.prototype.addEventListener;
 			if (typeof origAEL === 'function' && !origAEL.__nvirya) {
 				const guardedAEL = function(type, listener, options) {
 					try {
-						if (config.enabled && !isDisabledHere() && isAdCallStack()) {
+						if (
+							config.enabled &&
+							!isDisabledHere() &&
+							RE_GUARDED_EVENT_TYPES.test(String(type || '')) &&
+							isAdCallStack()
+						) {
 							log('BLOCK', 'event-trap', 'Defused ad listener via stack:', type);
 							return;
 						}
@@ -3006,8 +3122,12 @@
 			if (typeof origST === 'function' && !origST.__nvirya) {
 				const guardedST = function(fn, delay) {
 					try {
-						if (config.enabled && !isDisabledHere() && (isAdCallStack() || (typeof fn === 'string' && RE_INLINE_AD_SCRIPT.test(fn)))) {
-							return 0;
+						if (config.enabled && !isDisabledHere()) {
+							if (typeof fn === 'string') {
+								if (RE_INLINE_AD_SCRIPT.test(fn)) return 0;
+							} else if (D.currentScript && isAdCallStack()) {
+								return 0;
+							}
 						}
 					} catch (err) {}
 					return origST.apply(this, arguments);
@@ -3019,8 +3139,12 @@
 			if (typeof origSI === 'function' && !origSI.__nvirya) {
 				const guardedSI = function(fn, delay) {
 					try {
-						if (config.enabled && !isDisabledHere() && (isAdCallStack() || (typeof fn === 'string' && RE_INLINE_AD_SCRIPT.test(fn)))) {
-							return 0;
+						if (config.enabled && !isDisabledHere()) {
+							if (typeof fn === 'string') {
+								if (RE_INLINE_AD_SCRIPT.test(fn)) return 0;
+							} else if (D.currentScript && isAdCallStack()) {
+								return 0;
+							}
 						}
 					} catch (err) {}
 					return origSI.apply(this, arguments);
@@ -3422,19 +3546,14 @@
 				const origAttach = elProto.attachShadow;
 				const guardedAttach = function(init) {
 					try {
-						if (!isNviryaNode(this) && config.enabled && !isDisabledHere()) {
-							const stack = (new Error().stack) || '';
-							if (isAdCallStack()) {
-								log('BLOCK', 'shadow-ad', 'Blocked adware attachShadow via stack');
-								try { this.style.setProperty('display', 'none', 'important');
-									this.remove(); } catch (e) {}
-								const dummy = D.createElement('div');
-								return origAttach.call(dummy, { mode: 'open' });
-							}
-							const forced = Object.assign({}, init || {}, { mode: 'open' });
-							const sr = origAttach.call(this, forced);
-							try { this.__nvirya_sr = sr; } catch (e) {}
-							return sr;
+						if (!isNviryaNode(this) && config.enabled && !isDisabledHere() && isAdCallStack()) {
+							log('BLOCK', 'shadow-ad', 'Blocked adware attachShadow via stack');
+							try {
+								this.style.setProperty('display', 'none', 'important');
+								this.remove();
+							} catch (e) {}
+							const dummy = D.createElement('div');
+							return origAttach.call(dummy, { mode: 'open' });
 						}
 					} catch (e) {}
 					return origAttach.apply(this, arguments);
@@ -3541,28 +3660,6 @@
 		} catch (e) {}
 
 		try {
-			const fastObs = new MutationObserver((mutations) => {
-				if (!config.enabled || isDisabledHere()) return;
-				for (let i = 0; i < mutations.length; i++) {
-					const m = mutations[i];
-					if (m.type === 'attributes') {
-						neutralizeScriptNode(m.target);
-						continue;
-					}
-					const added = m.addedNodes;
-					for (let j = 0; j < added.length; j++) {
-						const n = added[j];
-						if (!n || n.nodeType !== 1) continue;
-						if (String(n.tagName || '').toLowerCase() === 'script') {
-							neutralizeScriptNode(n);
-						} else if (n.querySelectorAll) {
-							const scripts = n.querySelectorAll('script');
-							for (let k = 0; k < scripts.length; k++) neutralizeScriptNode(scripts[k]);
-						}
-					}
-				}
-			});
-			fastObs.observe(D, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'data-zone'] });
 			const existing = D.querySelectorAll ? D.querySelectorAll('script') : [];
 			for (let i = 0; i < existing.length; i++) neutralizeScriptNode(existing[i]);
 		} catch (e) {}
@@ -4066,10 +4163,24 @@
 				target.adSlots = [];
 				altered = true;
 			}
+			if ('adBreakHeartbeatParams' in target) {
+				delete target.adBreakHeartbeatParams;
+				altered = true;
+			}
+			if ('adBreakRenderer' in target) {
+				delete target.adBreakRenderer;
+				altered = true;
+			}
 		};
 		stripKeys(jsonObj);
 		if (jsonObj.playerResponse && typeof jsonObj.playerResponse === 'object') {
 			stripKeys(jsonObj.playerResponse);
+		}
+		if (Array.isArray(jsonObj.onResponseReceivedEndpoints)) {
+			for (let i = 0; i < jsonObj.onResponseReceivedEndpoints.length; i++) {
+				const ep = jsonObj.onResponseReceivedEndpoints[i];
+				if (ep && typeof ep === 'object') stripKeys(ep);
+			}
 		}
 		return { altered, jsonObj };
 	}
@@ -4078,12 +4189,13 @@
 		if (!isYouTubeDomain(hostname) || W.__nvirya_yt_pruner_installed) return;
 		try { Object.defineProperty(W, '__nvirya_yt_pruner_installed', { value: true }); } catch (e) { W.__nvirya_yt_pruner_installed = true; }
 
-		const YT_PLAYER_RE = /youtubei\/v1\/(?:player|watch)(?:[/?#]|$)/i;
+		const YT_PLAYER_RE = /youtubei\/v1\/(?:player|watch|next)(?:[/?#]|$)/i;
+		const YT_AD_KEYS_RE = /"(?:adPlacements|playerAds|adSlots|adBreakHeartbeatParams|adBreakRenderer)"/;
 
 		try {
 			let _ytInitialPlayerResponse = W.ytInitialPlayerResponse;
 			if (_ytInitialPlayerResponse && typeof _ytInitialPlayerResponse === 'object') {
-				cleanYoutubeJSON(_ytInitialPlayerResponse);
+				if (cleanYoutubeJSON(_ytInitialPlayerResponse).altered) stats.inc('ads');
 			}
 			Object.defineProperty(W, 'ytInitialPlayerResponse', {
 				configurable: true,
@@ -4108,7 +4220,7 @@
 				if (typeof origJson === 'function') {
 					rProto.json = function() {
 						const p = origJson.call(this);
-						if (!YT_PLAYER_RE.test(this.url || '') || !config.enabled || isDisabledHere()) return p;
+						if ((!this.__nvirya_yt_target && !YT_PLAYER_RE.test(this.url || '')) || !config.enabled || isDisabledHere()) return p;
 						return p.then((d) => {
 							try {
 								if (cleanYoutubeJSON(d).altered) stats.inc('ads');
@@ -4120,9 +4232,9 @@
 				if (typeof origText === 'function') {
 					rProto.text = function() {
 						const p = origText.call(this);
-						if (!YT_PLAYER_RE.test(this.url || '') || !config.enabled || isDisabledHere()) return p;
+						if ((!this.__nvirya_yt_target && !YT_PLAYER_RE.test(this.url || '')) || !config.enabled || isDisabledHere()) return p;
 						return p.then((tStr) => {
-							if (typeof tStr !== 'string' || !/"(?:adPlacements|playerAds|adSlots)"/.test(tStr)) return tStr;
+							if (typeof tStr !== 'string' || !YT_AD_KEYS_RE.test(tStr)) return tStr;
 							try {
 								const o = JSON.parse(tStr);
 								const res = cleanYoutubeJSON(o);
@@ -4159,7 +4271,7 @@
 						!config.enabled ||
 						isDisabledHere() ||
 						!YT_PLAYER_RE.test(xhr.__nvirya_yt_url) ||
-						!/"(?:adPlacements|playerAds|adSlots)"/.test(rawText)
+						!YT_AD_KEYS_RE.test(rawText)
 					) {
 						return rawText;
 					}
@@ -4183,6 +4295,7 @@
 						configurable: true,
 						enumerable: origRespTextDesc.enumerable,
 						get: function() {
+							if (this.__nvirya_blocked || this.__nvirya_yt_ad_blocked) return '{}';
 							const raw = origRespTextDesc.get.call(this);
 							if (this.responseType && this.responseType !== '' && this.responseType !== 'text') return raw;
 							return pruneRawText(this, raw);
@@ -4195,6 +4308,7 @@
 						configurable: true,
 						enumerable: origRespDesc.enumerable,
 						get: function() {
+							if (this.__nvirya_blocked || this.__nvirya_yt_ad_blocked) return this.responseType === 'json' ? {} : '{}';
 							const res = origRespDesc.get.call(this);
 							if (!this.__nvirya_yt_url || !YT_PLAYER_RE.test(this.__nvirya_yt_url)) return res;
 							if (typeof res === 'string') return pruneRawText(this, res);
@@ -4216,7 +4330,6 @@
 	function installNetworkGuard() {
 		if (isYouTubeDomain(hostname)) {
 			installYouTubeJsonPruner();
-			return;
 		}
 
 		try {
@@ -4298,12 +4411,20 @@
 					const url = typeof input === 'string' ? input : (input && input.url) || '';
 					try {
 						if (isYouTubeWhitelistedRequest(url)) {
-							return origFetch.apply(this, arguments);
+							const p = origFetch.apply(this, arguments);
+							if (isYouTubeDomain(hostname) && /youtubei\/v1\/(?:player|watch|next)/i.test(url)) {
+								return p.then((resp) => { try { if (resp) resp.__nvirya_yt_target = true; } catch (e) {} return resp; });
+							}
+							return p;
 						}
 						const u = safeUrl(url);
 						if (u) {
-							if (isYouTubeWhitelistedRequest(u) || isYouTubeDomain(u.hostname)) {
-								return origFetch.apply(this, arguments);
+							if (isYouTubeWhitelistedRequest(u)) {
+								const p = origFetch.apply(this, arguments);
+								if (isYouTubeDomain(hostname) && /youtubei\/v1\/(?:player|watch|next)/i.test(u.href)) {
+									return p.then((resp) => { try { if (resp) resp.__nvirya_yt_target = true; } catch (e) {} return resp; });
+								}
+								return p;
 							}
 							const active = config.enabled && !isDisabledHere();
 							const shouldBlock = active && (isAdUrl(u) || (config.strictMode && RE_TRACKER.test(u.hostname)));
@@ -4350,7 +4471,7 @@
 					try {
 						if (!isYouTubeWhitelistedRequest(url)) {
 							const u = safeUrl(url);
-							if (u && !isYouTubeWhitelistedRequest(u) && !isYouTubeDomain(u.hostname)) {
+							if (u && !isYouTubeWhitelistedRequest(u)) {
 								this.__nvirya_url = u.href;
 								const active = config.enabled && !isDisabledHere();
 								const shouldBlock = active && (isAdUrl(u) || (config.strictMode && RE_TRACKER.test(u.hostname)));
@@ -5207,49 +5328,50 @@
 		try { style = W.getComputedStyle(el); } catch (e) { return false; }
 		if (!style) return false;
 		const z = parseInt(style.zIndex, 10);
-		return style.position === 'fixed' || style.position === 'absolute' || (isFinite(z) && z >= 10);
+		return style.position === 'fixed' || style.position === 'sticky' || style.position === 'absolute' || (isFinite(z) && z >= 10);
 	}
 
 	function isFloatingAdModal(el) {
-		if (!el || el.nodeType !== 1) return false;
+		if (!el || el.nodeType !== 1 || isSecurityVerificationPage()) return false;
 		const tag = String(el.tagName || '').toLowerCase();
-		if (tag !== 'div' && tag !== 'section' && tag !== 'dialog') return false;
+		if (tag !== 'div' && tag !== 'section' && tag !== 'dialog' && tag !== 'aside') return false;
 
 		let style, rect;
 		try {
 			style = W.getComputedStyle(el);
+			if (!style || (style.position !== 'fixed' && style.position !== 'sticky' && style.position !== 'absolute')) return false;
+			if (style.display === 'none' || style.visibility === 'hidden') return false;
+			const z = parseInt(style.zIndex, 10);
+			if ((!isFinite(z) || z < 20) && style.position !== 'fixed' && style.position !== 'sticky') return false;
 			rect = el.getBoundingClientRect();
 		} catch (e) { return false; }
-		if (!style || (style.position !== 'fixed' && style.position !== 'absolute')) return false;
-		const z = parseInt(style.zIndex, 10);
-		if (!isFinite(z) || z < 100) return false;
 
 		const vw = W.innerWidth || D.documentElement.clientWidth || 0;
 		const vh = W.innerHeight || D.documentElement.clientHeight || 0;
-		if (!vw || !vh || rect.width <= 150 || rect.height <= 150) return false;
-		if (rect.left < -2 || rect.top < -2 || rect.right > vw + 2 || rect.bottom > vh + 2) return false;
-		if (rect.width * rect.height >= vw * vh * 0.9) return false;
-		const centered = Math.abs((rect.left + rect.width / 2) - vw / 2) <= vw * 0.22 &&
-			Math.abs((rect.top + rect.height / 2) - vh / 2) <= vh * 0.22;
-		if (style.position === 'absolute' && !centered) return false;
+		if (!vw || !vh || rect.width <= 120 || rect.height <= 42) return false;
+		const isStickyBar = (style.position === 'fixed' || style.position === 'sticky') && rect.width >= vw * 0.65 && rect.height >= 44 && rect.height <= 180;
+		if (!isStickyBar && (rect.width <= 150 || rect.height <= 120)) return false;
 
 		if (hasProtectedCleanupContent(el)) return false;
 		const text = meaningfulText(el);
-		if (text.length >= 50) return false;
+		if (text.length >= 60) return false;
+
+		const marked = ((el.id || '') + ' ' + classString(el)).trim();
+		let adEvidence = !!(marked && RE_AD_TOKEN.test(marked)) || !!el.hasAttribute('data-nvirya-ad-child');
+
 		let links = [],
 			media = [];
 		try {
 			links = el.querySelectorAll('a[href]');
-			media = el.querySelectorAll('img,iframe,object,embed');
+			media = el.querySelectorAll('img,iframe,object,embed,ins');
 		} catch (e) {}
-		if (links.length > 2 || media.length > 2 || links.length + media.length === 0) return false;
 
-		let adEvidence = false,
-			untrustedExternalLink = false,
+		if (!adEvidence && links.length + media.length === 0) return false;
+		if (links.length > 4 || media.length > 4) return false;
+
+		let untrustedExternalLink = false,
 			trustedIdentityLink = false;
-		const marked = ((el.id || '') + ' ' + classString(el)).trim();
-		if (RE_AD_TOKEN.test(marked)) adEvidence = true;
-		for (let i = 0; i < Math.min(links.length, 3); i++) {
+		for (let i = 0; i < Math.min(links.length, 4); i++) {
 			const link = links[i];
 			const u = safeUrl(link.href || attr(link, 'href'));
 			const marker = ((link.id || '') + ' ' + classString(link)).trim();
@@ -5257,7 +5379,7 @@
 			if (u && isUntrustedCrossSiteUrl(u)) untrustedExternalLink = true;
 			if (u && isTrustedPopupHost(u.hostname)) trustedIdentityLink = true;
 		}
-		for (let i = 0; i < Math.min(media.length, 3); i++) {
+		for (let i = 0; i < Math.min(media.length, 4); i++) {
 			const item = media[i];
 			const u = safeUrl(attr(item, 'src') || attr(item, 'data-src') || '');
 			const marker = ((item.id || '') + ' ' + classString(item)).trim();
@@ -5266,9 +5388,9 @@
 			if (u && isTrustedPopupHost(u.hostname)) trustedIdentityLink = true;
 		}
 
-		const sparseImageDialog = media.length > 0 && text.length < 15 && containsCloseControl(el);
+		const sparseImageDialog = !isStickyBar && media.length > 0 && text.length < 15 && containsCloseControl(el);
 		if (trustedIdentityLink && !adEvidence) return false;
-		return adEvidence || (media.length > 0 && untrustedExternalLink) || sparseImageDialog;
+		return adEvidence || (media.length > 0 && untrustedExternalLink && containsCloseControl(el)) || sparseImageDialog;
 	}
 
 	function isBackdropFor(backdrop, modal) {
@@ -5325,16 +5447,21 @@
 
 	function pruneAdAncestors(start) {
 		let current = start;
-		for (let depth = 0; current && depth < 4; depth++) {
+		for (let depth = 0; current && depth < 5; depth++) {
 			const tag = String(current.tagName || '').toLowerCase();
-			if (tag === 'body' || tag === 'html' || tag === 'main') break;
+			if (tag === 'body' || tag === 'html' || tag === 'main' || tag === 'article' || tag === 'header' || tag === 'nav') break;
 			const next = current.parentElement;
-			if (!hasProtectedCleanupContent(current) && isFloatingContainer(current) &&
-				isEmptyOrCloseOnly(current, 0)) {
-				removePairedBackdrops(current);
-				if (removeTrackedAdNode(current, 'parent-pruned')) {
-					current = next;
-					continue;
+			try { current.setAttribute('data-nvirya-ad-child', '1'); } catch (e) {}
+			if (!hasProtectedCleanupContent(current)) {
+				const idc = ((current.id || '') + ' ' + classString(current)).trim();
+				const isAdWrap = RE_AD_TOKEN.test(idc) || /ad[-_]?overlay|ad[-_]?modal|ad[-_]?stack|sticky[-_]?ad/i.test(idc);
+				const isFloat = isFloatingContainer(current);
+				if ((isFloat && (isEmptyOrCloseOnly(current, 0) || meaningfulText(current).length <= 24)) || (isAdWrap && meaningfulText(current).length <= 24)) {
+					removePairedBackdrops(current);
+					if (removeTrackedAdNode(current, 'parent-pruned')) {
+						current = next;
+						continue;
+					}
 				}
 			}
 			current = next;
@@ -5425,19 +5552,26 @@
 		return parentTag === 'body' || parentTag === 'html' || !hasNonClosePayload(parent, el);
 	}
 
+	const checkedCleanModals = new WeakSet();
+	const checkedCleanCloseBtns = new WeakSet();
+
 	function cleanupOrphanCloseButtons(root) {
-		if (isDisabledHere()) return;
+		if (isDisabledHere() || isSecurityVerificationPage()) return;
 		let nodes = [];
-		const query = '[class*="close" i],[id*="close" i],[aria-label*="close" i],[aria-label*="dismiss" i],button,[role="button"],span,svg,a,div';
+		const query = '[class*="close" i],[id*="close" i],[aria-label*="close" i],[aria-label*="dismiss" i],button,[role="button"]';
 		try {
 			if (root && root.nodeType === 1 && root.matches && root.matches(query)) nodes.push(root);
 			const found = root && root.querySelectorAll ? root.querySelectorAll(query) : D.querySelectorAll(query);
 			for (let i = 0; i < found.length; i++) nodes.push(found[i]);
 		} catch (e) { return; }
-		const limit = Math.min(nodes.length, 800);
+		const limit = Math.min(nodes.length, 200);
 		for (let i = 0; i < limit; i++) {
 			const el = nodes[i];
-			if (!el || !el.parentNode || !isOrphanCloseButton(el)) continue;
+			if (!el || !el.parentNode || checkedCleanCloseBtns.has(el)) continue;
+			if (!isOrphanCloseButton(el)) {
+				checkedCleanCloseBtns.add(el);
+				continue;
+			}
 			const parent = el.parentElement;
 			removePairedBackdrops(el);
 			if (removeTrackedAdNode(el, 'orphan-close-removed')) pruneAdAncestors(parent);
@@ -5445,19 +5579,25 @@
 	}
 
 	function cleanupFloatingAdModals(root) {
-		if (isDisabledHere()) return;
+		if (isDisabledHere() || isSecurityVerificationPage()) return;
 		scanShadowRoots(root || D.documentElement);
 		let nodes = [];
-		const query = 'div,section,dialog';
+		const query = 'dialog,aside,div[style],section[style],div[class*="modal" i],div[class*="overlay" i],div[class*="popup" i],div[class*="sticky" i],div[class*="ad" i],div[id*="ad" i],[data-nvirya-ad-child]';
 		try {
 			if (root && root.nodeType === 1 && root.matches && root.matches(query)) nodes.push(root);
 			const found = root && root.querySelectorAll ? root.querySelectorAll(query) : D.querySelectorAll(query);
 			for (let i = 0; i < found.length; i++) nodes.push(found[i]);
 		} catch (e) { return; }
-		const limit = Math.min(nodes.length, 1200);
+		const limit = Math.min(nodes.length, 300);
 		for (let i = 0; i < limit; i++) {
 			const el = nodes[i];
-			if (el && el.parentNode && isFloatingAdModal(el)) applyAction(el, 'remove', 'floating-ad-modal');
+			if (!el || !el.parentNode) continue;
+			if (checkedCleanModals.has(el) && !el.hasAttribute('data-nvirya-ad-child')) continue;
+			if (isFloatingAdModal(el)) {
+				applyAction(el, 'remove', 'floating-ad-modal');
+			} else {
+				checkedCleanModals.add(el);
+			}
 		}
 	}
 
@@ -5507,10 +5647,13 @@
 		});
 		const extraSel = customHostRules.length ? ',\n    ' + customHostRules.join(',\n    ') : '';
 		const css = `
-    [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"],
+    [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"], [data-google-query-id],
     ins.adsbygoogle, .aads-sticky, #aads-close, iframe[data-aa],
     aside.ads, .ads_single_top, .ads_single_center, .ads_header,
     .ads_download_1, .ads_download_2, .ads_download_u_1, .ads_download_u_2, .ads_download_u_3,
+    .ad-stack, .pure-u-custom-ad, [data-ad-placeholder],
+    .ytp-ad-overlay-container, .ytp-ad-overlay-slot, .ytp-ad-image-overlay,
+    #player-ads, #masthead-ad, ytm-companion-slot, ytm-promoted-sparkles-web-renderer,
     [data-ad-slot], [data-ad-client], [data-ad-unit],
     iframe[src*="googlesyndication"], iframe[src*="doubleclick"],
     iframe[src*="adservice.google"], iframe[src*="amazon-adsystem"],
@@ -5606,16 +5749,18 @@
 			activeAdVideos.set(video, {
 				muted: !!video.muted,
 				volume: Number(video.volume),
-				playbackRate: Number(video.playbackRate)
+				playbackRate: Number(video.playbackRate) || 1
 			});
+			stats.inc('ads');
 		}
 		try { video.muted = true; } catch (e) {}
 		try { video.volume = 0; } catch (e) {}
 		try { video.playbackRate = 16; } catch (e) {}
 		const duration = Number(video.duration);
-		if (isFinite(duration) && duration > 0) {
-			try { video.currentTime = duration; } catch (e) {
-				try { if (typeof video.fastSeek === 'function') video.fastSeek(duration); } catch (e2) {}
+		if (isFinite(duration) && duration > 0.5 && video.currentTime < duration - 0.1) {
+			const targetTime = Math.max(0, duration - 0.05);
+			try { video.currentTime = targetTime; } catch (e) {
+				try { if (typeof video.fastSeek === 'function') video.fastSeek(targetTime); } catch (e2) {}
 			}
 		}
 		return true;
@@ -5628,17 +5773,17 @@
 			videoScanScheduled = false;
 			if (isDisabledHere() || !D.body) return;
 			const now = Date.now();
-			if (now - lastVideoScan < 180) {
+			if (now - lastVideoScan < 150) {
 				if (!videoScanTimer) videoScanTimer = setTimeout(function() {
 					videoScanTimer = null;
 					scheduleVideoAdScan();
-				}, 180);
+				}, 150);
 				return;
 			}
 			lastVideoScan = now;
 			let hasActiveAd = false;
 			try {
-				const skip = D.querySelectorAll('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.videoAdUiSkipButton,[class*="skip-ad" i],[class*="ad-skip" i],[aria-label*="skip ad" i],[data-testid*="skip-ad" i],.jw-skip,.vjs-ad-skip-button,.dplayer-ad-skip,.artplayer-ad-skip');
+				const skip = D.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-ad-SkipButton,ytm-skip-ad-renderer button,.ytp-ad-overlay-close-button,.videoAdUiSkipButton,[class*="skip-ad" i],[class*="ad-skip" i],[aria-label*="skip ad" i],[data-testid*="skip-ad" i],.jw-skip,.vjs-ad-skip-button,.dplayer-ad-skip,.artplayer-ad-skip');
 				for (let i = 0; i < Math.min(skip.length, 30); i++) {
 					const button = skip[i];
 					if (clickedSkipButtons.has(button) || isNviryaNode(button)) continue;
@@ -5695,6 +5840,7 @@
 			const equiv = (attr(meta, 'http-equiv') || '').trim().toLowerCase();
 			if (equiv !== 'refresh') continue;
 			handledMetaRefresh.add(meta);
+			if (!isMaliciousMetaRefresh(meta)) continue;
 			const content = attr(meta, 'content') || '';
 			try {
 				if (!meta.parentNode) continue;
@@ -5921,9 +6067,40 @@
 		if (observer) return;
 		const target = D.documentElement || D;
 		if (!target) return;
+		const isYT = isYouTubeDomain(hostname);
 		try {
 			observer = new MutationObserver((mutations) => {
 				if (isDisabledHere()) return;
+				if (isYT) {
+					let shouldScanVideo = false;
+					for (let i = 0; i < mutations.length; i++) {
+						const m = mutations[i];
+						if (m.type === 'attributes') {
+							const tNode = m.target;
+							if (tNode && tNode.classList && (tNode.classList.contains('ad-showing') || tNode.classList.contains('ad-interrupting') || tNode.id === 'movie_player')) {
+								shouldScanVideo = true;
+								break;
+							}
+						} else if (m.addedNodes && m.addedNodes.length) {
+							for (let j = 0; j < m.addedNodes.length; j++) {
+								const n = m.addedNodes[j];
+								if (n && n.nodeType === 1) {
+									const tag = String(n.tagName || '').toLowerCase();
+									if (tag === 'video' || tag.indexOf('ad') !== -1 || tag.indexOf('skip') !== -1 || (n.classList && n.classList.contains('ytp-ad-module'))) {
+										shouldScanVideo = true;
+										break;
+									}
+								}
+							}
+							if (shouldScanVideo) break;
+						}
+					}
+					if (shouldScanVideo) scheduleVideoAdScan();
+					return;
+				}
+
+				if (isSecurityVerificationPage()) return;
+
 				let hasMutations = false;
 				let rootChildAdded = false;
 				for (let i = 0; i < mutations.length; i++) {
@@ -5932,7 +6109,7 @@
 						for (let j = 0; j < m.addedNodes.length; j++) {
 							const n = m.addedNodes[j];
 							if (n.nodeType === 1) {
-								if (isNviryaNode(n)) continue;
+								if (n.namespaceURI === 'http://www.w3.org/2000/svg' || isNviryaNode(n)) continue;
 								const nTag = String(n.tagName || '').toLowerCase();
 								if (nTag === 'script') {
 									if (neutralizeScriptNode(n)) continue;
@@ -5942,12 +6119,14 @@
 									rootChildAdded = true;
 									guardMaxZIndexNode(n);
 								}
-								neutralizeMetaRefresh(n);
-								scanShadowRoots(n);
+								if (nTag === 'meta' || n.firstElementChild) {
+									neutralizeMetaRefresh(n);
+								}
 								queueTrapNode(n, false);
 								enqueue(n);
-								if (n.querySelectorAll) {
+								if (n.firstElementChild && n.querySelectorAll) {
 									try {
+										scanShadowRoots(n);
 										const scripts = n.querySelectorAll('script');
 										for (let s = 0; s < scripts.length; s++) neutralizeScriptNode(scripts[s]);
 										const candidates = n.querySelectorAll(TARGETED_CANDIDATE_SELECTOR);
@@ -5960,7 +6139,8 @@
 						}
 					} else if (m.type === 'attributes') {
 						const targetNode = m.target;
-						if (targetNode && targetNode.nodeType === 1 && !isNviryaNode(targetNode)) {
+						if (targetNode && targetNode.nodeType === 1 && targetNode.namespaceURI !== 'http://www.w3.org/2000/svg' && !isNviryaNode(targetNode)) {
+							checkedCleanModals.delete(targetNode);
 							if ((targetNode === D.documentElement || targetNode === D.body) && (m.attributeName === 'style' || m.attributeName === 'class')) {
 								try {
 									const cs = W.getComputedStyle(targetNode);
@@ -5987,7 +6167,7 @@
 				childList: true,
 				subtree: true,
 				attributes: true,
-				attributeFilter: ['src', 'href', 'style', 'class', 'id', 'data-src', 'data-srcset']
+				attributeFilter: isYT ? ['class', 'src'] : ['src', 'href', 'style', 'class', 'id', 'data-src', 'data-srcset']
 			});
 			if (D.documentElement) {
 				captureScrollBaseline(D.documentElement);
@@ -7043,8 +7223,8 @@
 
 		const ICONS = {
 			shield: [
-				'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z',
-				'm9 12 2 2 4-4'
+				'M13.19 8.72c.62 0 1.24.01 1.86.01-.87 1.33-1.74 2.66-2.62 3.98-.04-.03-.13-.13-.15-.17a.64.64 0 0 1-.03-.23.47.47 0 0 0-.07-.07c-.03-.05-.06-.11-.1-.17-.03-.04-.06-.09-.09-.13-.02-.02-.05-.03-.06-.05a.8.8 0 0 1-.03-.22c-.03-.04-.05-.09-.09-.13-.01-.01-.03-.02-.04-.04a1.86 1.86 0 0 0-.17-.23.47.47 0 0 0-.06-.08c-.04-.06-.07-.13-.11-.19-.02-.02-.04-.04-.06-.06-.02-.03-.02-.06-.04-.08a.33.33 0 0 0-.06-.05c-.01-.03-.01-.06-.03-.08-.31-.5-.64-.99-.96-1.48-.1-.16-.2-.33-.31-.49-.1-.15-.17-.33-.3-.46-1.03 1.97-2.07 3.95-3.1 5.92-.57 0-1.14 0-1.71 0 .03-.17.27-.52.36-.69.23-.42.46-.83.69-1.25.78-1.42 1.56-2.83 2.35-4.25.27-.48.54-.97.81-1.46.08-.15.17-.3.25-.46.04-.07.08-.18.15-.22.82 1.33 1.64 2.66 2.47 4 .1-.1.17-.24.25-.35.19-.27.37-.55.56-.82.07-.1.2-.36.3-.41zm-3.66 2.92c.07.04.09.13.14.2.01.02.04.03.05.05.01.02.01.05.02.07.02.03.05.04.07.07.01.02.01.05.02.07.03.06.08.11.12.16.1.16.19.3.28.46.11.17.23.33.34.5.08.11.14.23.22.35.2.3.41.6.61.9.14.22.28.44.42.66.05.08.1.17.17.24.11-.09.17-.27.23-.39.07-.13.15-.26.23-.39.14-.22.25-.45.37-.68.1-.18.21-.37.31-.55.04-.07.09-.14.13-.21.1-.2.21-.41.34-.6.03-.05.05-.11.08-.17.1-.16.18-.32.27-.48.1-.18.21-.35.3-.53.05-.1.1-.2.16-.29.08-.12.16-.24.22-.37.03-.06.05-.12.08-.17.01-.03.04-.05.05-.08.05-.09.12-.19.16-.28a.48.48 0 0 0 .03-.12c.04-.09.09-.17.14-.25.03-.04.04-.09.06-.13.04-.05.09-.12.12-.18.01-.01 0-.03.01-.04.05-.1.14-.18.15-.29.19-.32.38-.64.57-.96-.23 0-.46 0-.69-.01-.14-.03-.31-.01-.46-.01-.28 0-.56 0-.84 0-.11 0-.42.03-.5-.02.05-.13.15-.24.23-.35.16-.24.33-.47.49-.71.05-.08.2-.34.26-.38.08-.04.23-.02.32-.02.26 0 .52 0 .78 0 .78 0 1.56 0 2.33 0 .23 0 .46 0 .69 0 .11 0 .24-.02.33.02-2.35 3.67-4.7 7.35-7.04 11.02-.97-1.73-1.93-3.46-2.9-5.19.16-.3.31-.59.47-.89z',
+				'M13.58 8.13c.08.05.39.02.5-.02.28 0 .56 0 .84 0 .15 0 .32-.02.46.01 0 .08-.05.14-.09.21-.08.12-.15.26-.24.37-.62 0-1.24-.01-1.86-.01.04-.13.29-.49.39-.56zm-1.15 4.58c-.04.09-.1.17-.15.25-.08.12-.14.28-.26.36-.73-1.15-1.45-2.3-2.18-3.45-.1.08-.16.27-.22.39-.12.24-.26.49-.38.73-.32.64-.67 1.27-.99 1.91-.12.23-.21.47-.35.69-.06.1-.11.21-.16.32-.07.15-.15.3-.23.44-.05.09-.09.2-.16.27-.21 0-.42 0-.63 0 1.03-1.97 2.07-3.95 3.1-5.92.13.13.2.31.3.46.11.16.21.33.31.49.32.49.65.98.96 1.48.02.02.02.05.03.08.02.02.02.05.06.05.02.02.02.05.04.08.02.02.04.04.06.06.04.06.07.13.11.19.01.03.03.05.06.08.06.08.11.16.17.23.01.02.03.03.04.04.04.04.06.09.09.13.01.08.01.16.03.22.01.02.04.03.06.05.03.04.06.09.09.13.04.06.07.12.1.17.01.02.04.05.07.07.01.07.01.15.03.23.02.04.11.14.15.17zm3.07-3.59c-.01.11-.1.19-.15.29-.01.01 0 .03-.01.04-.03.06-.08.13-.12.18-.02.04-.03.09-.06.13-.05.08-.1.16-.14.25a.48.48 0 0 1-.03.12c-.04.09-.11.19-.16.28-.01.03-.04.05-.05.08-.03.05-.05.11-.08.17-.06.13-.14.25-.22.37-.06.09-.11.19-.16.29-.09.18-.2.35-.3.53-.09.16-.17.32-.27.48-.03.06-.05.12-.08.17-.13.19-.24.4-.34.6-.04.07-.09.14-.13.21-.1.18-.21.37-.31.55-.12.23-.23.46-.37.68-.08.13-.16.26-.23.39-.06.12-.12.3-.23.39-.07-.07-.12-.16-.17-.24-.14-.22-.28-.44-.42-.66-.2-.3-.41-.6-.61-.9-.08-.12-.14-.24-.22-.35-.11-.17-.23-.33-.34-.5-.09-.16-.18-.3-.28-.46-.04-.05-.09-.1-.12-.16-.01-.02-.01-.05-.02-.07-.02-.03-.05-.04-.07-.07-.01-.02-.01-.05-.02-.07-.01-.02-.04-.03-.05-.05-.05-.07-.07-.16-.14-.2.04-.11.1-.22.16-.32.06-.12.1-.24.19-.34.71 1.12 1.42 2.24 2.13 3.36.11-.07.18-.24.25-.34.2-.3.39-.6.59-.9.61-.95 1.24-1.92 1.88-2.83.07-.1.12-.2.18-.3.1-.16.23-.32.33-.48.03-.05.19-.31.22-.33.01-.01.03 0 .04-.01z'
 			],
 
 			sun: [
@@ -7800,6 +7980,7 @@
 		}
 
 		let lastRenderedEffTheme = '';
+
 		function updateThemeUI() {
 			const eff = effectiveTheme();
 			if (themeBtn && lastRenderedEffTheme !== eff) {
@@ -7855,7 +8036,7 @@
 					if (handleEl && !menuOpen && !handleEl.classList.contains('dragging') && !handleEl.classList.contains('hidden')) {
 						handleEl.classList.add('idle');
 					}
-				}, 2000);
+				}, 3000);
 			}
 		}
 
@@ -8575,8 +8756,7 @@
 			if (!ubListEl) return;
 			clear(ubListEl);
 			const list = (Array.isArray(items) && items.length > 0) ?
-				items :
-				[t('ub_def_1'), t('ub_def_2'), t('ub_def_3')];
+				items : [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')];
 			for (let i = 0; i < list.length; i++) {
 				ubListEl.appendChild(el('li', null, String(list[i])));
 			}
@@ -8833,35 +9013,7 @@
 					if (!drag) lastPageScrollAt = Date.now();
 				}, { passive: true, capture: true });
 
-				D.addEventListener('pointerdown', (e) => {
-					if (!e.isTrusted || !handleEl || !config.showFloatingButton || menuOpen) return;
-					if (handleEl.classList.contains('hidden') || handleEl.classList.contains('away')) return;
-					const path = eventPath(e);
-					if (isExtensionUiPath(path) || path.indexOf(handleEl) !== -1 || path.indexOf(host) !== -1) return;
-					const r = handleEl.getBoundingClientRect();
-					if (!r.width || !r.height) return;
-					const cx = r.left + r.width / 2;
-					const cy = r.top + r.height / 2;
-					if (Math.hypot(e.clientX - cx, e.clientY - cy) <= 30) {
-						const blocker = e.target;
-						if (blocker && blocker.nodeType === 1 && !isNviryaNode(blocker)) {
-							const bTag = String(blocker.tagName || '').toLowerCase();
-							if (!/^(?:html|body|main|video|audio)$/i.test(bTag) && !isProtectedPlayer(blocker)) {
-								try {
-									e.preventDefault();
-									e.stopPropagation();
-									e.stopImmediatePropagation();
-								} catch (err) {}
-								applyAction(blocker, 'remove', 'fab-overlay-trap');
-								if (handleEl.classList.contains('idle')) {
-									resetFabIdle(true);
-								} else {
-									setMenu(true);
-								}
-							}
-						}
-					}
-				}, true);
+				// FAB sits at max z-index inside Shadow DOM; never delete underlying page elements on tap
 			} catch (e) {}
 
 			handleEl.addEventListener('mouseenter', (e) => {
@@ -9999,9 +10151,9 @@
 			if (blockAllBtn) {
 				blockAllBtn.disabled = simCount <= 1;
 				const allTxt = t('p_all', { count: simCount });
-				blockAllBtn.textContent = simCount > 1
-					? (allTxt.indexOf(String(simCount)) !== -1 ? allTxt : `${allTxt} (${simCount})`)
-					: allTxt.replace(/\s*\(\{?count\}?\)/g, '');
+				blockAllBtn.textContent = simCount > 1 ?
+					(allTxt.indexOf(String(simCount)) !== -1 ? allTxt : `${allTxt} (${simCount})`) :
+					allTxt.replace(/\s*\(\{?count\}?\)/g, '');
 				blockAllBtn.style.display = simCount > 1 ? 'inline-flex' : 'none';
 			}
 
