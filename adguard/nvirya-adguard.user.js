@@ -2,7 +2,7 @@
 // @name         Nvirya AdGuard
 // @license      MIT
 // @namespace    https://nvirya.com/adguard
-// @version      11.7.1
+// @version      11.7.2
 // @description  A lightweight, ultra-powerful userscript & extension engine designed to eliminate intrusive ads, stealth overlays, instant redirects, and popups on mobile (iOS Stay) and desktop.
 // @author       Nvirya
 // @homepageURL  https://adguard.nvirya.com
@@ -18,27 +18,23 @@
 // @grant        unsafeWindow
 // @connect      reporter.nvirya.com
 // @connect      raw.nvirya.com
-// @connect      discord.com
-// @connect      discordapp.com
 // @connect      *
 // @run-at       document-start
 // @all-frames   true
-// @changelog    v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
-// @changelog    [Task 1] Google Search Safe Transit: Bypassed synthetic click/redirect blockers and heavy DOM banner sweeps on search engines to prevent navigation freezes and layout thrashing.
-// @changelog    [Task 2] Bootstrap Modal & Scroll Lock Cleanup: Widened backdrop z-index tolerance up to 35, paired non-adjacent backdrops, reconciled empty modals, and restored page scrolling.
-// @changelog    [Task 3] Silent URL De-Tracking Stripper: Sanitized tracking query parameters (utm_*, gclid, fbclid, ref_id, etc.) in-place without breaking outbound links or replacing href with void.
-// @changelog    [Task 4] Adaptive Idle Mutation & Bait Auto-Heal: Throttled heavy style scans during active scrolling to idle frames, and preserved bait element layout dimensions with clip/opacity auto-heal.
-// @changelog    [Task 5] Webhook Reporting Endpoint Update: Migrated feedback and reporting target to https://reporter.nvirya.com with updated network permissions.
-// @downloadURL https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.user.js
-// @updateURL https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.meta.js
+// @changelog    Fixed Cloudflare Turnstile & Under Attack infinite reload loops and protected closed Shadow DOM verification widgets.
+// @changelog    Fixed Google Search results disappearing when scrolling to the bottom of search pages.
+// @changelog    Refined inline script and URL path regex boundaries to prevent false positives on legitimate scripts and redirect links.
+// @changelog    Enforced site whitelist and session pause checks before injecting main-world hooks, and masked native function toString signatures.
+// @changelog    Expanded the safe third-party allowlist for payment, auth, captcha, and CDN services, and scoped Page Visibility spoofing.
+// @downloadURL  https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.user.js
+// @updateURL    https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.meta.js
 // ==/UserScript==
 /* ==Changelog==
-v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
-- [Task 1] Google Search Safe Transit: Bypassed synthetic click/redirect blockers and heavy DOM banner sweeps on search engines to prevent navigation freezes and layout thrashing.
-- [Task 2] Bootstrap Modal & Scroll Lock Cleanup: Widened backdrop z-index tolerance up to 35, paired non-adjacent backdrops, reconciled empty modals, and restored page scrolling.
-- [Task 3] Silent URL De-Tracking Stripper: Sanitized tracking query parameters (utm_*, gclid, fbclid, ref_id, etc.) in-place without breaking outbound links or replacing href with void.
-- [Task 4] Adaptive Idle Mutation & Bait Auto-Heal: Throttled heavy style scans during active scrolling to idle frames, and preserved bait element layout dimensions with clip/opacity auto-heal.
-- [Task 5] Webhook Reporting Endpoint Update: Migrated feedback and reporting target to https://reporter.nvirya.com with updated network permissions.
+- Fixed Cloudflare Turnstile & Under Attack infinite reload loops and protected closed Shadow DOM verification widgets.
+- Fixed Google Search results disappearing when scrolling to the bottom of search pages.
+- Refined inline script and URL path regex boundaries to prevent false positives on legitimate scripts and redirect links.
+- Enforced site whitelist and session pause checks before injecting main-world hooks, and masked native function toString signatures.
+- Expanded the safe third-party allowlist for payment, auth, captcha, and CDN services, and scoped Page Visibility spoofing.
 ==/Changelog== */
 (function() {
 	'use strict';
@@ -47,7 +43,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	const D = W.document;
 	if (W.__NVIRYA_ADGUARD_X__) return;
 	try { Object.defineProperty(W, '__NVIRYA_ADGUARD_X__', { value: true }); } catch (e) { W.__NVIRYA_ADGUARD_X__ = true; }
-	const VERSION = '11.7.1';
+	const VERSION = '11.7.2';
 	const RE_GOOGLE_CORE_HOST = /(?:^|\.)(?:gstatic\.com|googleusercontent\.com|google\.[a-z.]+)$/i;
 	const RE_YOUTUBE_HOST = /(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$/i;
 	const RE_YOUTUBE_AD_ENDPOINT = /(?:youtube\.com\/(?:api\/stats\/ads|pagead\/(?!ad_status)|get_midroll_|pcs\/activeview|youtubei\/v1\/player\/ad_break)|doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google)/i;
@@ -63,7 +59,8 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		return RE_SEARCH_DEBOUNCE_HOST.test(h) || isGoogleCoreHost(h) || SEARCH_ENGINES.test(h);
 	}
 
-	const RE_SECURITY_CHALLENGE = /(?:challenges\.cloudflare\.com|\bcdn-cgi\/(?:challenge-platform|images\/trace)|cf-turnstile|cf_chl_|__cf_chl|hcaptcha\.com|recaptcha\.net|google\.com\/recaptcha|ddos-guard)/i;
+	const RE_SECURITY_CHALLENGE = /(?:challenges\.cloudflare\.com|turnstile\/v0\/api\.js|\bcdn-cgi\/(?:challenge-platform|images\/trace|l\/chk_)|cf-turnstile|cf_chl_|__cf_chl|cf-spinner|cf-please-wait|hcaptcha\.com|recaptcha\.net|google\.com\/recaptcha|ddos-guard|arkoselabs\.com|funcaptcha\.com|geetest\.com)/i;
+	const RE_SECURITY_CHALLENGE_HOST = /(?:^|\.)(?:challenges\.cloudflare\.com|hcaptcha\.com|recaptcha\.net|ddos-guard\.net|arkoselabs\.com|funcaptcha\.com|geetest\.com)$/i;
 	const SCRIPT_START_TIME = Date.now();
 	const RE_BAIT_ELEMENT = /ads?[-_]?box|adsbygoogle|banner[-_]?ad|ad[-_]?slot|ad[-_]?unit|ad[-_]?placement|textads|banner-ads/i;
 
@@ -100,7 +97,21 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		if (W.__NVIRYA_MAIN_SHIELD__) return;
 		try { Object.defineProperty(W, '__NVIRYA_MAIN_SHIELD__', { value: true }); } catch (e) { W.__NVIRYA_MAIN_SHIELD__ = true; }
 
-		const mwHost = String((W.location && W.location.hostname) || '').toLowerCase();
+		const mwHost = String((W.location && W.location.hostname) || '').toLowerCase().replace(/\.$/, '');
+		const mwHref = String((W.location && W.location.href) || '');
+		if (
+			/(?:^|\.)(?:challenges\.cloudflare\.com|hcaptcha\.com|recaptcha\.net|ddos-guard\.net|arkoselabs\.com|funcaptcha\.com|geetest\.com|gstatic\.com|googleusercontent\.com|google\.[a-z.]+|bing\.com|wikipedia\.org|github\.com|gitlab\.com)$/i.test(mwHost) ||
+			/(?:challenges\.cloudflare\.com|\bcdn-cgi\/(?:challenge-platform|l\/chk_)|cf_chl_|__cf_chl)/i.test(mwHref) ||
+			Boolean(W._cf_chl_opt || W.__cf$cv$params)
+		) {
+			return;
+		}
+		try {
+			if (D.querySelector && D.querySelector('#challenge-running, #challenge-stage, #challenge-form, #cf-wrapper, script[src*="/cdn-cgi/challenge-platform/"]')) {
+				W.__nvirya_has_security_challenge = true;
+				return;
+			}
+		} catch (e) {}
 		const isYouTube = /(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$/i.test(mwHost);
 		const RE_YT_AD_BLOCK = /(?:youtube\.com\/(?:api\/stats\/ads|pagead\/(?!ad_status)|get_midroll_|pcs\/activeview|youtubei\/v1\/player\/ad_break)|doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google)/i;
 		const RE_YT_STREAM_SAFE = /(?:googlevideo\.com|ytimg\.com|yt3\.ggpht\.com|youtube-nocookie\.com|youtube\.com\/(?:videoplayback|s\/player|yts\/|ptracking|api\/stats\/(?:playback|watchtime|qoe|atr)|youtubei\/v1\/(?!player\/ad_break))|instream\/ad_status\.js|translate\.google\.[a-z.]+|translate\.googleapis\.com|bing\.com\/translator|bing\.com\/ttranslatev3|bing\.com\/tfetspktok|play\.google\.com\/log|bat\.bing\.com|api\.cognitive\.microsofttranslator\.com)/i;
@@ -326,7 +337,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			return;
 		}
 
-		const RE_SHIELD_AD_URL = /(?:^|\.|\/\/)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|pagead2?|googletagservices|adsystem\.amazon|amazon-adsystem|adnxs|adsrvr|criteo|taboola|outbrain|outbrainimg|zemanta|mgid|pubmatic|rubiconproject|openx|smartadserver|scorecardresearch|moatads|doubleverify|adsafeprotected|quantserve|quantcast|highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease|monetag|propellerads|admaven|ad-maven|popads|popcash|adsterra|exoclick|onclickmax|wingsmob)(?:\.|\/|$)|\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[\/:?#]|$)|(?:^|\/)(?:pagead\/show_ads\.js|pagead\/js\/adsbygoogle\.js|tag\/js\/gpt\.js|outbrain\.js|apu\.php|cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
+		const RE_SHIELD_AD_URL = /(?:^|\.|\/\/)(?:doubleclick|googlesyndication|googleadservices|adservice\.google|pagead2?|googletagservices|adsystem\.amazon|amazon-adsystem|adnxs|adsrvr|criteo|taboola|outbrain|outbrainimg|zemanta|mgid|pubmatic|rubiconproject|openx|smartadserver|scorecardresearch|moatads|doubleverify|adsafeprotected|quantserve|quantcast|highrevenueformat|cloudiniry|p7jeusk9n|kettledroopingcontinuation|zoologyfibre|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|optimalcpm|formatcpm|creativecpm|richcpm|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease|monetag|propellerads|admaven|ad-maven|popads|popcash|adsterra|exoclick|onclickmax|wingsmob)(?:\.|\/|$)|https?:\/\/[^/\s]+\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[\/:?#]|$)|(?:^|\/)(?:pagead\/show_ads\.js|pagead\/js\/adsbygoogle\.js|tag\/js\/gpt\.js|outbrain\.js|apu\.php|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
 
 		const scheduleAsyncTask = (fn) => {
 			if (typeof queueMicrotask === 'function') queueMicrotask(fn);
@@ -688,20 +699,44 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			} catch (e) {}
 		};
 
+		const isChallengeActive = () => {
+			try {
+				if (W.__nvirya_has_security_challenge || W._cf_chl_opt || W.__cf$cv$params) return true;
+				if (D.querySelector && D.querySelector('#challenge-running, #challenge-stage, #challenge-form, #cf-wrapper, .cf-turnstile, script[src*="/cdn-cgi/challenge-platform/"], script[src*="challenges.cloudflare.com"]')) {
+					W.__nvirya_has_security_challenge = true;
+					return true;
+				}
+			} catch (e) {}
+			return false;
+		};
+
 		ensureVendorGlobalsPopulated();
-		const RE_SHIELD_INLINE = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|znid|zoneid.*\d{5,}|dataset\.zone\s*=|createElement\(['"]script['"]\).*?(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)/i;
+		const RE_SHIELD_INLINE = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|(?:[?&]zoneid=\d{5,}|['"]zoneid['"]\s*:\s*['"]?\d{5,})|dataset\.zone\s*=|createElement\(['"]script['"]\)[\s\S]{0,240}?https?:\/\/[a-z0-9.-]+\.(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)(?:[\/:'"?#]|$)/i;
 
 		const RE_TRAP_EVENT_TYPES = /^(?:click|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend|contextmenu|blur|focus|beforeunload)$/i;
 
-		const isAdStack = () => {
+		const isSecurityStack = () => {
 			try {
 				const cs = D.currentScript;
 				if (cs) {
 					const src = cs.src || (cs.getAttribute && cs.getAttribute('src')) || '';
-					if (src) return !/eruda|vconsole|chobitsu|challenge-platform|turnstile/i.test(src) && RE_SHIELD_AD_URL.test(src);
+					if (/challenge-platform|challenges\.cloudflare|turnstile|hcaptcha|recaptcha|ddos-guard|arkoselabs|funcaptcha|geetest/i.test(src)) return true;
 				}
 				const st = (new Error().stack) || '';
-				if (!st || /eruda|vconsole|chobitsu|challenge-platform|turnstile|hcaptcha|recaptcha/i.test(st)) return false;
+				return /challenge-platform|challenges\.cloudflare|turnstile|hcaptcha|recaptcha|ddos-guard|arkoselabs|funcaptcha|geetest/i.test(st);
+			} catch (e) { return false; }
+		};
+
+		const isAdStack = () => {
+			try {
+				if (isChallengeActive()) return false;
+				const cs = D.currentScript;
+				if (cs) {
+					const src = cs.src || (cs.getAttribute && cs.getAttribute('src')) || '';
+					if (src) return !/eruda|vconsole|chobitsu|challenge-platform|challenges\.cloudflare|turnstile|hcaptcha|recaptcha/i.test(src) && RE_SHIELD_AD_URL.test(src);
+				}
+				const st = (new Error().stack) || '';
+				if (!st || /eruda|vconsole|chobitsu|challenge-platform|challenges\.cloudflare|turnstile|hcaptcha|recaptcha/i.test(st)) return false;
 				return RE_SHIELD_AD_URL.test(st);
 			} catch (e) { return false; }
 		};
@@ -710,34 +745,38 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			const origST = W.setTimeout;
 			const origSI = W.setInterval;
 			if (typeof origST === 'function') {
-				W.setTimeout = function(fn, delay) {
-					if (typeof fn === 'string') {
-						if (RE_SHIELD_INLINE.test(fn)) return 0;
-					} else if (D.currentScript && isAdStack()) {
-						return 0;
+				W.setTimeout = markNativeFn(function(fn, delay) {
+					if (!isChallengeActive()) {
+						if (typeof fn === 'string') {
+							if (RE_SHIELD_INLINE.test(fn)) return 0;
+						} else if (D.currentScript && isAdStack()) {
+							return 0;
+						}
 					}
 					return origST.apply(this, arguments);
-				};
+				}, 'setTimeout');
 			}
 			if (typeof origSI === 'function') {
-				W.setInterval = function(fn, delay) {
-					if (typeof fn === 'string') {
-						if (RE_SHIELD_INLINE.test(fn)) return 0;
-					} else if (D.currentScript && isAdStack()) {
-						return 0;
+				W.setInterval = markNativeFn(function(fn, delay) {
+					if (!isChallengeActive()) {
+						if (typeof fn === 'string') {
+							if (RE_SHIELD_INLINE.test(fn)) return 0;
+						} else if (D.currentScript && isAdStack()) {
+							return 0;
+						}
 					}
 					return origSI.apply(this, arguments);
-				};
+				}, 'setInterval');
 			}
 		} catch (e) {}
 
 		try {
 			const origAEL = W.EventTarget && W.EventTarget.prototype && W.EventTarget.prototype.addEventListener;
 			if (typeof origAEL === 'function') {
-				W.EventTarget.prototype.addEventListener = function(type, listener, options) {
+				W.EventTarget.prototype.addEventListener = markNativeFn(function(type, listener, options) {
 					if (RE_TRAP_EVENT_TYPES.test(String(type || '')) && isAdStack()) return;
 					return origAEL.apply(this, arguments);
-				};
+				}, 'addEventListener');
 			}
 		} catch (e) {}
 
@@ -745,20 +784,29 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			const elProto = W.Element && W.Element.prototype;
 			if (elProto && typeof elProto.attachShadow === 'function' && !elProto.attachShadow.__nvirya) {
 				const origAttachShadow = elProto.attachShadow;
-				const patchedAttachShadow = function(init) {
+				const patchedAttachShadow = markNativeFn(function(init) {
 					try {
 						const isOwnUi = this.hasAttribute && (this.hasAttribute('data-nvirya-ui') || this.hasAttribute('data-nvirya-picker'));
-						if (!isOwnUi && isAdStack()) {
-							try {
-								this.style.setProperty('display', 'none', 'important');
-								this.remove();
-							} catch (e) {}
-							const dummyHost = D.createElement('div');
-							return origAttachShadow.call(dummyHost, { mode: 'open' });
+						if (!isOwnUi) {
+							if (isSecurityStack() || (this.classList && (this.classList.contains('cf-turnstile') || this.hasAttribute('data-sitekey')))) {
+								try {
+									this.setAttribute('data-nvirya-safe', 'captcha');
+									W.__nvirya_has_security_challenge = true;
+								} catch (e) {}
+								return origAttachShadow.apply(this, arguments);
+							}
+							if (isAdStack()) {
+								try {
+									this.style.setProperty('display', 'none', 'important');
+									this.remove();
+								} catch (e) {}
+								const dummyHost = D.createElement('div');
+								return origAttachShadow.call(dummyHost, { mode: 'open' });
+							}
 						}
 					} catch (e) {}
 					return origAttachShadow.apply(this, arguments);
-				};
+				}, 'attachShadow');
 				try { Object.defineProperty(patchedAttachShadow, '__nvirya', { value: true }); } catch (e) {}
 				elProto.attachShadow = patchedAttachShadow;
 			}
@@ -766,11 +814,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 		const isBlockedScriptEl = (node) => {
 			if (!node || node.nodeType !== 1 || String(node.tagName || '').toLowerCase() !== 'script') return false;
+			if (isChallengeActive()) return false;
 			const src = node.src || (node.getAttribute && node.getAttribute('src')) || '';
-			if (src && /eruda|vconsole|chobitsu/i.test(src)) return false;
+			if (src && /eruda|vconsole|chobitsu|challenge-platform|challenges\.cloudflare|turnstile|hcaptcha|recaptcha|ddos-guard|arkoselabs|funcaptcha|geetest/i.test(src)) {
+				if (/challenge-platform|challenges\.cloudflare|turnstile/i.test(src)) W.__nvirya_has_security_challenge = true;
+				return false;
+			}
 			const zone = (node.dataset && node.dataset.zone) || (node.getAttribute && node.getAttribute('data-zone')) || '';
 			const text = !src ? (node.textContent || '') : '';
-			if (text && /eruda|vconsole|chobitsu/i.test(text)) return false;
+			if (text && (/eruda|vconsole|chobitsu|_cf_chl_opt|__cf\$cv\$params|challenge-platform|cf-turnstile/i.test(text))) {
+				if (/_cf_chl_opt|__cf\$cv\$params|challenge-platform/i.test(text)) W.__nvirya_has_security_challenge = true;
+				return false;
+			}
 			return !!(zone || (src && RE_SHIELD_AD_URL.test(src)) || (text && RE_SHIELD_INLINE.test(text)));
 		};
 
@@ -942,13 +997,15 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 		try {
 			const origFunction = W.Function;
-			const patchedFunction = function() {
-				const bodyStr = Array.prototype.join.call(arguments, ' ');
-				if (bodyStr.includes('_vrx') || RE_SHIELD_INLINE.test(bodyStr)) {
-					return function() {};
+			const patchedFunction = markNativeFn(function() {
+				if (!isChallengeActive() && !isSecurityStack()) {
+					const bodyStr = Array.prototype.join.call(arguments, ' ');
+					if (bodyStr.includes('_vrx') || RE_SHIELD_INLINE.test(bodyStr)) {
+						return function() {};
+					}
 				}
 				return origFunction.apply(this, arguments);
-			};
+			}, 'Function');
 			patchedFunction.prototype = origFunction.prototype;
 			try {
 				Object.defineProperty(W, 'Function', {
@@ -1391,11 +1448,46 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		return (Date.now() - SCRIPT_START_TIME) < (thresholdMs || 6000);
 	}
 
+	const RE_CF_CHALLENGE_TITLE = /^(?:Just a moment|Attention Required|Checking your browser|Security Verification|DDoS-Guard|One moment, please|Chỉ một chút|Đang kiểm tra trình duyệt|请稍候|安全验证|しばらくお待ちください|Un momento|Veuillez patienter|Один момент|Nur einen Moment)/i;
+
+	function isFullSecurityChallengePage() {
+		try {
+			const h = String((W.location && W.location.hostname) || '').toLowerCase().replace(/\.$/, '');
+			if (RE_SECURITY_CHALLENGE_HOST.test(h)) return true;
+			if (RE_SECURITY_CHALLENGE.test(location.href || '')) return true;
+			if (W._cf_chl_opt || W.__cf$cv$params) return true;
+			if (D.title && RE_CF_CHALLENGE_TITLE.test(D.title.trim())) return true;
+			if (D.querySelector && D.querySelector('#challenge-running, #challenge-stage, #challenge-form, #cf-wrapper, #cf-please-wait, .cf-error-details, script[src*="/cdn-cgi/challenge-platform/"]')) return true;
+		} catch (e) {}
+		return false;
+	}
+
 	function isSecurityVerificationPage() {
 		try {
-			if (RE_SECURITY_CHALLENGE.test(location.href || '')) return true;
-			if (D.title && /^(?:Just a moment|Attention Required|Checking your browser|Security Verification|DDoS-Guard|One moment, please)/i.test(D.title.trim())) return true;
-			if (D.querySelector && D.querySelector('#challenge-running, #challenge-stage, #cf-wrapper, .cf-turnstile, iframe[src*="challenges.cloudflare.com"], script[src*="/cdn-cgi/challenge-platform/"]')) return true;
+			if (isFullSecurityChallengePage()) return true;
+			if (W.__nvirya_has_security_challenge) return true;
+			if (D.querySelector && D.querySelector('.cf-turnstile, [data-nvirya-safe="captcha"], input[name="cf-turnstile-response"], iframe[src*="challenges.cloudflare.com"], script[src*="challenges.cloudflare.com/turnstile"]')) return true;
+		} catch (e) {}
+		return false;
+	}
+
+	function isCaptchaOrTurnstileElement(el) {
+		if (!el || el.nodeType !== 1) return false;
+		try {
+			let cur = el, depth = 0;
+			while (cur && cur.nodeType === 1 && depth < 6) {
+				if (attr(cur, 'data-nvirya-safe') === 'captcha') return true;
+				const idc = ((cur.id || '') + ' ' + classString(cur)).toLowerCase();
+				if (/(?:cf-turnstile|g-recaptcha|h-captcha|challenge-running|challenge-stage|challenge-form|cf-wrapper|turnstile|arkoselabs|funcaptcha|geetest)/i.test(idc)) return true;
+				if (attr(cur, 'data-sitekey') !== null) return true;
+				const src = attr(cur, 'src') || '';
+				if (src && RE_SECURITY_CHALLENGE.test(src)) return true;
+				cur = cur.parentElement;
+				depth++;
+			}
+			if (el.querySelector && el.querySelector('.cf-turnstile, .g-recaptcha, .h-captcha, [data-sitekey], [data-nvirya-safe="captcha"], input[name="cf-turnstile-response"], input[name="g-recaptcha-response"], input[name="h-captcha-response"], iframe[src*="challenges.cloudflare.com"], iframe[src*="recaptcha"], iframe[src*="hcaptcha.com"], script[src*="challenges.cloudflare.com"]')) {
+				return true;
+			}
 		} catch (e) {}
 		return false;
 	}
@@ -1443,17 +1535,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	}
 
 	function installEarlyMetaRefreshGuard() {
-		if (D.documentElement) neutralizeMetaRefresh(D.documentElement);
+		if (D.documentElement && !isSecurityVerificationPage()) neutralizeMetaRefresh(D.documentElement);
 	}
 
 	function installDocWriteGuard() {
+		if (isFullSecurityChallengePage()) return;
 		try {
 			const origWrite = D.write;
 			const origWriteln = D.writeln;
 			if (typeof origWrite !== 'function') return;
 			const sanitizeHTML = function(str) {
-				if (typeof str !== 'string') return str;
-				if (/<meta[^>]+http-equiv\s*=\s*["']?refresh/i.test(str)) {
+				if (typeof str !== 'string' || isSecurityVerificationPage()) return str;
+				if (/<meta[^>]+http-equiv\s*=\s*["']?refresh/i.test(str) && !/cdn-cgi|challenge-platform|cf_chl/i.test(str)) {
 					log('BLOCK', 'doc-write', 'Blocked meta-refresh in document.write');
 					return str.replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh[^>]*>/gi, '');
 				}
@@ -1593,8 +1686,10 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 	function cleanTrackingQuery() {
 		try {
+			if (isSecurityVerificationPage() || isSearchEngineDomain()) return;
 			if (/(?:^|\.)(?:youtube\.com|youtu\.be)$/i.test(W.location.hostname || '')) return;
 			const url = new URL(W.location.href);
+			if (RE_SECURITY_CHALLENGE.test(url.href)) return;
 			const exact = /^(?:fbclid|gclid|dclid|gbraid|wbraid|msclkid|twclid|igshid|yclid|mc_cid|mc_eid|ref_src|ref_url|ref_id|si|feature|spm|vero_id|oly_anon_id|oly_enc_id|_hsenc|_hsmi|mkt_tok|s_cid|ef_id|cmpid|campaign_id|camp_id|ad_id|banner_id|zone_id|click_id|clk_id|aff_id|aff_sub|sub_id|s2s_id|trk|trac_id)$/i;
 			const remove = [];
 			url.searchParams.forEach(function(_, key) {
@@ -1606,8 +1701,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			}
 		} catch (e) {}
 	}
-
-	// early guards moved after const/let init
 
 	const isAppleDevice = () => {
 		const ua = navigator.userAgent || '';
@@ -1632,7 +1725,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	const K_SESS = 'nvirya_x_session';
 	const K_WEEKLY = 'nvirya_x_weekly_history';
 	const K_LAST_REP = 'nvirya_x_last_report';
-	const UPDATE_URL = 'https://raw.nvirya.com/adguard/nvirya-adguard.user.js';
+	const UPDATE_URL = 'https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.user.js';
 	const STAY_INSTALL_URL = 'stay://x-callback-url/install?scriptURL=' + encodeURIComponent(UPDATE_URL);
 	const INSTALL_URL = isAppleDevice() ? STAY_INSTALL_URL : UPDATE_URL;
 	const K_UPD_LAST = 'nvirya_x_last_update_check';
@@ -1645,8 +1738,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	const UPDATE_SNOOZE_MS = 2 * 60 * 60 * 1000;
 	const UPDATE_START_DELAY = 1500;
 	const UPDATE_TIMEOUT = 5000;
-
-	// Feedback/Bug report webhook endpoint
 	const WEBHOOK_PAYLOAD = "https://reporter.nvirya.com";
 
 	const DEFAULT_CONFIG = {
@@ -1663,7 +1754,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		showFloatingButton: true,
 		edgeHandle: true,
 		theme: 'auto', // 'auto' | 'light' | 'dark'
-		lang: 'auto', // 'auto' | 'en' | 'vi' | 'zh-CN'
+		lang: 'auto', // 'auto' | 'en' | 'vi' | 'zh-CN' | 'ja' | 'ru'
 		debug: false
 	};
 
@@ -1741,10 +1832,10 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			ub_dsc: 'A newer version with improved filter rules is ready.',
 			ub_ltr: 'Later',
 			ub_now: 'Update Now',
-			ub_whats_new: "What's New in v11.7.1:",
-			ub_def_1: 'Google Search safe transit and silent tracking parameter stripper.',
-			ub_def_2: 'Bootstrap modal backdrop reconciliation & automatic scroll unlock recovery.',
-			ub_def_3: 'Adaptive scroll-idle mutation scanning & anti-adblock bait auto-healing.',
+			ub_whats_new: "What's New in v{ver}:",
+			ub_def_1: 'Fixed Cloudflare Turnstile & Under Attack infinite reload loops.',
+			ub_def_2: 'Fixed Google Search results disappearing when scrolling to the bottom.',
+			ub_def_3: 'Hardened inline script regex, whitelist enforcement & tracker allowlist.',
 			tabHome: 'Overview',
 			tabConfig: 'Settings',
 			tabAbout: 'About',
@@ -1950,10 +2041,10 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			ub_dsc: 'Đã có phiên bản mới với quy tắc lọc được cải thiện.',
 			ub_ltr: 'Để sau',
 			ub_now: 'Cập nhật ngay',
-			ub_whats_new: 'Có gì mới ở v11.7.1:',
-			ub_def_1: 'Chuyển hướng mượt mà trên Google Search và tự động gỡ tham số theo dõi URL.',
-			ub_def_2: 'Xử lý triệt để lớp mờ Bootstrap modal và tự động khôi phục cuộn trang.',
-			ub_def_3: 'Tối ưu quét DOM khi cuộn trang và tự động bảo toàn kích thước bẫy anti-adblock.',
+			ub_whats_new: 'Có gì mới ở v{ver}:',
+			ub_def_1: 'Khắc phục triệt để lỗi kẹt xác minh Cloudflare Turnstile & Under Attack reload liên tục.',
+			ub_def_2: 'Sửa lỗi mất kết quả trên Google Search khi cuộn xuống cuối trang.',
+			ub_def_3: 'Tối ưu bộ lọc regex, tôn trọng Whitelist ở Main World và mở rộng danh sách CDN an toàn.',
 			tabHome: 'Tổng quan',
 			tabConfig: 'Cài đặt',
 			tabAbout: 'Giới thiệu',
@@ -2159,10 +2250,10 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			ub_dsc: '新版本带来了改进的过滤规则。',
 			ub_ltr: '稍后',
 			ub_now: '立即更新',
-			ub_whats_new: 'v11.7.1 更新内容：',
-			ub_def_1: '优化 Google 搜索顺畅跳转与静默 URL 跟踪参数清理。',
-			ub_def_2: '彻底修复 Bootstrap 模态背景遮罩与页面滚动锁定问题。',
-			ub_def_3: '滚动自适应空闲突变检测与防广告拦截诱饵自动修复。',
+			ub_whats_new: 'v{ver} 更新内容：',
+			ub_def_1: '彻底修复 Cloudflare Turnstile 验证拦截与 Under Attack 无限刷新问题。',
+			ub_def_2: '修复 Google 搜索滚动到底部时搜索结果消失的问题。',
+			ub_def_3: '优化内联脚本正则匹配、严格执行白名单并扩展安全 CDN 列表。',
 			tabHome: '概览',
 			tabConfig: '设置',
 			tabAbout: '关于',
@@ -2294,6 +2385,424 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			promptSyncUrl: '输入原始列表 URL (.txt 或 .json)：',
 			toastSyncSuccess: '已同步 {count} 个新域名',
 			systemBlocked: '内置'
+		},
+		ru: {
+			s_stats: 'Сводка защиты',
+			s_week: 'Активность за неделю',
+			s_act: 'Быстрые действия',
+			s_set: 'Внешний вид и язык',
+			s_bak: 'Резервное копирование',
+			s_data: 'Хранилище и обновления',
+			s_dbg: 'Диагностика',
+			this_page: 'На этой странице',
+			all_time: 'За все время',
+			ads_rem: 'Реклама',
+			ads_rem_s: 'Очищено',
+			el_hid: 'Скрыто элементов',
+			pop_blk: 'Заблокировано всплывающих окон',
+			req_blk: 'Заблокировано трекеров',
+			all_pre: 'Всего: ',
+			page_pre: 'На странице: ',
+			today: 'Сегодня',
+			ads_u: 'рекл.',
+			days: 'Пн|Вт|Ср|Чт|Пт|Сб|Вс',
+			wl_add: 'Разрешить этот сайт',
+			wl_add_s: 'Приостановить фильтрацию на этом домене',
+			wl_rem: 'Возобновить защиту сайта',
+			wl_rem_s: 'Включить блокировку рекламы на этом домене',
+			td_off: 'Приостановить для этой сессии',
+			td_off_s: 'Отключить фильтрацию до закрытия вкладки',
+			td_on: 'Возобновить сессию защиты',
+			td_on_s: 'Немедленно включить фильтрацию обратно',
+			pick: 'Скрыть элемент страницы',
+			pick_s: 'Нажмите или смахните элемент, чтобы скрыть его',
+			clean: 'Очистить пустые блоки',
+			clean_s: 'Немедленно свернуть пустые рекламные места',
+			rep: 'Сообщить о проблеме',
+			rep_s: 'Сообщить о пропущенной рекламе или сбое разметки',
+			undo: 'Отменить (Ctrl+Z)',
+			undo_s: 'Восстановить последний скрытый элемент',
+			rules: 'Правила фильтрации сайта',
+			rules_s: 'Управление скрытыми элементами на этом сайте',
+			peek: 'Оригинал страницы (3 сек)',
+			peek_s: 'Временно показать скрытые элементы на 3 секунды',
+			unlock: 'Разблокировать прокрутку',
+			unlock_s: 'Восстановить прокрутку, заблокированную оверлеем',
+			t_auto: 'Авто',
+			t_light: 'Светлая',
+			t_dark: 'Темная',
+			shield: 'Умный щит',
+			shield_s: 'Блокировка всплывающих окон, редиректов и ловушек',
+			media: 'Медиа-защита',
+			media_s: 'Оптимизация видеоплеера и автопропуск рекламы',
+			strict: 'Глубокая сетевая фильтрация',
+			strict_s: 'Строгая блокировка доменов аналитики и трекеров',
+			fab: 'Кнопка быстрого доступа',
+			fab_s: 'Автоматически прижиматься к краю экрана',
+			exp: 'Экспорт правил фильтрации',
+			exp_s: 'Скопировать пользовательские правила в буфер обмена',
+			imp: 'Импорт правил фильтрации',
+			imp_s: 'Объединить правила из JSON или Base64',
+			upd: 'Проверить обновления',
+			upd_cur: 'Текущая версия: v{ver}',
+			upd_new: 'Доступно обновление v{remote} (установлена v{ver})',
+			upd_chk: 'Проверка обновлений...',
+			rst_cfg: 'Сбросить все настройки',
+			rst_cfg_s: 'Восстановить параметры защиты по умолчанию',
+			clr_st: 'Сбросить статистику',
+			clr_st_s: 'Обнулить все счетчики защиты',
+			rst_rl: 'Очистить правила сайта',
+			rst_rl_s: 'Восстановить все скрытые вручную элементы на этом сайте',
+			dbg_cp: 'Копировать диагностику',
+			dbg_cp_s: 'Скопировать системные логи и фильтры в буфер обмена',
+			ub_ttl: 'Доступно обновление',
+			ub_dsc: 'Готова новая версия с улучшенными правилами фильтрации.',
+			ub_ltr: 'Позже',
+			ub_now: 'Обновить сейчас',
+			ub_whats_new: 'Что нового в v{ver}:',
+			ub_def_1: 'Исправлена бесконечная перезагрузка Cloudflare Turnstile & Under Attack.',
+			ub_def_2: 'Исправлено исчезновение результатов Google Search при прокрутке вниз.',
+			ub_def_3: 'Усилены регулярные выражения скриптов, белый список и трекеры.',
+			tabHome: 'Обзор',
+			tabConfig: 'Настройки',
+			tabAbout: 'О скрипте',
+			badgeSupported: 'поддерживается',
+			badgeUnsupported: 'не поддерживается',
+			subBypassSupported: 'Нейтрализация анти-блокировщиков на новостных сайтах',
+			subBypassUnsupported: 'Недоступно из-за ограничений песочницы iOS WebKit',
+			systemStatus: 'Возможности системы',
+			contactAuthor: 'Сообщество и поддержка',
+			systemCompatibility: 'Возможности системы',
+			featureBypass: 'Обход анти-блокировщиков',
+			featurePopup: 'Защита от всплывающих окон',
+			featureOverlay: 'Защита от скрытых оверлеев',
+			featureNetwork: 'Глубокая сетевая фильтрация',
+			featureClipboard: 'Защита буфера и фокуса',
+			statusSupported: 'поддерживается',
+			statusUnsupported: 'не поддерживается',
+			statusLimited: 'ограничено (iOS)',
+			compatLimitedNote: 'Ограничено на iOS WebKit из-за изоляции песочницы',
+			aboutContact: 'Прямая связь',
+			aboutDesc: 'Легковесный движок блокировки рекламы и защиты навигации для мобильных браузеров.',
+			sysPlatform: 'Платформа',
+			sysPlatformIOS: 'iOS Safari (Stay)',
+			sysPlatformStd: 'Android (XBrowser) / ПК',
+			reportBtnShort: 'Отзыв',
+			rp_ttl: 'Отправить отзыв',
+			rp_rsn: 'Категория:',
+			rp_m1: 'Пропущенная реклама',
+			rp_m2: 'Сломанная разметка сайта',
+			rp_m3: 'Проблема с воспроизведением видео',
+			rp_m4: 'Предложение функции',
+			rp_m5: 'Другое',
+			rp_nt: 'Подробности (необязательно):',
+			rp_ph: 'Опишите, где появилась реклама или что сломалось...',
+			cancel: 'Отмена',
+			rp_send: 'Отправить',
+			rl_empty: 'Для этого сайта пока нет пользовательских правил',
+			p_depth: 'Уровень {current}/{total}',
+			p_par: 'Шире',
+			p_chd: 'Уже',
+			p_blk: 'Скрыть элемент',
+			p_all: 'Скрыть все ({count})',
+			ts_pick: 'Нажмите для выбора элемента или смахните для скрытия',
+			ts_pclose: 'Выбор элементов закрыт',
+			tossedElement: 'Элемент скрыт',
+			ts_gone: 'Элемент больше не найден на странице',
+			ts_nosel: 'Не удалось создать селектор для этого элемента',
+			ts_ball: 'Скрыты все совпадающие элементы',
+			ts_bone: 'Элемент скрыт',
+			ts_wla: 'Сайт добавлен в белый список',
+			ts_wlr: 'Защита на этом сайте возобновлена',
+			ts_tdo: 'Защита возобновлена для этой сессии',
+			ts_tdf: 'Защита приостановлена для этой сессии',
+			ts_cln: 'Очищены пустые рамки',
+			ts_rst: 'Настройки сброшены по умолчанию',
+			ts_clr: 'Статистика очищена',
+			ts_rlc: 'Пользовательские правила для этого сайта удалены',
+			ts_dbg: 'Диагностика скопирована в буфер обмена',
+			ts_con: 'Диагностика выведена в консоль',
+			ts_ulk: 'Прокрутка страницы разблокирована',
+			ts_pkon: 'Просмотр оригинала страницы (3 сек)...',
+			ts_pkoff: 'Фильтры восстановлены',
+			ts_rm: 'Удалено правило: {sel}',
+			ts_udo: 'Восстановлено: {sel}',
+			ts_udn: 'Элемент восстановлен',
+			ts_ud0: 'Нечего отменять',
+			ts_ufail: 'Не удалось проверить обновления',
+			ts_ulat: 'У вас установлена последняя версия',
+			ts_wait: 'Пожалуйста, подождите {sec} с перед повторной отправкой',
+			ts_nohk: 'Конечная точка для отзывов не настроена',
+			ts_rpok: 'Отзыв отправлен. Спасибо!',
+			ts_rperr: 'Не удалось отправить отзыв: {msg}',
+			ts_noexp: 'Нет правил для экспорта',
+			ts_exp: 'Скопировано правил в буфер: {count}',
+			ts_ibad: 'Неверный формат правил',
+			ts_imp: 'Импортировано правил: {count}',
+			pr_json: 'Скопируйте правила JSON:',
+			pr_imp: 'Вставьте правила (JSON или Base64):',
+			cf_rst: 'Сбросить все настройки по умолчанию?',
+			cf_clr: 'Обнулить всю статистику защиты?',
+			cf_rl: 'Удалить все пользовательские правила для этого сайта?',
+			cf_plr: 'Этот элемент является частью видеоплеера. Скрытие может нарушить воспроизведение. Продолжить?',
+			cf_ball: 'Скрыть все совпадающие элементы ({sel})?',
+			cf_bone: 'Скрыть этот элемент?\n\n{sel}',
+			networkRequests: 'Журнал подключений',
+			networkRequestsSub: 'Просмотр и управление разрешениями доменов',
+			blockDomain: 'Блокировать',
+			unblockDomain: 'Разрешить',
+			blockedBadge: 'Заблокировано',
+			allowedBadge: 'Разрешено',
+			badgeBlocked: 'ЗАБЛОКИРОВАНО',
+			badgeAllowed: 'РАЗРЕШЕНО',
+			badgeUnlocked: 'РАЗБЛОКИРОВАНО',
+			sourceBuiltin: 'Встроенный фильтр',
+			sourceTracker: 'Трекер 3-Strike',
+			sourceCustom: 'Пользовательский блок',
+			sourceUserAllowed: 'Разрешено пользователем',
+			searchDomainPlaceholder: 'Фильтр доменов...',
+			noRequestsYet: 'Сторонних подключений пока не зафиксировано',
+			toastDomainBlocked: 'Домен заблокирован: {domain}',
+			toastDomainUnblocked: 'Домен разрешен: {domain}',
+			toastDomainAllowed: 'Домен {domain} разрешен. Перезагрузите страницу для применения.',
+			toastReload: 'Перезагрузить',
+			netFilterAll: 'Все',
+			netFilterBlocked: 'Заблокированные',
+			netFilterUnlocked: 'Разблокированные',
+			netClearLog: 'Очистить журнал сессии',
+			smartTrackerTitle: 'Умная защита от трекеров (3-Strike)',
+			smartTrackerSub: 'Автоматическая блокировка доменов, отслеживающих вас на 3+ сайтах (Обнаружено: {count})',
+			factoryResetTitle: 'Полный сброс (Factory Reset)',
+			factoryResetSub: 'Стереть все данные, правила, белый список и вернуть начальное состояние скрипта',
+			factoryResetConfirm: 'Вы уверены, что хотите выполнить сброс до заводских настроек? Все конфигурации, правила, белый список и статистика будут удалены безвозвратно.',
+			factoryResetConfirmShort: 'Подтвердить удаление всех данных и настроек?',
+			factoryResetDeleteAll: 'Удалить все',
+			factoryResetSuccess: 'Сброс выполнен успешно! Перезагрузка страницы...',
+			cancel: 'Отмена',
+			helpCenterTitle: 'Центр помощи и частые вопросы',
+			helpCenterSub: 'adguard.nvirya.help',
+			helpCenterSection: 'Помощь и документация',
+			helpCenterUnsupportedTooltip: 'Нажмите для просмотра технических ограничений на adguard.nvirya.help',
+			reportPreNoticeText: 'ℹ️ Примечание: перемотка рекламы на YouTube (1–2 с) и расход батареи WebView обусловлены техническими рамками, а не ошибками.',
+			reportPreNoticeLink: 'Известные ограничения ↗',
+			rep_feat_lbl: 'Предложение:',
+			placeholderFeature: 'Опишите функцию или улучшение, которое вы хотели бы видеть...',
+			placeholderBug: 'Опишите, где появилась реклама или что пошло не так...',
+			toastEmptyNote: 'Сначала введите краткое описание',
+			syncRemoteRules: 'Синхронизация по URL',
+			syncRemoteRulesSub: 'Импорт заблокированных доменов из внешнего списка хостов',
+			promptSyncUrl: 'Введите URL списка хостов (.txt или .json):',
+			toastSyncSuccess: 'Синхронизировано новых доменов: {count}',
+			systemBlocked: 'Встроенный'
+		},
+		ja: {
+			s_stats: '保護の概要',
+			s_week: '今週のアクティビティ',
+			s_act: 'クイックアクション',
+			s_set: '外観と言語',
+			s_bak: 'バックアップと同期',
+			s_data: 'ストレージと更新',
+			s_dbg: '診断情報',
+			this_page: 'このページ',
+			all_time: '累計',
+			ads_rem: '広告',
+			ads_rem_s: 'クリーンアップ済',
+			el_hid: '非表示要素',
+			pop_blk: 'ポップアップブロック',
+			req_blk: 'トラッカーブロック',
+			all_pre: '累計: ',
+			page_pre: 'このページ: ',
+			today: '今日',
+			ads_u: '件',
+			days: '月|火|水|木|金|土|日',
+			wl_add: 'このサイトを許可',
+			wl_add_s: '現在のドメインでのフィルタリングを一時停止',
+			wl_rem: 'このサイトの保護を再開',
+			wl_rem_s: 'このドメインでの広告フィルタリングを再度有効化',
+			td_off: 'このセッションのみ一時停止',
+			td_off_s: 'タブを閉じるまでフィルタリングを無効化',
+			td_on: 'セッション保護を再開',
+			td_on_s: 'フィルタリングを直ちに再度有効化',
+			pick: 'ページ要素を非表示',
+			pick_s: '不要な要素をタップまたはスワイプして非表示',
+			clean: '残存フレームを消去',
+			clean_s: '空の広告プレースホルダーを直ちに折りたたむ',
+			rep: '問題を報告',
+			rep_s: '広告のブロック漏れやレイアウト崩れを報告',
+			undo: '元に戻す (Ctrl+Z)',
+			undo_s: '直前に非表示にした要素を復元',
+			rules: 'サイト別フィルター規則',
+			rules_s: 'このサイトの手動非表示要素を管理',
+			peek: '元のページをプレビュー (3秒)',
+			peek_s: '非表示にした要素を3秒間一時的に表示',
+			unlock: 'スクロールロック解除',
+			unlock_s: '隠しオーバーレイで固定されたスクロールを復元',
+			t_auto: '自動',
+			t_light: 'ライト',
+			t_dark: 'ダーク',
+			shield: 'スマートシールド',
+			shield_s: 'ポップアップ・リダイレクト・不可視トラップをブロック',
+			media: 'メディアガード',
+			media_s: '動画プレイヤーを最適化し広告を自動スキップ',
+			strict: 'ディープネットワークフィルター',
+			strict_s: 'トラッキングおよび解析ドメインを厳格に遮断',
+			fab: 'クイック操作ボタン',
+			fab_s: '画面の端に自動吸着',
+			exp: 'フィルター規則をエクスポート',
+			exp_s: 'カスタム規則をクリップボードにコピー',
+			imp: 'フィルター規則をインポート',
+			imp_s: 'JSONまたはBase64から規則を統合',
+			upd: '更新を確認',
+			upd_cur: '現在のバージョン: v{ver}',
+			upd_new: '新しいバージョン v{remote} が利用可能です (現在 v{ver})',
+			upd_chk: '更新を確認中...',
+			rst_cfg: 'すべての設定をリセット',
+			rst_cfg_s: '保護設定をデフォルトに戻す',
+			clr_st: '統計をリセット',
+			clr_st_s: 'すべての保護カウンターをゼロに戻す',
+			rst_rl: 'サイト規則を消去',
+			rst_rl_s: 'このサイトで手動非表示にした全要素を復元',
+			dbg_cp: '診断情報をコピー',
+			dbg_cp_s: 'システムログとフィルターログをクリップボードにコピー',
+			ub_ttl: 'アップデートが利用可能',
+			ub_dsc: 'フィルタールールが改善された新しいバージョンが利用可能です。',
+			ub_ltr: '後で',
+			ub_now: '今すぐ更新',
+			ub_whats_new: 'v{ver} の更新内容:',
+			ub_def_1: 'Cloudflare Turnstile と Under Attack の無限リロードループを修正。',
+			ub_def_2: 'Google 検索で一番下までスクロールした際に結果が消える問題を修正。',
+			ub_def_3: 'インラインスクリプト正規表現、ホワイトリスト適用、トラッカーリストを強化。',
+			tabHome: '概要',
+			tabConfig: '設定',
+			tabAbout: '情報',
+			badgeSupported: '対応',
+			badgeUnsupported: '非対応',
+			subBypassSupported: 'ニュースサイトの広告ブロック検知を回避',
+			subBypassUnsupported: 'iOS WebKit のサンドボックス制限により利用不可',
+			systemStatus: 'システム機能',
+			contactAuthor: 'コミュニティとサポート',
+			systemCompatibility: 'システム機能',
+			featureBypass: '広告ブロック検知の回避',
+			featurePopup: 'ポップアップ保護',
+			featureOverlay: '不可視オーバーレイ防御',
+			featureNetwork: 'ディープネットワークフィルター',
+			featureClipboard: 'クリップボードとフォーカス保護',
+			statusSupported: '対応',
+			statusUnsupported: '非対応',
+			statusLimited: '制限あり (iOS)',
+			compatLimitedNote: 'iOS WebKit のサンドボックス隔離により機能制限あり',
+			aboutContact: '直接連絡',
+			aboutDesc: 'モバイルブラウザ向けに設計された軽量な広告ブロック＆ナビゲーション保護エンジン。',
+			sysPlatform: 'プラットフォーム',
+			sysPlatformIOS: 'iOS Safari (Stay)',
+			sysPlatformStd: 'Android (XBrowser) / デスクトップ',
+			reportBtnShort: 'フィードバック',
+			rp_ttl: 'フィードバックを送信',
+			rp_rsn: 'カテゴリー:',
+			rp_m1: '広告のブロック漏れ',
+			rp_m2: 'ページレイアウト崩れ',
+			rp_m3: '動画再生の不具合',
+			rp_m4: '機能リクエスト',
+			rp_m5: 'その他',
+			rp_nt: '詳細（任意）:',
+			rp_ph: '広告が表示された場所や問題の内容を記入してください...',
+			cancel: 'キャンセル',
+			rp_send: '送信',
+			rl_empty: 'このサイトのカスタムルールはまだありません',
+			p_depth: '階層 {current}/{total}',
+			p_par: '広げる',
+			p_chd: '絞り込む',
+			p_blk: '要素を非表示',
+			p_all: 'すべて非表示 ({count})',
+			ts_pick: '要素をタップして選択、またはスワイプで非表示',
+			ts_pclose: '要素ピッカーを閉じました',
+			tossedElement: '要素を非表示にしました',
+			ts_gone: '要素がページ上に見つかりません',
+			ts_nosel: 'この要素のセレクターを生成できませんでした',
+			ts_ball: '一致するすべての要素を非表示にしました',
+			ts_bone: '要素を非表示にしました',
+			ts_wla: 'サイトを許可リストに追加しました',
+			ts_wlr: 'このサイトでの保護を再開しました',
+			ts_tdo: 'このセッションの保護を再開しました',
+			ts_tdf: 'このセッションの保護を一時停止しました',
+			ts_cln: '残存フレームを消去しました',
+			ts_rst: '設定をデフォルトにリセットしました',
+			ts_clr: '統計をリセットしました',
+			ts_rlc: 'このサイトのカスタムルールを削除しました',
+			ts_dbg: '診断情報をクリップボードにコピーしました',
+			ts_con: '診断情報をコンソールに出力しました',
+			ts_ulk: 'スクロールロックを解除しました',
+			ts_pkon: '元のページをプレビュー中 (3秒)...',
+			ts_pkoff: 'フィルターを復元しました',
+			ts_rm: 'ルールを削除しました: {sel}',
+			ts_udo: '復元しました: {sel}',
+			ts_udn: '要素を復元しました',
+			ts_ud0: '元に戻す操作はありません',
+			ts_ufail: '更新の確認に失敗しました',
+			ts_ulat: '最新バージョンを使用中です',
+			ts_wait: '再送信まで {sec} 秒お待ちください',
+			ts_nohk: 'フィードバックのエンドポイントが設定されていません',
+			ts_rpok: 'フィードバックを送信しました。ありがとうございます！',
+			ts_rperr: '送信に失敗しました: {msg}',
+			ts_noexp: 'エクスポートするカスタムルールがありません',
+			ts_exp: '{count} 件のルールをクリップボードにコピーしました',
+			ts_ibad: '無効なルール形式です',
+			ts_imp: '{count} 件の新しいルールをインポートしました',
+			pr_json: 'JSON ルールをコピー:',
+			pr_imp: 'ルールを貼り付け (JSON または Base64):',
+			cf_rst: 'すべての設定をデフォルトに戻しますか？',
+			cf_clr: 'すべての保護統計をゼロにリセットしますか？',
+			cf_rl: 'このサイトのすべてのカスタムルールを削除しますか？',
+			cf_plr: 'この要素は動画プレイヤーの一部です。非表示にすると再生に影響が出る可能性があります。続行しますか？',
+			cf_ball: '一致するすべての要素 ({sel}) を非表示にしますか？',
+			cf_bone: 'この要素を非表示にしますか？\n\n{sel}',
+			networkRequests: '接続ログ',
+			networkRequestsSub: 'ドメインのアクセス許可の確認と管理',
+			blockDomain: '遮断',
+			unblockDomain: '許可',
+			blockedBadge: '遮断済',
+			allowedBadge: '許可済',
+			badgeBlocked: '遮断済',
+			badgeAllowed: '許可',
+			badgeUnlocked: '許可解除',
+			sourceBuiltin: '標準フィルター',
+			sourceTracker: '3-Strike トラッカー',
+			sourceCustom: '手動ブロック',
+			sourceUserAllowed: 'ユーザー許可',
+			searchDomainPlaceholder: 'ドメインを絞り込み...',
+			noRequestsYet: 'サードパーティ接続はまだ記録されていません',
+			toastDomainBlocked: '{domain} をブロックしました',
+			toastDomainUnblocked: '{domain} を許可しました',
+			toastDomainAllowed: '{domain} を許可しました。完全に適用するには再読み込みしてください。',
+			toastReload: '再読み込み',
+			netFilterAll: 'すべて',
+			netFilterBlocked: '遮断済',
+			netFilterUnlocked: '許可解除',
+			netClearLog: 'セッションログを消去',
+			smartTrackerTitle: 'スマートトラッカー保護 (3-Strike)',
+			smartTrackerSub: '3つ以上のサイトを横断追跡するドメインを自動ブロック (検出: {count} 件)',
+			factoryResetTitle: '初期状態にリセット (Factory Reset)',
+			factoryResetSub: '全データ・ルール・許可リストを消去し初回インストール状態に戻す',
+			factoryResetConfirm: '工場出荷時の状態にリセットしますか？すべての設定、カスタムルール、許可リスト、統計データが完全に消去されます。',
+			factoryResetConfirmShort: 'すべてのデータと設定を消去しますか？',
+			factoryResetDeleteAll: 'すべて削除',
+			factoryResetSuccess: 'リセットが完了しました！ページを再読み込み中...',
+			cancel: 'キャンセル',
+			helpCenterTitle: 'ヘルプセンターとよくある質問',
+			helpCenterSub: 'adguard.nvirya.help',
+			helpCenterSection: 'ヘルプとドキュメント',
+			helpCenterUnsupportedTooltip: 'タップして adguard.nvirya.help で技術的制限を確認',
+			reportPreNoticeText: 'ℹ️ お知らせ: YouTube の1〜2秒の早送りや WebView のバッテリー消費は仕様上の制限であり、不具合ではありません。',
+			reportPreNoticeLink: '既知の制限事項を見る ↗',
+			rep_feat_lbl: 'リクエスト:',
+			placeholderFeature: '追加または改善してほしい機能を入力してください...',
+			placeholderBug: '広告が表示された場所や問題の内容を入力してください...',
+			toastEmptyNote: '簡単な説明を入力してください',
+			syncRemoteRules: 'リモート URL から同期',
+			syncRemoteRulesSub: '外部ホストリストから遮断ドメインを取り込む',
+			promptSyncUrl: 'リストの URL (.txt または .json) を入力:',
+			toastSyncSuccess: '{count} 件の新しいドメインを同期しました',
+			systemBlocked: '標準'
 		}
 	};
 
@@ -2365,6 +2874,8 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		const nav = String((W.navigator && W.navigator.language) || 'en').toLowerCase();
 		if (nav.startsWith('vi')) return 'vi';
 		if (nav.startsWith('zh')) return 'zh-CN';
+		if (nav.startsWith('ja')) return 'ja';
+		if (nav.startsWith('ru')) return 'ru';
 		return 'en';
 	}
 
@@ -2788,9 +3299,14 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		'googleapis.com', 'gstatic.com', 'cloudflare.com', 'cdnjs.cloudflare.com',
 		'jsdelivr.net', 'unpkg.com', 'bootstrapcdn.com', 'jquery.com',
 		'fontawesome.com', 'ytimg.com', 'googlevideo.com', 'youtube.com',
-		'vimeo.com', 'jwpcdn.com', 'akamaized.net', 'fastly.net',
-		'cloudfront.net', 'github.io', 'githubusercontent.com',
-		'recaptcha.net', 'hcaptcha.com', 'challenges.cloudflare.com'
+		'vimeo.com', 'vimeocdn.com', 'jwpcdn.com', 'jwpsrv.com', 'akamaized.net', 'fastly.net',
+		'cloudfront.net', 'github.io', 'githubusercontent.com', 'gitlab.com',
+		'recaptcha.net', 'hcaptcha.com', 'challenges.cloudflare.com', 'turnstile.com',
+		'arkoselabs.com', 'funcaptcha.com', 'geetest.com', 'ddos-guard.net',
+		'stripe.com', 'paypal.com', 'pay.google.com', 'apple.com', 'microsoft.com', 'bing.com',
+		'disqus.com', 'disquscdn.com', 'gravatar.com', 'wp.com', 'shopify.com', 'shopifycdn.com',
+		'sentry.io', 'auth0.com', 'clerk.com', 'supabase.co', 'firebaseio.com', 'firebaseapp.com',
+		'googleusercontent.com', 'ggpht.com'
 	]);
 
 	function isSafeThirdPartyCdn(host) {
@@ -2842,7 +3358,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		}
 	}
 
-	const RE_INLINE_AD_SCRIPT = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|znid|zoneid.*\d{5,}|dataset\.zone\s*=|createElement\(['"]script['"]\).*?(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)/i;
+	const RE_INLINE_AD_SCRIPT = /apu\.php\?zoneid|484r\.com|bvtpk\.com|rushloiters|kirpankinky|pucksdopes|bebangcaromel|casherscamize|nucleindinkly|genaalkyls|urosomeentrec|_vrx|atOptions|popunder|(?:[?&]zoneid=\d{5,}|['"]zoneid['"]\s*:\s*['"]?\d{5,})|dataset\.zone\s*=|createElement\(['"]script['"]\)[\s\S]{0,240}?https?:\/\/[a-z0-9.-]+\.(?:cfd|qpon|sbs|cyou|icu|rest|buzz|monster|cam|hair|skin|quest)(?:[\/:'"?#]|$)/i;
 
 	const RE_AD_STACK = /(?:^|[/.])(?:doubleclick|googlesyndication|adnxs|popads|popcash|propellerads|propeller|propu|adsterra|ad-maven|admaven|exoclick|juicyads|onclickmax|wingsmob|hilltopads|monetag|galaksion|richads|rollerads|evadav|highrevenueformat|cloudiniry|p7jeusk9n|effectivegatecpm|profitablegatecpm|highcpmgate|topcpmgate|revenuecpmgate|cpmrevenuegate|al5sm|co5n|484r|bvtpk|genaalkyls|bebangcaromel|casherscamize|nucleindinkly|kirpankinky|rushloiters|urosomeentrec|pucksdopes|ay267|bblaa|405kk|luugy|a-ads|balauplease)\.|https?:\/\/[^/\s]*\.(?:qpon|cfd|sbs|cyou|icu|rest|bar|buzz|monster|cam|hair|skin|quest)(?:[/:?#]|$)/i;
 
@@ -2850,7 +3366,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		/(?:^|\.)(?:yo88|hitclub|gemwin|zowin|rikvip|sunwin|debet|3bet|five88|sin88|ball88|sv88|bom88|win79|k8cc|j88|fun88|w88|m88|188bet|fb88|ee88|hi88|go88|nohu|bet88|v9bet|kubet|ku11|ku9|jun88|8xbet|new88|789bet|789club|b52|iwin|man88|hbet|f8bet|bk8|vwin|11bet|12bet|138bet|letou|vn88|dafabet|sbobet|cmd368|bong88|123b|mibet|one88|oxbet|red88|sm66|mmwin|78win|win55|fabet|lucky88|vx88|tt88|qq88|kimsa|loto188|shbet|mb66|gk88|okvip|rr88|79king|bj88|king88|69vn|betvisa|thabet|ta88|zbet|mu9|sodo66|qh88|onbet|vz99|k8vina|i9bet|viva88|ok9|go99|hb88|vip52|rik789|dabet|may88|sky88|uk88|bong99|88online|kubet77|kubet88|hi88vip|f8bet0|shbet0|789bet0|jun880|new880)(?:\.|$)/i;
 
 	const RE_AD_PATH =
-		/(?:^|\/)(?:ads?|adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?|cgi-bin\/[a-z0-9_-]+\.pl|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)(?:out|redirect|goto|clk|jump|link|adv|forward)\.(?:php|pl|cgi|asp|aspx)|\/(?:ad|clk|aff|track|pop|jump|forward)\/|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
+		/(?:^|\/)(?:adserver|adservice|advert|adunit|adframe|popunder|popads|banner[-_]?ads?|ad[-_]?(?:slot|unit|frame|box|banner|container|zone|loader|delivery|wrapper|rotate)|vast|vpaid|prebid|revive|openx|adclient|adtag|nativeads?|interstitial[-_]?ad|sponsored[-_]?post|adclick|aff[-_]?click|clickserv(?:er)?|cgi-bin\/(?:dl|pop|jump|gate|out|tracker).*\.cgi|(?:\/|^)ad[_-]?(?:gate|jump|direct|click))(?:\/|\.|$)/i;
 
 	const RE_AD_TOKEN =
 		/(?:^|[^a-z0-9])(?:ads?|advert|advertis(?:e|ing|ement)|sponsor(?:ed)?[-_](?:ad|box|slot|block|content|unit)|banner[-_]?ads?|ad[-_]?banner|popunder|popup[-_]ad|sticky[-_]ad|interstitial[-_]ad|ad[-_](?:box|slot|unit|zone|block|wrap|holder|container|banner|area|space|placeholder|overlay|loader|placement|wrapper)|adsbygoogle|taboola[-_]|outbrain[-_]|mgid[-_]|carbonads|dfp[-_]?ad)(?=[^a-z0-9]|$)/i;
@@ -2871,7 +3387,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		/^(?:utm_[a-z0-9_]+|click_?id|clk_?id|aff(?:iliate)?(?:_id|_sub)?|camp(?:aign)?_?id|ref_?id|track(?:ing)?_?id|ad_?id|banner_?id|zone_?id|gclid|fbclid|dclid|msclkid|mc_cid|mc_eid|spm|ref_src|ref_url|gbraid|wbraid|si|trk|trac_?id|sub_?id|s2s_?id|twclid|igshid|yclid|vero_id|oly_anon_id|oly_enc_id|_hsenc|_hsmi|mkt_tok|s_cid|ef_id|cmpid)$/i;
 
 	function stripTrackingParams(uOrStr) {
-		if (!uOrStr) return uOrStr;
+		if (!uOrStr || isSecurityVerificationPage()) return uOrStr;
 		let u = null;
 		let isStringInput = false;
 		if (typeof uOrStr === 'string') {
@@ -2882,7 +3398,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		}
 		if (!u || !u.searchParams) return uOrStr;
 
-		// Preserve essential parameters on YouTube
 		if (u.hostname && (isYouTubeDomain(u.hostname) || RE_YOUTUBE_HOST.test(u.hostname))) {
 			return uOrStr;
 		}
@@ -3112,8 +3627,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		}, true);
 	} catch (e) {}
 
-	// network/script guards moved after const/let init
-
 	function safeUrl(input) {
 		if (!input) return null;
 		try {
@@ -3236,7 +3749,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		return false;
 	}
 
-	function isAdUrl(u, pageHostname) {
+	function isAdUrl(u, pageHostname, skipLearnedTracker = false) {
 		if (!u) return false;
 		let urlObj = u;
 		if (typeof u === 'string') {
@@ -3244,20 +3757,16 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			if (!urlObj) return false;
 		}
 		const h = String(urlObj.hostname || '').toLowerCase().replace(/\.$/, '');
+		const href = String(urlObj.href || '');
+		if (RE_SECURITY_CHALLENGE.test(href) || RE_SECURITY_CHALLENGE_HOST.test(h)) return false;
 		const pageHost = String(pageHostname || hostname || '').toLowerCase();
 
-		// Priority 1 (Highest): User Whitelist Override
 		if (isUserAllowedNetHost(h, pageHost)) return false;
 
-		// Priority 2: User Custom Block
 		if (isUserBlockedNetHost(h)) return true;
 
-		// Priority 3: 3-Strike Heuristic Tracker Protection
-		if (config.smartTrackerProtection && isLearnedTrackerHost(h)) return true;
+		if (!skipLearnedTracker && config.smartTrackerProtection && isLearnedTrackerHost(h)) return true;
 
-		// Priority 4: Built-in Filter Lists
-		const href = String(urlObj.href || '');
-		if (RE_SECURITY_CHALLENGE.test(href)) return false;
 		if (RE_TRANSLATOR_WHITELIST.test(href) || isTranslatorWhitelistedRequest(urlObj)) return false;
 		if (RE_YOUTUBE_AD_ENDPOINT.test(href)) return true;
 		if (isYouTubeWhitelistedRequest(urlObj)) return false;
@@ -3511,9 +4020,9 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	}
 
 	function shouldSpoofVisibility() {
-		if (!config.enabled || isDisabledHere()) return false;
-		if (RE_MAINSTREAM_VIDEO_HOST.test(hostname)) return false;
-		return true;
+		if (!config.enabled || isDisabledHere() || isSecurityVerificationPage()) return false;
+		if (RE_MAINSTREAM_VIDEO_HOST.test(hostname) || isSearchEngineDomain(hostname) || TRUSTED_DOCS_DOMAINS.test(hostname) || isTrustedPopupHost(hostname)) return false;
+		return stats.session.popups > 0 || stats.session.redirects > 0 || stats.session.ads > 0;
 	}
 
 	function installClipboardAndVisibilityGuard() {
@@ -3843,9 +4352,12 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 	function neutralizeScriptNode(node) {
 		if (!node || node.nodeType !== 1 || String(node.tagName || '').toLowerCase() !== 'script') return false;
-		if (!config.enabled || isDisabledHere() || isYouTubeDomain(hostname)) return false;
+		if (!config.enabled || isDisabledHere() || isYouTubeDomain(hostname) || isFullSecurityChallengePage()) return false;
 		const rawSrc = node.src || attr(node, 'src') || '';
-		if (rawSrc && /eruda|vconsole|chobitsu/i.test(rawSrc)) return false;
+		if (rawSrc && (/eruda|vconsole|chobitsu/i.test(rawSrc) || RE_SECURITY_CHALLENGE.test(rawSrc))) {
+			if (RE_SECURITY_CHALLENGE.test(rawSrc)) W.__nvirya_has_security_challenge = true;
+			return false;
+		}
 		const hasAdZone = !!(attr(node, 'data-zone') || (node.dataset && node.dataset.zone));
 		if (rawSrc || hasAdZone) {
 			const u = safeUrl(rawSrc);
@@ -3865,6 +4377,10 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			}
 		} else {
 			const codeText = node.textContent || '';
+			if (codeText && /_cf_chl_opt|__cf\$cv\$params|challenge-platform|cf-turnstile/i.test(codeText)) {
+				W.__nvirya_has_security_challenge = true;
+				return false;
+			}
 			if (codeText && !/eruda|vconsole|chobitsu/i.test(codeText) && RE_INLINE_AD_SCRIPT.test(codeText)) {
 				try {
 					node.type = 'javascript/blocked';
@@ -3890,14 +4406,24 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 				const origAttach = elProto.attachShadow;
 				const guardedAttach = function(init) {
 					try {
-						if (!isNviryaNode(this) && config.enabled && !isDisabledHere() && isAdCallStack()) {
-							log('BLOCK', 'shadow-ad', 'Blocked adware attachShadow via stack');
-							try {
-								this.style.setProperty('display', 'none', 'important');
-								this.remove();
-							} catch (e) {}
-							const dummy = D.createElement('div');
-							return origAttach.call(dummy, { mode: 'open' });
+						if (!isNviryaNode(this)) {
+							const st = (new Error().stack) || '';
+							if (RE_SECURITY_CHALLENGE.test(st) || isCaptchaOrTurnstileElement(this)) {
+								try {
+									this.setAttribute('data-nvirya-safe', 'captcha');
+									W.__nvirya_has_security_challenge = true;
+								} catch (e) {}
+								return origAttach.apply(this, arguments);
+							}
+							if (config.enabled && !isDisabledHere() && !isSecurityVerificationPage() && isAdCallStack()) {
+								log('BLOCK', 'shadow-ad', 'Blocked adware attachShadow via stack');
+								try {
+									this.style.setProperty('display', 'none', 'important');
+									this.remove();
+								} catch (e) {}
+								const dummy = D.createElement('div');
+								return origAttach.call(dummy, { mode: 'open' });
+							}
 						}
 					} catch (e) {}
 					return origAttach.apply(this, arguments);
@@ -4241,7 +4767,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 											if (isSynthetic) {
 												try { if (typeof event.stopPropagation === 'function') event.stopPropagation(); } catch (e) {}
 												try { if (typeof event.preventDefault === 'function') event.preventDefault(); } catch (e) {}
-												return true; // Stealth deception: return true so anti-adblock script believes click succeeded!
+												return true;
 											}
 											return false;
 										}
@@ -5074,7 +5600,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		if (!el || el.nodeType !== 1) return { action: 'ignore' };
 		const tag = (el.tagName || '').toLowerCase();
 		if (NEVER_REMOVE_TAGS.has(tag)) return { action: 'ignore' };
-		if (isProtectedPlayer(el) || isLegitimateMediaPreview(el)) return { action: 'ignore' };
+		if (isProtectedPlayer(el) || isLegitimateMediaPreview(el) || isCaptchaOrTurnstileElement(el)) return { action: 'ignore' };
 
 		if (el.__nvirya_spoof_img) return { action: 'ignore' };
 		const isGooglePage = isGoogleCoreHost(hostname);
@@ -5349,10 +5875,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		return false;
 	}
 
-
-	// ==========================================
-	// TASK 2: MEDIA CARD & VIDEO PREVIEW SAFE-GUARD
-	// ==========================================
 	const RE_PREVIEW_KEYWORDS = /(?:preview|trailer|thumb|hover|preload|mediabook|videopreview|stream-preview|snapshot)/i;
 	const RE_CARD_CONTAINER = /(?:^|[\s_-])(?:video[-_]?box|thumb[-_]?block|videoblock|cam[-_]?item|room[-_]?card|video[-_]?card|item[-_]?video|thumb[-_]?container|media[-_]?card)(?:$|[\s_-])/i;
 
@@ -5360,7 +5882,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		if (!node || node.nodeType !== 1) return false;
 		if (node.hasAttribute && node.getAttribute('data-nvirya-safe-preview') === '1') return true;
 
-		// 1. YouTube Context
 		if (isYouTubeDomain(hostname)) {
 			if (node.id === 'video-preview' || (node.closest && node.closest('ytd-thumbnail, ytm-thumbnail-cover, ytd-rich-item-renderer, ytm-media-item, ytd-video-preview, #video-preview, .ytp-inline-preview-ui, ytm-reel-item-renderer'))) {
 				try { node.setAttribute('data-nvirya-safe-preview', '1'); } catch (e) {}
@@ -5368,7 +5889,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			}
 		}
 
-		// 2. Video / Cam / Tube Context (Universal Video Card Detection)
 		const tag = String(node.tagName || '').toLowerCase();
 		const isMediaEl = tag === 'video' || tag === 'canvas' || tag === 'img';
 		const videoEl = tag === 'video' ? node : (node.querySelector ? node.querySelector('video') : null);
@@ -5396,7 +5916,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 				}
 			}
 
-			// Check identifiers: class, id, src
 			const idc = ((node.id || '') + ' ' + classString(node)).trim();
 			const src = (node.getAttribute && (node.getAttribute('src') || node.getAttribute('data-src'))) || '';
 			if (RE_PREVIEW_KEYWORDS.test(idc) || RE_PREVIEW_KEYWORDS.test(src)) {
@@ -5404,7 +5923,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 				return true;
 			}
 
-			// Check card container
 			try {
 				const card = node.closest && node.closest('li, article, .video-box, .thumb-block, .videoblock, .cam-item, .room-card, [data-video-id], [data-id]');
 				if (card) {
@@ -5417,7 +5935,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			} catch (e) {}
 		}
 
-		// Anchor thumbnail overlay check
 		try {
 			const anchor = node.closest && node.closest('a');
 			if (anchor) {
@@ -5435,21 +5952,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		return false;
 	}
 
-	// ==========================================
-	// TASK 3: UPWARD RECURSIVE WRAPPER COLLAPSE & FIXED BANNER SWEEPER
-	// ==========================================
 	const RE_AD_LABEL_ONLY = /^(?:advertisement|sponsored|quảng cáo|ad|ads|tài trợ|advertisements|promoted)$/i;
-	const RE_AD_WRAPPER_IDENTIFIER = /(?:^|[-_])(ad|ads|adv|banner|sponsor|promo|dfp|gpt|slot|wrapper)(?:$|[-_])/i;
-	const RE_MAIN_CONTENT_TAGS = /^(?:p|h1|h2|h3|h4|h5|h6|form|input|select|textarea|table)$/i;
+	const RE_AD_WRAPPER_IDENTIFIER = /(?:^|[-_])(?:ad|ads|adv|ad[-_]?banner|ad[-_]?wrapper|ad[-_]?slot|ad[-_]?box|ad[-_]?container|ad[-_]?unit|sponsor|dfp|gpt[-_]?ad)(?:$|[-_])/i;
+	const RE_MAIN_CONTENT_TAGS = /^(?:p|h1|h2|h3|h4|h5|h6|article|main|form|input|select|textarea|table)$/i;
 
 	function collapseEmptyAdAncestors(adNode) {
-		if (!adNode || !adNode.parentElement) return;
+		if (!adNode || !adNode.parentElement || isSearchEngineDomain(hostname)) return;
 		let parent = adNode.parentElement;
 		let depth = 0;
 		while (parent && depth < 4) {
 			const tag = String(parent.tagName || '').toLowerCase();
-			if (tag === 'body' || tag === 'html' || tag === 'main' || tag === 'article' || parent.id === 'content' || parent.id === 'app' || parent.id === '__next' || parent.id === 'root') break;
-			if (isNviryaNode(parent) || isProtectedPlayer(parent) || isLegitimateMediaPreview(parent)) break;
+			if (tag === 'body' || tag === 'html' || tag === 'main' || tag === 'article' || parent.id === 'content' || parent.id === 'app' || parent.id === '__next' || parent.id === 'root' || parent.id === 'rso' || parent.id === 'botstuff' || parent.id === 'search' || parent.id === 'center_col') break;
+			if (isNviryaNode(parent) || isProtectedPlayer(parent) || isLegitimateMediaPreview(parent) || isCaptchaOrTurnstileElement(parent)) break;
 
 			const hasLegitVideo = parent.querySelector && parent.querySelector('video') && !isAdUrl(safeUrl(parent.querySelector('video').src));
 			if (hasLegitVideo) break;
@@ -5457,22 +5971,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			const txt = String(parent.innerText || parent.textContent || '').trim();
 			const isShortText = txt.length < 25;
 			const isAdLabelOnly = RE_AD_LABEL_ONLY.test(txt);
+			if (!isShortText && !isAdLabelOnly) break;
 
 			let hasMainTags = false;
-			if (parent.children) {
-				for (let i = 0; i < parent.children.length; i++) {
-					const cTag = String(parent.children[i].tagName || '').toLowerCase();
-					if (RE_MAIN_CONTENT_TAGS.test(cTag)) {
-						hasMainTags = true;
-						break;
-					}
-				}
+			if (parent.querySelector && parent.querySelector('p, h1, h2, h3, h4, h5, h6, article, main, form, input:not([type="hidden"]), select, textarea, table')) {
+				hasMainTags = true;
 			}
+			if (hasMainTags) break;
 
 			const idc = ((parent.id || '') + ' ' + classString(parent)).trim();
 			const isAdWrap = RE_AD_WRAPPER_IDENTIFIER.test(idc);
 
-			if (((isShortText || isAdLabelOnly) && !hasMainTags) || isAdWrap) {
+			if (isAdLabelOnly || (isShortText && isAdWrap)) {
 				try {
 					parent.style.setProperty('display', 'none', 'important');
 					parent.style.setProperty('height', '0px', 'important');
@@ -5528,9 +6038,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		}
 	}
 
-	// ==========================================
-	// TASK 5: ORPHANED DARK BACKDROP SWEEPER
-	// ==========================================
 	const RE_BACKDROP_IDENTIFIER = /(?:backdrop|modal[-_]?bg|overlay[-_]?bg|dimmer|mask|popup[-_]?overlay|fancybox[-_]?bg|swal2[-_]?container|mfp[-_]?bg|black[-_]?layer)/i;
 
 	function hasActiveLegitimateDialogOrModal() {
@@ -5553,7 +6060,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	}
 
 	function sweepOrphanedBackdrops() {
-		if (isDisabledHere() || isSecurityVerificationPage()) return;
+		if (isDisabledHere() || isSecurityVerificationPage() || isSearchEngineDomain(hostname)) return;
 		if (hasActiveLegitimateDialogOrModal()) return;
 
 		const vw = W.innerWidth || D.documentElement.clientWidth || 0;
@@ -5573,7 +6080,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		let sweptCount = 0;
 		for (let i = 0; i < candidates.length; i++) {
 			const el = candidates[i];
-			if (!el || el.nodeType !== 1 || isNviryaNode(el) || isProtectedPlayer(el) || isLegitimateMediaPreview(el)) continue;
+			if (!el || el.nodeType !== 1 || isNviryaNode(el) || isProtectedPlayer(el) || isLegitimateMediaPreview(el) || isCaptchaOrTurnstileElement(el)) continue;
 
 			let style, rect;
 			try {
@@ -5592,7 +6099,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			let isEmptyModal = false;
 			if (isModalContainer && !isNamedBackdrop) {
 				const hasControls = el.querySelector && el.querySelector('input:not([type="hidden"]), textarea, select, video, audio');
-				if (!hasControls) {
+				if (!hasControls && !isCaptchaOrTurnstileElement(el)) {
 					const txt = meaningfulText(el);
 					const hasSubstantiveContent = txt.length >= 25 || (el.querySelector && el.querySelector('img:not([data-nvirya-collapsed]), iframe:not([data-nvirya-collapsed])'));
 					if (!hasSubstantiveContent || isEmptyOrCloseOnly(el, 0)) {
@@ -5645,8 +6152,8 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	}
 
 	function isInvisibleTrap(el) {
-		if (isYouTubeDomain(hostname) || TRUSTED_DOCS_DOMAINS.test(hostname)) return false;
-		if (isLegitimateMediaPreview(el)) return false;
+		if (isYouTubeDomain(hostname) || isSearchEngineDomain(hostname) || TRUSTED_DOCS_DOMAINS.test(hostname) || isSecurityVerificationPage()) return false;
+		if (isLegitimateMediaPreview(el) || isCaptchaOrTurnstileElement(el)) return false;
 		if (!el || el.nodeType !== 1 || !el.isConnected) return false;
 
 		const tag = String(el.tagName || '').toLowerCase();
@@ -5658,6 +6165,13 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 		if (isNviryaNode(el) || isProtectedPlayer(el)) return false;
 		if (isProtectedTrapSurface(el)) return false;
+
+		if (tag === 'iframe') {
+			const iSrc = attr(el, 'src') || '';
+			if (iSrc && RE_SECURITY_CHALLENGE.test(iSrc)) return false;
+			const iu = safeUrl(iSrc);
+			if (iu && (isSafeThirdPartyCdn(iu.hostname) || sameRootDomain(iu.hostname, hostname)) && !isAdUrl(iu)) return false;
+		}
 
 		let style, rect;
 		try {
@@ -5673,7 +6187,8 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			const bg = String(style.backgroundColor || '').replace(/\s+/g, '').toLowerCase();
 			const transparentBg = bg === 'transparent' || /^rgba\(\d{1,3},\d{1,3},\d{1,3},0(?:\.0+)?\)$/.test(bg);
 			const isFilterZero = /opacity\(\s*0(?:\.0+)?\s*\)/i.test(style.filter || '');
-			const isTransparent = (isFinite(opacity) && opacity <= 0.08) || transparentBg || isFilterZero;
+			const isLowOpacity = (isFinite(opacity) && opacity <= 0.08) || isFilterZero;
+			const isTransparent = tag === 'iframe' ? (isLowOpacity || (transparentBg && (!attr(el, 'src') || /^about:blank/i.test(attr(el, 'src')) || isAdUrl(safeUrl(attr(el, 'src')))))) : (isLowOpacity || transparentBg);
 			if (!isTransparent) return false;
 
 			const image = String(style.backgroundImage || 'none').trim().toLowerCase();
@@ -5846,12 +6361,13 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		}
 	}
 
-	function unlockPageScroll() {
+	function unlockPageScroll(forceManual = false) {
+		if (!forceManual && (isSearchEngineDomain(hostname) || isSecurityVerificationPage())) return false;
 		if (hasVisibleLegitimateModal()) return false;
 		sweepOrphanedBackdrops();
 		const roots = [D.documentElement, D.body];
 		let changed = false;
-		const overflowProps = ['overflow', 'overflow-x', 'overflow-y'];
+		const overflowProps = ['overflow', 'overflow-y'];
 		for (const el of roots) {
 			if (!el) continue;
 			try {
@@ -5872,9 +6388,13 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 				const camel = prop.replace(/-([a-z])/g, function(_, c) { return c.toUpperCase(); });
 				const current = String(cs[camel] || cs.getPropertyValue(prop) || '').toLowerCase();
 				if (current === 'hidden' || current === 'clip') {
-					rememberScrollOverride(el, prop);
+					rememberScrollOverride(el, 'overflow-y');
 					try {
-						el.style.setProperty(prop, 'auto', 'important');
+						el.style.setProperty('overflow-y', 'auto', 'important');
+						if (prop === 'overflow' && String(el.style.getPropertyValue('overflow') || '').toLowerCase() === 'hidden') {
+							rememberScrollOverride(el, 'overflow');
+							el.style.setProperty('overflow', ' visible auto', 'important');
+						}
 						changed = true;
 					} catch (e) {}
 				}
@@ -5882,14 +6402,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			const position = String(cs.position || '').toLowerCase();
 			if (position === 'fixed' && String(base.computed.position || '').toLowerCase() !== 'fixed') {
 				try {
+					const topOffset = parseInt(el.style.top || cs.top || '0', 10);
 					rememberScrollOverride(el, 'position');
 					el.style.setProperty('position', base.inline.position || base.computed.position || 'static', base.priority.position || 'important');
 					['top', 'right', 'bottom', 'left', 'width', 'margin-right'].forEach(function(prop) {
 						rememberScrollOverride(el, prop);
-						const val = base.inline[prop] || base.computed[prop];
-						if (val) el.style.setProperty(prop, val, base.priority[prop] || 'important');
+						const val = base.inline[prop];
+						if (val) el.style.setProperty(prop, val, base.priority[prop] || '');
 						else el.style.removeProperty(prop);
 					});
+					if (topOffset < 0 && W.scrollY === 0) {
+						try { W.scrollTo(0, Math.abs(topOffset)); } catch (e) {}
+					}
 					changed = true;
 				} catch (e) {}
 			}
@@ -6477,7 +7001,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		});
 		const extraSel = customHostRules.length ? ',\n    ' + customHostRules.join(',\n    ') : '';
 		const css = `
-    [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"], [data-google-query-id],
+    [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"], ins[data-google-query-id], div[id^="google_ads_"][data-google-query-id], div[id^="div-gpt-ad"][data-google-query-id],
     ins.adsbygoogle, .aads-sticky, #aads-close, iframe[data-aa],
     aside.ads, .ads_single_top, .ads_single_center, .ads_header,
     .ads_download_1, .ads_download_2, .ads_download_u_1, .ads_download_u_2, .ads_download_u_3,
@@ -6719,10 +7243,12 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	}
 
 	const RE_FAKE_BOT_TEXT = /(?:xác minh bạn không phải|không phải là bot|hãy xác minh|nhấn tiếp tục|bấm tiếp tục|verify you are (?:not a )?(?:bot|human)|human verification|robot check|click allow|nhấn cho phép|press continue|tap continue|robot verification|chú ý\s*:.*tiếp tục)/i;
-	const LEGIT_CAPTCHA_SELECTOR = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="google.com/recaptcha"], iframe[src*="recaptcha.net"], iframe[src*="hcaptcha.com"]';
+	const LEGIT_CAPTCHA_SELECTOR = 'iframe[src*="challenges.cloudflare.com"], iframe[src*="google.com/recaptcha"], iframe[src*="recaptcha.net"], iframe[src*="hcaptcha.com"], .cf-turnstile, .g-recaptcha, .h-captcha, [data-sitekey], [data-nvirya-safe="captcha"], input[name="cf-turnstile-response"], input[name="g-recaptcha-response"], input[name="h-captcha-response"], #challenge-running, #challenge-stage, #challenge-form, #cf-wrapper';
 
 	function hasLegitCaptchaIframe(rootNode) {
-		if (!rootNode || !rootNode.querySelector) return false;
+		if (!rootNode) return false;
+		if (isSecurityVerificationPage() || isCaptchaOrTurnstileElement(rootNode)) return true;
+		if (!rootNode.querySelector) return false;
 		try {
 			return !!rootNode.querySelector(LEGIT_CAPTCHA_SELECTOR);
 		} catch (e) {
@@ -7065,7 +7591,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 							continue;
 						}
 						checkedCleanModals.delete(targetNode);
-						if ((targetNode === D.documentElement || targetNode === D.body) && (m.attributeName === 'style' || m.attributeName === 'class')) {
+						if (!isSearchEngineHost && !isSecurityVerificationPage() && (stats.session.hidden > 0 || stats.session.removed > 0 || stats.antiAdblock.session.recoveries > 0) && (targetNode === D.documentElement || targetNode === D.body) && (m.attributeName === 'style' || m.attributeName === 'class')) {
 							try {
 								const cs = W.getComputedStyle(targetNode);
 								if (cs && (cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.overflow === 'clip' || cs.overflowY === 'clip' || cs.position === 'fixed')) {
@@ -7952,16 +8478,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 		function parseRemoteChangelog(head) {
 			const parsedChangelogArray = [];
+			const cleanChangelogLine = (raw) => String(raw || '')
+				.replace(/^\s*(?:\/\/|\*+)?\s*/, '')
+				.replace(/^[-•*+]\s*/, '')
+				.replace(/^\[Task\s*\d+\]\s*/i, '')
+				.trim();
 			try {
 				const blockMatch = head.match(/==Changelog==([\s\S]*?)==\/Changelog==/i);
 				if (blockMatch && blockMatch[1]) {
 					const lines = blockMatch[1].split(/\r?\n/);
 					for (let i = 0; i < lines.length; i++) {
-						const cleaned = lines[i]
-							.replace(/^\s*(?:\/\/|\*+)?\s*/, '')
-							.replace(/^[-•*+]\s*/, '')
-							.trim();
-						if (cleaned && !/^==/.test(cleaned)) {
+						const cleaned = cleanChangelogLine(lines[i]);
+						if (cleaned && !/^==/.test(cleaned) && !/^v\d+\.\d+.*:$/i.test(cleaned)) {
 							parsedChangelogArray.push(cleaned);
 						}
 					}
@@ -7970,8 +8498,8 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 					const tagRe = /\/\/\s*@changelog\s+(.+)/gi;
 					let tm;
 					while ((tm = tagRe.exec(head)) !== null) {
-						const item = String(tm[1] || '').replace(/^[-•*+]\s*/, '').trim();
-						if (item) parsedChangelogArray.push(item);
+						const item = cleanChangelogLine(tm[1]);
+						if (item && !/^v\d+\.\d+.*:$/i.test(item)) parsedChangelogArray.push(item);
 					}
 				}
 			} catch (e) {}
@@ -8105,7 +8633,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	const UI = (() => {
 		const K_FAB = 'nvirya_x_fab';
 		const THEMES = ['auto', 'light', 'dark'];
-		const LANGS = ['auto', 'en', 'vi', 'zh-CN'];
+		const LANGS = ['auto', 'en', 'vi', 'zh-CN', 'ja', 'ru'];
 		const SVG_NS = 'http://www.w3.org/2000/svg';
 		const FAB_SIZE = 46,
 			FAB_MARGIN = 10;
@@ -8671,6 +9199,9 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
     .item.disabled input { cursor: not-allowed; pointer-events: none; }
 
     .update-banner {
+			-webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
       position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px));
       width: min(92vw, 390px);
       padding: 16px;
@@ -9082,10 +9613,13 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		function refreshLanguageUI() {
 			if (sheetBuilt && bodyEl) buildBody();
 			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl');
-			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new');
+
+			const curRemoteVer = String(updateAvailable || VERSION).replace(/^v/i, '');
+			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new', { ver: curRemoteVer });
 			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
 			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
 			renderUpdateChangelog(updateChangelog);
+
 			if (reportModalEl) {
 				const wasOpen = reportModalEl.classList.contains('open');
 				reportModalEl.remove();
@@ -9124,7 +9658,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			});
 			root.insertBefore(backdropEl, toastEl);
 
-			sheetEl = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Nvirya AdGuard X', 'aria-hidden': 'true', tabindex: '-1', style: { display: 'none' } });
+			sheetEl = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Nvirya AdGuard', 'aria-hidden': 'true', tabindex: '-1', style: { display: 'none' } });
 			themeBtn = el('button', {
 				class: 'icon-btn',
 				type: 'button',
@@ -9147,7 +9681,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			}, icon('close'));
 			const head = el('div', { class: 'head' },
 				el('div', { class: 'titles' },
-					el('h1', null, 'Nvirya AdGuard X',
+					el('h1', null, 'Nvirya AdGuard',
 						newBadgeEl = el('span', { class: 'new-badge', 'aria-label': 'NEW' }, 'NEW')),
 					el('div', { class: 'badge' }, hostname || '(unknown)')
 				),
@@ -9204,7 +9738,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': t('ub_ltr'), onclick: () => dismissUpdateBanner() }, icon('close'))
 				),
 				el('div', { class: 'ub-body' },
-					ubWhatsNewEl = el('div', { class: 'ub-whats-new' }, t('ub_whats_new')),
+					ubWhatsNewEl = el('div', { class: 'ub-whats-new' }, t('ub_whats_new', { ver: String(updateAvailable || VERSION).replace(/^v/i, '') })),
 					ubListEl = el('ul', { class: 'ub-changelog' })
 				),
 				el('div', { class: 'ub-actions' },
@@ -9468,7 +10002,9 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 					['auto', t('t_auto')],
 					['en', 'EN'],
 					['vi', 'VI'],
-					['zh-CN', '中文']
+					['zh-CN', '中文'],
+					['ja', 'JP'],
+					['ru', 'RU']
 				]) {
 				const b = el('button', {
 					type: 'button',
@@ -9885,7 +10421,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 				)
 			);
 			aboutView.appendChild(aboutCard);
-			aboutView.appendChild(el('div', { class: 'footer' }, 'Nvirya AdGuard X v' + VERSION));
+			aboutView.appendChild(el('div', { class: 'footer' }, 'Nvirya AdGuard v' + VERSION));
 
 			bodyEl.append(homeView, configView, aboutView);
 
@@ -9910,13 +10446,23 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			if (newBadgeEl) newBadgeEl.classList.toggle('show', !!updateAvailable);
 		}
 
-		function renderUpdateChangelog(items) {
+		function renderUpdateChangelog(list) {
 			if (!ubListEl) return;
 			clear(ubListEl);
-			const list = (Array.isArray(items) && items.length > 0) ?
-				items : [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')];
-			for (let i = 0; i < list.length; i++) {
-				ubListEl.appendChild(el('li', null, String(list[i])));
+			const lang = getEffectiveLang();
+			const hasLocalDefs = Boolean(TRANSLATIONS[lang] && TRANSLATIONS[lang].ub_def_1);
+			let items;
+			if (lang !== 'en' && hasLocalDefs) {
+				items = [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')].filter(Boolean);
+			} else if (Array.isArray(list) && list.length) {
+				items = list;
+			} else {
+				items = [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')].filter(Boolean);
+			}
+			for (let i = 0; i < items.length; i++) {
+				const text = String(items[i] || '').replace(/^\[Task\s*\d+\]\s*/i, '').trim();
+				if (!text || /^v\d+\.\d+.*:$/i.test(text)) continue;
+				ubListEl.appendChild(el('li', {}, text));
 			}
 		}
 
@@ -9947,10 +10493,11 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 				}
 			}
 			if (!updateAvailable) return;
+			const cleanRemoteVer = String(updateAvailable).replace(/^v/i, '');
 			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl');
 			if (ubCurVerEl) ubCurVerEl.textContent = 'v' + VERSION;
-			if (ubNewVerEl) ubNewVerEl.textContent = 'v' + String(updateAvailable).replace(/^v/i, '');
-			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new');
+			if (ubNewVerEl) ubNewVerEl.textContent = 'v' + cleanRemoteVer;
+			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new', { ver: cleanRemoteVer });
 			renderUpdateChangelog(updateChangelog);
 			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
 			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
@@ -11627,7 +12174,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 
 		function collectDebugInfo() {
 			const lines = [];
-			lines.push('Nvirya AdGuard X v' + VERSION);
+			lines.push('Nvirya AdGuard v' + VERSION);
 			lines.push('Host: ' + hostname);
 			lines.push('URL: ' + location.href.split('?')[0]);
 			lines.push('Enabled: ' + config.enabled);
@@ -11647,7 +12194,7 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		}
 
 		function forceUnlockScroll() {
-			unlockPageScroll();
+			unlockPageScroll(true);
 			try {
 				[D.documentElement, D.body].forEach(elNode => {
 					if (!elNode) return;
@@ -11869,22 +12416,18 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			if (!host) return { status: 'allowed', source: 'allowed' };
 			const h = String(host).toLowerCase().replace(/\.$/, '');
 
-			// 1. User allowed (Highest priority - Whitelist override)
 			if (userAllowedSet.has(h) || (typeof isUserAllowedNetHost === 'function' && isUserAllowedNetHost(h, hostname))) {
 				return { status: 'unlocked', source: 'user_allowed' };
 			}
 
-			// 2. User custom blocked
 			if (userBlockedSet.has(h) || (typeof isUserBlockedNetHost === 'function' && isUserBlockedNetHost(h))) {
 				return { status: 'blocked', source: 'custom' };
 			}
 
-			// 3. 3-Strike Heuristic Tracker
 			if (config.smartTrackerProtection && typeof isLearnedTrackerHost === 'function' && isLearnedTrackerHost(h)) {
 				return { status: 'blocked', source: 'tracker' };
 			}
 
-			// 4. Built-in filters
 			const sample = sampleUrl ? String(sampleUrl) : '';
 			const isBuiltin = RE_AD_HOST.test(h) || RE_GAMBLING_HOST.test(h) || isSuspiciousAdDomain(h) || (sample && (RE_BANNER_NETWORKS.test(sample) || RE_AD_STACK.test(sample) || RE_YOUTUBE_AD_ENDPOINT.test(sample)));
 			if (isBuiltin) {
@@ -12202,26 +12745,31 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	}
 
 	function init() {
-		// =========================================================================
-		// PHASE 1: Critical Core (Immediate at document-start, < 2ms execution)
-		// =========================================================================
+		if (isFullSecurityChallengePage()) {
+			log('INFO', 'init', 'Security challenge page detected; standing down');
+			return;
+		}
 		if (!state.phase1Done) {
 			state.phase1Done = true;
-			injectMainWorldShield();
-			installNetworkGuard();
-			installEarlyMetaRefreshGuard();
-			installDocWriteGuard();
-			installScriptletDefusers();
-			installPreExecutionScriptKiller();
-			installEventListenerGuard();
-			installClipboardAndVisibilityGuard();
-			installPopupGuard();
-			installRedirectGuard();
-			installInvisibleTrapInterception();
-			cleanTrackingQuery();
+			if (!isDisabledHere()) {
+				if (!isSearchEngineDomain(hostname)) {
+					injectMainWorldShield();
+				}
+				installNetworkGuard();
+				installEarlyMetaRefreshGuard();
+				installDocWriteGuard();
+				installScriptletDefusers();
+				installPreExecutionScriptKiller();
+				installEventListenerGuard();
+				installClipboardAndVisibilityGuard();
+				installPopupGuard();
+				installRedirectGuard();
+				installInvisibleTrapInterception();
+				cleanTrackingQuery();
+			}
 		}
 
-		if (D.documentElement || D.head) {
+		if (!isDisabledHere() && (D.documentElement || D.head)) {
 			installCosmeticCSS();
 			installSiteRulesCSS();
 		}
@@ -12240,20 +12788,24 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 		if (state.initialized) return;
 		state.initialized = true;
 
-		installScriptElementGuard();
-		installIframePopupGuard();
-		defuseGoogleTagManager();
+		if (!isDisabledHere() && !isFullSecurityChallengePage()) {
+			installScriptElementGuard();
+			installIframePopupGuard();
+			if (!isSearchEngineDomain(hostname)) {
+				defuseGoogleTagManager();
+			}
+		}
 
 		const isTop = (function() {
 			try { return W.self === W.top; } catch (e) { return false; }
 		})();
 
-		// =========================================================================
-		// PHASE 2: Deferred DOM (When initial DOM is ready, ~5ms execution)
-		// =========================================================================
 		const runPhase2DeferredDOM = () => {
-			installCosmeticCSS();
-			installSiteRulesCSS();
+			if (isFullSecurityChallengePage()) return;
+			if (!isDisabledHere()) {
+				installCosmeticCSS();
+				installSiteRulesCSS();
+			}
 
 			if (isTop) {
 				try { UI.build(); } catch (e) { log('ERROR', 'ui', e && e.message); }
@@ -12283,9 +12835,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 			scheduleVideoAdScan();
 			installSPAHooks();
 
-			// =====================================================================
-			// PHASE 3: Idle Background Tasks (Browser idle / deferred 2000ms)
-			// =====================================================================
 			runIdleTask(() => {
 				try {
 					stats.load();
@@ -12349,6 +12898,6 @@ v11.7.1 Safe Transit, Modal Cleanup & Engine Stability Release:
 	try {
 		init();
 	} catch (e) {
-		try { console.error('[Nvirya AdGuard X] init failed', e); } catch (e2) {}
+		try { console.error('[Nvirya AdGuard] init failed', e); } catch (e2) {}
 	}
 })();
