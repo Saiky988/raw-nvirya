@@ -23,22 +23,20 @@
 // @connect      *
 // @run-at       document-start
 // @all-frames   true
-// @changelog    v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening:
-// @changelog    [Task 1] Cloudflare Turnstile & Under Attack Safe Bypass: Exempted security challenge frames/pages at document-start, detected closed Shadow DOM Turnstile widgets, and preserved challenge query signatures.
-// @changelog    [Task 2] Google Search Infinite Scroll & Layout Protection: Scoped [data-google-query-id] CSS selector to ad slots only, guarded scroll-unlock on search engines, and fixed ancestor wrapper collapse logic.
-// @changelog    [Task 3] Inline Script & Path Regex Precision: Enforced strict URL/domain boundaries on inline script TLD matching and separated redirect-unwrap paths from DOM ad deletion.
-// @changelog    [Task 4] Whitelist & Main-World Enforcement: Checked site whitelist, session pause, and security verification state before injecting main-world hooks, and masked native function toString signatures.
-// @changelog    [Task 5] Smart Tracker Allowlist & Visibility Hardening: Expanded safe third-party CDN/auth/captcha/payment allowlist and scoped Page Visibility spoofing to prevent web app interference.
+// @changelog    Fixed Cloudflare Turnstile & Under Attack infinite reload loops and protected closed Shadow DOM verification widgets.
+// @changelog    Fixed Google Search results disappearing when scrolling to the bottom of search pages.
+// @changelog    Refined inline script and URL path regex boundaries to prevent false positives on legitimate scripts and redirect links.
+// @changelog    Enforced site whitelist and session pause checks before injecting main-world hooks, and masked native function toString signatures.
+// @changelog    Expanded the safe third-party allowlist for payment, auth, captcha, and CDN services, and scoped Page Visibility spoofing.
 // @downloadURL https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.user.js
 // @updateURL https://update.greasyfork.org/scripts/599226/Nvirya%20AdGuard.meta.js
 // ==/UserScript==
 /* ==Changelog==
-v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening:
-- [Task 1] Cloudflare Turnstile & Under Attack Safe Bypass: Exempted security challenge frames/pages at document-start, detected closed Shadow DOM Turnstile widgets, and preserved challenge query signatures.
-- [Task 2] Google Search Infinite Scroll & Layout Protection: Scoped [data-google-query-id] CSS selector to ad slots only, guarded scroll-unlock on search engines, and fixed ancestor wrapper collapse logic.
-- [Task 3] Inline Script & Path Regex Precision: Enforced strict URL/domain boundaries on inline script TLD matching and separated redirect-unwrap paths from DOM ad deletion.
-- [Task 4] Whitelist & Main-World Enforcement: Checked site whitelist, session pause, and security verification state before injecting main-world hooks, and masked native function toString signatures.
-- [Task 5] Smart Tracker Allowlist & Visibility Hardening: Expanded safe third-party CDN/auth/captcha/payment allowlist and scoped Page Visibility spoofing to prevent web app interference.
+- Fixed Cloudflare Turnstile & Under Attack infinite reload loops and protected closed Shadow DOM verification widgets.
+- Fixed Google Search results disappearing when scrolling to the bottom of search pages.
+- Refined inline script and URL path regex boundaries to prevent false positives on legitimate scripts and redirect links.
+- Enforced site whitelist and session pause checks before injecting main-world hooks, and masked native function toString signatures.
+- Expanded the safe third-party allowlist for payment, auth, captcha, and CDN services, and scoped Page Visibility spoofing.
 ==/Changelog== */
 (function() {
 	'use strict';
@@ -1836,7 +1834,7 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 			ub_dsc: 'A newer version with improved filter rules is ready.',
 			ub_ltr: 'Later',
 			ub_now: 'Update Now',
-			ub_whats_new: "What's New in v11.7.2:",
+			ub_whats_new: "What's New in v{ver}:",
 			ub_def_1: 'Fixed Cloudflare Turnstile & Under Attack infinite reload loops.',
 			ub_def_2: 'Fixed Google Search results disappearing when scrolling to the bottom.',
 			ub_def_3: 'Hardened inline script regex, whitelist enforcement & tracker allowlist.',
@@ -2045,7 +2043,7 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 			ub_dsc: 'Đã có phiên bản mới với quy tắc lọc được cải thiện.',
 			ub_ltr: 'Để sau',
 			ub_now: 'Cập nhật ngay',
-			ub_whats_new: 'Có gì mới ở v11.7.2:',
+			ub_whats_new: 'Có gì mới ở v{ver}:',
 			ub_def_1: 'Khắc phục triệt để lỗi kẹt xác minh Cloudflare Turnstile & Under Attack reload liên tục.',
 			ub_def_2: 'Sửa lỗi mất kết quả trên Google Search khi cuộn xuống cuối trang.',
 			ub_def_3: 'Tối ưu bộ lọc regex, tôn trọng Whitelist ở Main World và mở rộng danh sách CDN an toàn.',
@@ -2254,7 +2252,7 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 			ub_dsc: '新版本带来了改进的过滤规则。',
 			ub_ltr: '稍后',
 			ub_now: '立即更新',
-			ub_whats_new: 'v11.7.2 更新内容：',
+			ub_whats_new: 'v{ver} 更新内容：',
 			ub_def_1: '彻底修复 Cloudflare Turnstile 验证拦截与 Under Attack 无限刷新问题。',
 			ub_def_2: '修复 Google 搜索滚动到底部时搜索结果消失的问题。',
 			ub_def_3: '优化内联脚本正则匹配、严格执行白名单并扩展安全 CDN 列表。',
@@ -2463,7 +2461,7 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 			ub_dsc: 'Готова новая версия с улучшенными правилами фильтрации.',
 			ub_ltr: 'Позже',
 			ub_now: 'Обновить сейчас',
-			ub_whats_new: 'Что нового в v11.7.2:',
+			ub_whats_new: 'Что нового в v{ver}:',
 			ub_def_1: 'Исправлена бесконечная перезагрузка Cloudflare Turnstile & Under Attack.',
 			ub_def_2: 'Исправлено исчезновение результатов Google Search при прокрутке вниз.',
 			ub_def_3: 'Усилены регулярные выражения скриптов, белый список и трекеры.',
@@ -2672,7 +2670,7 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 			ub_dsc: 'フィルタールールが改善された新しいバージョンが利用可能です。',
 			ub_ltr: '後で',
 			ub_now: '今すぐ更新',
-			ub_whats_new: 'v11.7.2 の更新内容:',
+			ub_whats_new: 'v{ver} の更新内容:',
 			ub_def_1: 'Cloudflare Turnstile と Under Attack の無限リロードループを修正。',
 			ub_def_2: 'Google 検索で一番下までスクロールした際に結果が消える問題を修正。',
 			ub_def_3: 'インラインスクリプト正規表現、ホワイトリスト適用、トラッカーリストを強化。',
@@ -8482,16 +8480,18 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 
 		function parseRemoteChangelog(head) {
 			const parsedChangelogArray = [];
+			const cleanChangelogLine = (raw) => String(raw || '')
+				.replace(/^\s*(?:\/\/|\*+)?\s*/, '')
+				.replace(/^[-•*+]\s*/, '')
+				.replace(/^\[Task\s*\d+\]\s*/i, '')
+				.trim();
 			try {
 				const blockMatch = head.match(/==Changelog==([\s\S]*?)==\/Changelog==/i);
 				if (blockMatch && blockMatch[1]) {
 					const lines = blockMatch[1].split(/\r?\n/);
 					for (let i = 0; i < lines.length; i++) {
-						const cleaned = lines[i]
-							.replace(/^\s*(?:\/\/|\*+)?\s*/, '')
-							.replace(/^[-•*+]\s*/, '')
-							.trim();
-						if (cleaned && !/^==/.test(cleaned)) {
+						const cleaned = cleanChangelogLine(lines[i]);
+						if (cleaned && !/^==/.test(cleaned) && !/^v\d+\.\d+.*:$/i.test(cleaned)) {
 							parsedChangelogArray.push(cleaned);
 						}
 					}
@@ -8500,8 +8500,8 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 					const tagRe = /\/\/\s*@changelog\s+(.+)/gi;
 					let tm;
 					while ((tm = tagRe.exec(head)) !== null) {
-						const item = String(tm[1] || '').replace(/^[-•*+]\s*/, '').trim();
-						if (item) parsedChangelogArray.push(item);
+						const item = cleanChangelogLine(tm[1]);
+						if (item && !/^v\d+\.\d+.*:$/i.test(item)) parsedChangelogArray.push(item);
 					}
 				}
 			} catch (e) {}
@@ -9201,6 +9201,9 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
     .item.disabled input { cursor: not-allowed; pointer-events: none; }
 
     .update-banner {
+			-webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
       position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px));
       width: min(92vw, 390px);
       padding: 16px;
@@ -9612,10 +9615,23 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 		function refreshLanguageUI() {
 			if (sheetBuilt && bodyEl) buildBody();
 			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl');
-			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new');
+			
+			const curRemoteVer = String(updateAvailable || VERSION).replace(/^v/i, '');
+			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new', { ver: curRemoteVer });
 			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
 			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
-			renderUpdateChangelog(updateChangelog);
+			
+			const lang = getEffectiveLang();
+			const hasLocalDefs = TRANSLATIONS[lang] && TRANSLATIONS[lang].ub_def_1;
+			let changelogToRender = updateChangelog;
+			
+			if (lang !== 'en' && hasLocalDefs) {
+				changelogToRender = [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')].filter(Boolean);
+			} else if (!changelogToRender || !changelogToRender.length) {
+				changelogToRender = [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')].filter(Boolean);
+			}
+			renderUpdateChangelog(changelogToRender);
+
 			if (reportModalEl) {
 				const wasOpen = reportModalEl.classList.contains('open');
 				reportModalEl.remove();
@@ -9734,7 +9750,7 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 					el('button', { class: 'icon-btn ub-close', type: 'button', 'aria-label': t('ub_ltr'), onclick: () => dismissUpdateBanner() }, icon('close'))
 				),
 				el('div', { class: 'ub-body' },
-					ubWhatsNewEl = el('div', { class: 'ub-whats-new' }, t('ub_whats_new')),
+					ubWhatsNewEl = el('div', { class: 'ub-whats-new' }, t('ub_whats_new', { ver: String(updateAvailable || VERSION).replace(/^v/i, '') })),
 					ubListEl = el('ul', { class: 'ub-changelog' })
 				),
 				el('div', { class: 'ub-actions' },
@@ -10442,13 +10458,19 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 			if (newBadgeEl) newBadgeEl.classList.toggle('show', !!updateAvailable);
 		}
 
-		function renderUpdateChangelog(items) {
+		function renderUpdateChangelog(list) {
 			if (!ubListEl) return;
 			clear(ubListEl);
-			const list = (Array.isArray(items) && items.length > 0) ?
-				items : [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')];
-			for (let i = 0; i < list.length; i++) {
-				ubListEl.appendChild(el('li', null, String(list[i])));
+			const lang = getEffectiveLang();
+			const hasLocalDefs = TRANSLATIONS[lang] && TRANSLATIONS[lang].ub_def_1;
+			let items = (Array.isArray(list) && list.length) ? list : [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')];
+			if (lang !== 'en' && hasLocalDefs && (!Array.isArray(list) || !list.length)) {
+				items = [t('ub_def_1'), t('ub_def_2'), t('ub_def_3')].filter(Boolean);
+			}
+			for (let i = 0; i < items.length; i++) {
+				const text = String(items[i] || '').replace(/^\[Task\s*\d+\]\s*/i, '').trim();
+				if (!text || /^v\d+\.\d+.*:$/i.test(text)) continue;
+				ubListEl.appendChild(el('li', {}, text));
 			}
 		}
 
@@ -10479,10 +10501,11 @@ v11.7.2 Cloudflare Turnstile Bypass, Google Search Scroll Fix & Engine Hardening
 				}
 			}
 			if (!updateAvailable) return;
+			const cleanRemoteVer = String(updateAvailable).replace(/^v/i, '');
 			if (ubTitleEl) ubTitleEl.textContent = t('ub_ttl');
 			if (ubCurVerEl) ubCurVerEl.textContent = 'v' + VERSION;
-			if (ubNewVerEl) ubNewVerEl.textContent = 'v' + String(updateAvailable).replace(/^v/i, '');
-			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new');
+			if (ubNewVerEl) ubNewVerEl.textContent = 'v' + cleanRemoteVer;
+			if (ubWhatsNewEl) ubWhatsNewEl.textContent = t('ub_whats_new', { ver: cleanRemoteVer });
 			renderUpdateChangelog(updateChangelog);
 			if (ubLaterBtn) ubLaterBtn.textContent = t('ub_ltr');
 			if (ubGoBtn) ubGoBtn.textContent = t('ub_now');
