@@ -108,17 +108,17 @@
   var isPageReady = false;
 
   var statusMessage = "Đang khởi tạo…";
-  var statusType = "";
+  var statusType = "info";
   var isSpinnerActive = true;
   var activeCountdowns = {};
   var countdownIdCounter = 0;
 
-  // UI Element References (integrated into Link4m page)
+  // UI Element References (using native Link4m Bootstrap classes)
   var ui = {
     container: null,
     statusBox: null,
     statusText: null,
-    spinner: null,
+    countdownWrap: null,
     countdownFill: null,
     noticeBox: null,
     form: null,
@@ -131,7 +131,7 @@
     openUrlBtn: null
   };
 
-  // Multi-part & common TLDs
+  // Multi-part country TLDs
   var MULTI_PART_TLDS = {
     "com.vn": true,
     "net.vn": true,
@@ -158,7 +158,6 @@
 
   var IGNORED_DOMAIN_REGEX = /^(?:www\.)?(?:google\.[a-z.]+|link4m\.[a-z.]+|gstatic\.com|googleapis\.com|googleusercontent\.com|cloudflare\.com|youtube\.com|youtu\.be|facebook\.com|fb\.com|chrome\.google\.com|android\.com|apple\.com|microsoft\.com|w3\.org|schema\.org|example\.com)$/i;
 
-  // Utility: Truncate long strings
   function truncateText(text, maxLength) {
     if (!text) return "";
     var str = String(text);
@@ -166,7 +165,6 @@
     return str.length > limit ? str.slice(0, limit) + "…" : str;
   }
 
-  // Utility: Escape HTML special characters
   function escapeHtml(text) {
     return String(text).replace(/[&<>"]/g, function (ch) {
       return {
@@ -178,23 +176,24 @@
     });
   }
 
-  // Update status text and spinner state
+  function getBootstrapAlertClass(type) {
+    if (type === "ok") return "alert alert-success";
+    if (type === "err") return "alert alert-danger";
+    if (type === "warn") return "alert alert-warning";
+    return "alert alert-info";
+  }
+
   function setStatus(message, spinning, type) {
     statusMessage = String(message || "");
-    statusType = type || "";
+    statusType = type || "info";
     if (typeof spinning === "boolean") {
       isSpinnerActive = spinning;
     }
     renderStatusAndCountdown();
   }
 
-  // Render status bar and active countdown timer
   function renderStatusAndCountdown() {
-    if (!ui.statusText) return;
-
-    if (ui.spinner) {
-      ui.spinner.className = "l4m-spin" + (isSpinnerActive ? " on" : "");
-    }
+    if (!ui.statusText || !ui.statusBox) return;
 
     var now = Date.now();
     var earliestCountdown = null;
@@ -214,48 +213,41 @@
           ? Math.floor(remainingSec / 60) + ":" + ("0" + (remainingSec % 60)).slice(-2)
           : remainingSec + "s";
 
-      ui.statusText.className = "";
+      ui.statusBox.className = "alert alert-info";
       var labelPrefix = earliestCountdown.label ? escapeHtml(earliestCountdown.label) + " " : "";
-      var urgentClass = remainingSec <= 10 ? " urgent" : "";
-      var html =
-        labelPrefix +
-        '<span class="l4m-cd' +
-        urgentClass +
-        '"><i class="l4m-cddot"></i>' +
-        timeFormatted +
-        "</span>";
+      var badgeClass = remainingSec <= 10 ? "label label-danger" : "label label-primary";
+      var html = labelPrefix + '<span class="' + badgeClass + '">' + timeFormatted + "</span>";
 
       if (ui.statusText.innerHTML !== html) {
         ui.statusText.innerHTML = html;
       }
 
-      if (ui.countdownFill) {
+      if (ui.countdownWrap && ui.countdownFill) {
+        ui.countdownWrap.style.display = "block";
         var pct = earliestCountdown.dur
           ? Math.max(0, Math.min(100, (1 - (earliestCountdown.end - now) / earliestCountdown.dur) * 100))
           : 0;
         ui.countdownFill.style.width = pct + "%";
       }
     } else {
-      if (ui.countdownFill) {
+      if (ui.countdownWrap && ui.countdownFill) {
+        ui.countdownWrap.style.display = "none";
         ui.countdownFill.style.width = "0%";
       }
-      ui.statusText.className = "l4m-stx" + (statusType ? " " + statusType : "");
-      ui.statusText.textContent = statusMessage;
+      ui.statusBox.className = getBootstrapAlertClass(statusType);
+      ui.statusText.textContent = (isSpinnerActive ? "⏳ " : "") + statusMessage;
     }
   }
 
   function hideCaptchaNotice() {
     if (ui.noticeBox) {
-      ui.noticeBox.classList.remove("on");
+      ui.noticeBox.style.display = "none";
     }
   }
 
   function setUrlInputVisible(visible) {
-    if (ui.urlInputWrap) {
-      ui.urlInputWrap.style.display = visible ? "" : "none";
-    }
-    if (ui.submitBtn) {
-      ui.submitBtn.style.display = visible ? "" : "none";
+    if (ui.form) {
+      ui.form.style.display = visible ? "" : "none";
     }
   }
 
@@ -268,11 +260,10 @@
         ? "Đang chạy…"
         : isOcrRunning
         ? "Đang OCR…"
-        : "Bắt đầu Bypass";
+        : "Bắt đầu";
     }
   }
 
-  // Strip HTML tags to plain text (used to extract code from widget HTML response)
   function stripHtmlTags(html) {
     if (!html) return "";
     var str = String(html);
@@ -284,7 +275,6 @@
     return (tempDiv.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  // Sleep helper that registers a visual countdown if a label is provided
   function sleepWithCountdown(durationMs, label) {
     var cdKey = null;
     if (label) {
@@ -337,7 +327,6 @@
     });
   }
 
-  // Wait for browser to come back online
   function waitForOnline(timeoutMs) {
     if (navigator.onLine) {
       return Promise.resolve();
@@ -432,7 +421,6 @@
     return fallbackStr === "[object Object]" ? "lỗi không xác định" : truncateText(fallbackStr, 120);
   }
 
-  // Cross-origin HTTP request wrapper (GM.xmlHttpRequest / GM_xmlhttpRequest / fetch)
   function httpRequest(url, options) {
     var reqOpts = Object.assign({}, options);
     if (reqOpts.method) {
@@ -541,7 +529,7 @@
   }
 
   // Locate the campaign target image inside #advertise-html-wrapper
-  // Prioritizes: <p class="text-center" style="padding-bottom:30px;text-align: center;"><img src="https://img.link4m.net/uploads/advertiser/..." style="border:1px solid #ccc;"></p>
+  // Matches: <p class="text-center" style="padding-bottom:30px;text-align: center;"><img src="https://img.link4m.net/uploads/advertiser/..." style="border:1px solid #ccc;"></p>
   function findCampaignImageUrls(wrapperEl) {
     var root = wrapperEl || document.getElementById("advertise-html-wrapper");
     if (!root) return [];
@@ -573,7 +561,7 @@
       candidates.push(item);
     }
 
-    // 1. Exact match for campaign image inside <p class="text-center" style="padding-bottom:30px;...">
+    // 1. Target <p class="text-center" style="padding-bottom:30px;text-align: center;"> <img>
     var paddedParagraphImgs = root.querySelectorAll(
       'p.text-center[style*="padding-bottom"] img, p[style*="padding-bottom"] img'
     );
@@ -601,7 +589,7 @@
       addCandidate(bSrc, 2, bImg);
     }
 
-    // 3. Fallback: other advertiser images inside #advertise-html-wrapper (deprioritizing step 4/5 tutorial images)
+    // 3. Fallback: other advertiser images inside #advertise-html-wrapper
     var allImgs = root.querySelectorAll("img");
     for (var k = 0; k < allImgs.length; k++) {
       var img = allImgs[k];
@@ -624,7 +612,6 @@
         }
       } catch (_) {}
 
-      // Skip generic Bước 4 / Bước 5 tutorial screenshots unless no other image exists
       var isTutorialStep4Or5 =
         /Bước\s*[45]/i.test(prevText) ||
         img.getAttribute("width") === "600" ||
@@ -697,7 +684,6 @@
     return textParts.join("\n").trim();
   }
 
-  // Levenshtein edit distance for fuzzy matching against masked domains
   function levenshteinDistance(strA, strB) {
     var a = String(strA || "").toLowerCase();
     var b = String(strB || "").toLowerCase();
@@ -726,7 +712,6 @@
     return matrix[lenA][lenB];
   }
 
-  // Extract the best target domain from OCR ParsedText
   function extractBestDomainFromOcrText(ocrText, hints) {
     if (!ocrText) return null;
 
@@ -765,7 +750,6 @@
       }
     }
 
-    // Normalize common OCR spacing/punctuation glitches around dots and protocols
     var normalizedText = String(ocrText)
       .replace(/https?\s*:\s*\/\s*\//gi, "https://")
       .replace(/([a-z0-9])\s*[,\uff0c]\s*([a-z]{2,18})\b/gi, "$1.$2")
@@ -773,14 +757,12 @@
       .replace(/([a-z0-9])\.\s+([a-z]{2,18})\b/gi, "$1.$2")
       .replace(/([a-z0-9])\s+\.([a-z]{2,18})\b/gi, "$1.$2");
 
-    // 1. Score explicit http(s):// URLs highest
     var urlRegex = /https?:\/\/([a-z0-9][a-z0-9.\-]{1,61}\.[a-z]{2,18}(?:\.[a-z]{2,18})?)/gi;
     var urlMatch;
     while ((urlMatch = urlRegex.exec(normalizedText)) !== null) {
       scoreCandidate(urlMatch[1], 60);
     }
 
-    // 2. Score domain-like tokens line by line (giving higher weight to top lines of OCR result)
     var lines = normalizedText.split(/\r?\n/);
     var domainRegex = /\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,18}(?:\.[a-z]{2,18})?)\b/gi;
     for (var lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -794,7 +776,6 @@
       }
     }
 
-    // 3. Fuzzy repair against masked domain hints if present
     for (var mIdx = 0; mIdx < masks.length; mIdx++) {
       var maskItem = masks[mIdx];
       var prefix = maskItem.prefix || "";
@@ -848,7 +829,6 @@
     return bestEntry ? bestEntry.domain : null;
   }
 
-  // Run OCR on a campaign image candidate using https://api.ocr.space/parse/imageurl
   async function resolveDomainFromCampaignImage(imageCandidate, hints) {
     if (!imageCandidate || !imageCandidate.url) return null;
 
@@ -871,7 +851,6 @@
     return null;
   }
 
-  // Extract any direct or masked domain hints from #advertise-html-wrapper text
   function extractHintsFromWrapper(wrapperEl) {
     var result = { directDomains: [], masks: [] };
     if (!wrapperEl) return result;
@@ -936,7 +915,6 @@
     return result;
   }
 
-  // Automatically find campaign image, run OCR via imageurl endpoint, and start bypass
   async function autoOcrAndStartBypass() {
     if (isBypassRunning || isOcrRunning) return;
     isOcrRunning = true;
@@ -945,8 +923,6 @@
     try {
       var wrapperEl = document.getElementById("advertise-html-wrapper");
       var hints = extractHintsFromWrapper(wrapperEl);
-
-      // Clean up unnecessary instruction elements now that hints are extracted
       cleanupLink4mDomClutter();
 
       if (hints.directDomains.length > 0) {
@@ -981,7 +957,7 @@
       }
 
       if (!detectedDomain) {
-        setStatus("⊘ Không OCR được domain — hãy xem ảnh trên và nhập tay", false, "warn");
+        setStatus("⊘ Không OCR được domain — hãy xem ảnh camp và nhập tay", false, "warn");
         isOcrRunning = false;
         updateControlsState();
         return;
@@ -1504,7 +1480,7 @@
   }
 
   async function submitBypassCode(bypassCode) {
-    // Fill native Link4m password input if present
+    // Also fill native Link4m password input in #main-form-2 if present
     var nativeCodeInput = document.querySelector(
       '#main-form-2 input[name="password"], input[name="password"]'
     );
@@ -1542,7 +1518,7 @@
 
     var recaptchaToken = "";
     if (hasRecaptcha) {
-      if (ui.noticeBox) ui.noticeBox.classList.add("on");
+      if (ui.noticeBox) ui.noticeBox.style.display = "block";
       try {
         var grecaptchaObj = window.grecaptcha;
         if (grecaptchaObj && typeof grecaptchaObj.execute === "function") {
@@ -1610,7 +1586,7 @@
     var finalDestinationUrl = linkJson.url;
     if (ui.resultBox && ui.resultUrlText) {
       ui.resultUrlText.textContent = finalDestinationUrl;
-      ui.resultBox.classList.add("on");
+      ui.resultBox.style.display = "block";
     }
     setStatus("✓ Lấy URL thành công", false, "ok");
 
@@ -1694,7 +1670,7 @@
     }
 
     isBypassRunning = true;
-    if (ui.resultBox) ui.resultBox.classList.remove("on");
+    if (ui.resultBox) ui.resultBox.style.display = "none";
     if (ui.resultUrlText) ui.resultUrlText.textContent = "";
     hideCaptchaNotice();
     updateControlsState();
@@ -1786,7 +1762,7 @@
 
   async function waitForCloudflareChallenge() {
     if (isCloudflareChallengePage()) {
-      setStatus("⏳ Chờ Cloudflare…", true);
+      setStatus("Chờ Cloudflare…", true);
       while (isCloudflareChallengePage()) {
         await sleepWithCountdown(500);
       }
@@ -1845,9 +1821,8 @@
     delete activeCountdowns[cdKey];
 
     if (needsInitialCaptcha) {
-      setStatus("Hãy giải Captcha trên trang để tiếp tục…", false, "warn");
+      setStatus("Hãy giải Captcha để tiếp tục…", false, "warn");
       setUrlInputVisible(false);
-      // Watch for #advertise-html-wrapper to populate after user solves initial captcha
       waitForPostCaptchaAdvertiseWrapper();
       return false;
     }
@@ -1951,276 +1926,126 @@
     fallbackCopy();
   }
 
-  // Strip Link4m clutter so only Campaign Image, Captcha, Input/Form, and Bypass controls remain
+  // Hide unnecessary Link4m elements so only Campaign Image, Captcha, and Input/Form remain
   function cleanupLink4mDomClutter() {
+    var hideSelectors = [
+      "#mainNav",
+      "#report-wrapper",
+      "#modal-report",
+      ".responsive-youtube",
+      "iframe.youtube-player"
+    ];
+    for (var s = 0; s < hideSelectors.length; s++) {
+      var found = document.querySelectorAll(hideSelectors[s]);
+      for (var f = 0; f < found.length; f++) {
+        found[f].style.display = "none";
+      }
+    }
+
     var wrapper = document.getElementById("advertise-html-wrapper");
     if (!wrapper) return;
 
-    // Find campaign image(s) to preserve
+    // Identify campaign image and its <p> wrapper
     var campCandidates = findCampaignImageUrls(wrapper);
     var campImgEl = campCandidates.length > 0 ? campCandidates[0].el : null;
     var campContainerP = campImgEl ? campImgEl.closest("p") || campImgEl : null;
 
     if (campContainerP) {
-      campContainerP.classList.add("l4m-keep-element");
-      campContainerP.style.cssText = "padding: 12px 0 !important; text-align: center !important; display: block !important;";
+      campContainerP.setAttribute("data-l4m-keep", "1");
     }
     if (campImgEl) {
-      campImgEl.classList.add("l4m-keep-element");
-      campImgEl.style.cssText = "max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #d0d7de;";
+      campImgEl.setAttribute("data-l4m-keep", "1");
     }
 
-    // Preserve #main-form-2 and its parent container
+    // Identify #main-form-2 and its parent wrapper
     var mainForm = document.getElementById("main-form-2");
     if (mainForm) {
-      mainForm.classList.add("l4m-keep-element");
+      mainForm.setAttribute("data-l4m-keep", "1");
       if (mainForm.parentElement && mainForm.parentElement !== wrapper) {
-        mainForm.parentElement.classList.add("l4m-keep-element");
+        mainForm.parentElement.setAttribute("data-l4m-keep", "1");
       }
     }
 
-    // Hide all children inside #advertise-html-wrapper except campaign image & #main-form-2
-    var innerBlocks = wrapper.children;
-    for (var i = 0; i < innerBlocks.length; i++) {
-      var block = innerBlocks[i];
-      var containsKept =
-        block.classList.contains("l4m-keep-element") ||
-        block.querySelector(".l4m-keep-element, #main-form-2, .g-recaptcha, iframe[src*='recaptcha']");
+    // Hide all other children in #advertise-html-wrapper (instructions, base64 images, Bước 4/5/6, video, report)
+    var blocks = wrapper.children;
+    for (var i = 0; i < blocks.length; i++) {
+      var block = blocks[i];
+      if (block.id === "l4m-inline-controls") continue;
 
-      if (!containsKept) {
-        block.style.setProperty("display", "none", "important");
+      var hasKeptDescendant =
+        block.getAttribute("data-l4m-keep") === "1" ||
+        Boolean(
+          block.querySelector(
+            '[data-l4m-keep="1"], #main-form-2, #l4m-inline-controls, .g-recaptcha, iframe[src*="recaptcha"]'
+          )
+        );
+
+      if (!hasKeptDescendant) {
+        block.style.display = "none";
       } else {
-        var subChildren = block.children;
-        for (var j = 0; j < subChildren.length; j++) {
-          var child = subChildren[j];
+        var children = block.children;
+        for (var j = 0; j < children.length; j++) {
+          var child = children[j];
+          if (child.id === "l4m-inline-controls") continue;
+
           var keepChild =
-            child.classList.contains("l4m-keep-element") ||
+            child.getAttribute("data-l4m-keep") === "1" ||
             child === campContainerP ||
             child === campImgEl ||
             child.id === "main-form-2" ||
             Boolean(
               child.querySelector(
-                ".l4m-keep-element, #main-form-2, .g-recaptcha, iframe[src*='recaptcha']"
+                '[data-l4m-keep="1"], #main-form-2, #l4m-inline-controls, .g-recaptcha, iframe[src*="recaptcha"]'
               )
             );
+
           if (!keepChild) {
-            child.style.setProperty("display", "none", "important");
+            child.style.display = "none";
           }
         }
       }
     }
+
+    // Move inline bypass controls right above #main-form-2 (below campaign image) if #main-form-2 is present
+    if (ui.container && mainForm && mainForm.parentElement) {
+      var formWrapper = mainForm.parentElement;
+      if (formWrapper.parentElement && ui.container.nextSibling !== formWrapper) {
+        formWrapper.parentElement.insertBefore(ui.container, formWrapper);
+      }
+    }
   }
 
-  // Override Link4m page UI directly instead of creating a separate floating Shadow DOM panel
+  // Override Link4m UI using Link4m's native Bootstrap classes (no custom CSS)
   function overrideLink4mPageUI() {
     if (ui.container) return;
 
-    var styleEl = document.createElement("style");
-    styleEl.id = "l4m-override-styles";
-    styleEl.textContent = [
-      "/* Hide Link4m page clutter: navbar, report button, youtube video, extra ads */",
-      "#mainNav, nav.navbar, footer, #report-wrapper, #modal-report, .responsive-youtube, iframe.youtube-player {",
-      "  display: none !important;",
-      "}",
-      "body.captcha-page {",
-      "  background: #0f172a !important;",
-      "  color: #e2e8f0 !important;",
-      "  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;",
-      "  padding-top: 20px !important;",
-      "}",
-      ".box-main {",
-      "  max-width: 560px !important;",
-      "  margin: 0 auto 24px !important;",
-      "  background: #1e293b !important;",
-      "  border: 1px solid rgba(148, 163, 184, 0.2) !important;",
-      "  border-radius: 16px !important;",
-      "  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important;",
-      "  padding: 20px !important;",
-      "  color: #e2e8f0 !important;",
-      "}",
-      ".l4m-bypass-box {",
-      "  margin-bottom: 16px;",
-      "  text-align: left;",
-      "}",
-      ".l4m-status-bar {",
-      "  position: relative;",
-      "  display: flex;",
-      "  align-items: center;",
-      "  gap: 10px;",
-      "  min-height: 44px;",
-      "  padding: 10px 14px;",
-      "  background: rgba(15, 23, 42, 0.7);",
-      "  border: 1px solid rgba(148, 163, 184, 0.18);",
-      "  border-radius: 12px;",
-      "  font-size: 13.5px;",
-      "  font-weight: 600;",
-      "  color: #cbd5e1;",
-      "  overflow: hidden;",
-      "}",
-      ".l4m-stx.ok { color: #4ade80; }",
-      ".l4m-stx.err { color: #f87171; }",
-      ".l4m-stx.warn { color: #fbbf24; }",
-      ".l4m-stx.info { color: #38bdf8; }",
-      ".l4m-spin {",
-      "  display: none;",
-      "  width: 14px;",
-      "  height: 14px;",
-      "  flex: none;",
-      "  border: 2px solid rgba(255,255,255,0.15);",
-      "  border-top-color: #38bdf8;",
-      "  border-radius: 50%;",
-      "  animation: l4m-rot 0.8s linear infinite;",
-      "}",
-      ".l4m-spin.on { display: inline-block; }",
-      "@keyframes l4m-rot { to { transform: rotate(360deg); } }",
-      ".l4m-cdline {",
-      "  position: absolute;",
-      "  left: 0;",
-      "  right: 0;",
-      "  bottom: 0;",
-      "  height: 3px;",
-      "  background: rgba(255,255,255,0.05);",
-      "}",
-      ".l4m-cdline i {",
-      "  display: block;",
-      "  height: 100%;",
-      "  width: 0%;",
-      "  background: linear-gradient(90deg, #0284c7, #38bdf8);",
-      "  transition: width 0.25s linear;",
-      "}",
-      ".l4m-cd {",
-      "  display: inline-flex;",
-      "  align-items: center;",
-      "  gap: 6px;",
-      "  margin-left: 8px;",
-      "  padding: 2px 10px;",
-      "  border-radius: 999px;",
-      "  font-size: 12.5px;",
-      "  background: rgba(56, 189, 248, 0.16);",
-      "  border: 1px solid rgba(56, 189, 248, 0.4);",
-      "  color: #e0f2fe;",
-      "  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;",
-      "}",
-      ".l4m-cddot {",
-      "  display: inline-block;",
-      "  width: 6px;",
-      "  height: 6px;",
-      "  border-radius: 50%;",
-      "  background: #38bdf8;",
-      "}",
-      ".l4m-cd.urgent {",
-      "  background: rgba(239, 68, 68, 0.18);",
-      "  border-color: rgba(239, 68, 68, 0.45);",
-      "  color: #fecaca;",
-      "}",
-      ".l4m-notice {",
-      "  display: none;",
-      "  margin-top: 10px;",
-      "  padding: 10px 12px;",
-      "  align-items: center;",
-      "  gap: 8px;",
-      "  border-radius: 10px;",
-      "  background: rgba(56, 189, 248, 0.14);",
-      "  border: 1px solid rgba(56, 189, 248, 0.35);",
-      "  color: #bae6fd;",
-      "  font-size: 13px;",
-      "  font-weight: 600;",
-      "}",
-      ".l4m-notice.on { display: flex; }",
-      ".l4m-form {",
-      "  display: flex;",
-      "  gap: 8px;",
-      "  margin-top: 10px;",
-      "}",
-      ".l4m-urlwrap {",
-      "  flex: 1;",
-      "  display: flex;",
-      "  align-items: center;",
-      "  background: rgba(15, 23, 42, 0.85);",
-      "  border: 1px solid rgba(148, 163, 184, 0.25);",
-      "  border-radius: 10px;",
-      "  padding: 0 12px;",
-      "}",
-      ".l4m-url {",
-      "  width: 100%;",
-      "  background: transparent;",
-      "  border: none;",
-      "  outline: none;",
-      "  color: #f8fafc;",
-      "  padding: 10px 0;",
-      "  font-size: 14px;",
-      "}",
-      ".l4m-go {",
-      "  padding: 0 18px;",
-      "  min-height: 40px;",
-      "  border: none;",
-      "  border-radius: 10px;",
-      "  cursor: pointer;",
-      "  background: linear-gradient(135deg, #38bdf8, #0284c7);",
-      "  color: #0f172a;",
-      "  font-size: 13.5px;",
-      "  font-weight: 700;",
-      "}",
-      ".l4m-go:disabled { opacity: 0.45; cursor: not-allowed; }",
-      ".l4m-result {",
-      "  display: none;",
-      "  margin-top: 12px;",
-      "  padding: 12px;",
-      "  border-radius: 12px;",
-      "  background: rgba(34, 197, 94, 0.12);",
-      "  border: 1px solid rgba(34, 197, 94, 0.35);",
-      "}",
-      ".l4m-result.on { display: block; }",
-      ".l4m-rurl {",
-      "  padding: 8px 10px;",
-      "  background: rgba(15, 23, 42, 0.7);",
-      "  border-radius: 8px;",
-      "  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;",
-      "  font-size: 12.5px;",
-      "  color: #86efac;",
-      "  word-break: break-all;",
-      "}",
-      ".l4m-rbtns {",
-      "  display: flex;",
-      "  gap: 8px;",
-      "  margin-top: 8px;",
-      "}",
-      ".l4m-rbtn {",
-      "  flex: 1;",
-      "  min-height: 38px;",
-      "  border-radius: 8px;",
-      "  border: none;",
-      "  cursor: pointer;",
-      "  font-size: 13px;",
-      "  font-weight: 700;",
-      "}",
-      ".l4m-rbtn.copy { background: #22c55e; color: #052e16; }",
-      ".l4m-rbtn.open { background: rgba(34, 197, 94, 0.2); color: #bbf7d0; border: 1px solid rgba(34, 197, 94, 0.4); }"
-    ].join("\n");
-
-    (document.head || document.documentElement).appendChild(styleEl);
-
     var container = document.createElement("div");
     container.id = "l4m-inline-controls";
-    container.className = "l4m-bypass-box";
+    container.className = "text-center";
+    container.style.marginBottom = "15px";
     container.innerHTML =
-      '<div class="l4m-status-bar" id="l4m-status">' +
-      '<span class="l4m-spin on" id="l4m-spin"></span>' +
-      '<span id="l4m-statusText">Đang khởi tạo…</span>' +
-      '<span class="l4m-cdline"><i id="l4m-cdfill"></i></span>' +
+      '<div id="l4m-status" class="alert alert-info" style="margin-bottom: 10px;">' +
+      '<span id="l4m-statusText">⏳ Đang khởi tạo…</span>' +
+      '<div id="l4m-cdwrap" class="progress" style="height: 6px; margin: 8px 0 0 0; display: none;">' +
+      '<div id="l4m-cdfill" class="progress-bar progress-bar-info progress-bar-striped active" style="width: 0%;"></div>' +
       "</div>" +
-      '<div class="l4m-notice" id="l4m-notice"><span>🔓 Hãy giải reCaptcha bên dưới…</span></div>' +
-      '<form class="l4m-form" id="l4m-iform" novalidate>' +
-      '<div class="l4m-urlwrap" id="l4m-urlwrap">' +
-      '<input class="l4m-url" id="l4m-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Nhập URL nhiệm vụ (vd: tylekeo.black)" disabled>' +
       "</div>" +
-      '<button class="l4m-go" id="l4m-go" type="submit" disabled>Bắt đầu Bypass</button>' +
+      '<div id="l4m-notice" class="alert alert-warning" style="margin-bottom: 10px; display: none;">' +
+      "🔓 Hãy giải reCaptcha bên dưới…" +
+      "</div>" +
+      '<form id="l4m-iform" style="margin-bottom: 10px;" novalidate>' +
+      '<div id="l4m-urlwrap" class="input-group">' +
+      '<input id="l4m-url" type="url" class="form-control" inputmode="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Nhập URL nhiệm vụ (vd: tylekeo.black)" disabled>' +
+      '<span class="input-group-btn">' +
+      '<button id="l4m-go" type="submit" class="btn btn-primary" disabled>Bắt đầu</button>' +
+      "</span>" +
+      "</div>" +
       "</form>" +
-      '<div class="l4m-result" id="l4m-result">' +
-      '<div class="l4m-rurl" id="l4m-rurl"></div>' +
-      '<div class="l4m-rbtns">' +
-      '<button class="l4m-rbtn copy" id="l4m-rCopy" type="button">⧉ Copy URL</button>' +
-      '<button class="l4m-rbtn open" id="l4m-rOpen" type="button">↗ Mở URL</button>' +
+      '<div id="l4m-result" class="alert alert-success" style="margin-bottom: 10px; display: none;">' +
+      '<div id="l4m-rurl" class="well well-sm" style="margin-bottom: 8px; word-break: break-all;"></div>' +
+      '<div class="btn-group">' +
+      '<button id="l4m-rCopy" type="button" class="btn btn-success btn-sm">Copy URL</button>' +
+      '<button id="l4m-rOpen" type="button" class="btn btn-default btn-sm">Mở URL</button>' +
       "</div>" +
       "</div>";
 
@@ -2238,7 +2063,7 @@
     ui.container = container;
     ui.statusBox = document.getElementById("l4m-status");
     ui.statusText = document.getElementById("l4m-statusText");
-    ui.spinner = document.getElementById("l4m-spin");
+    ui.countdownWrap = document.getElementById("l4m-cdwrap");
     ui.countdownFill = document.getElementById("l4m-cdfill");
     ui.noticeBox = document.getElementById("l4m-notice");
     ui.form = document.getElementById("l4m-iform");
