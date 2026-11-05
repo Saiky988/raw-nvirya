@@ -2,7 +2,7 @@
 // @name         Nvirya Link4M
 // @namespace    https://nvirya.com/link4m
 // @icon         https://raw.nvirya.com/assets/icon128x128.png
-// @version      1.2
+// @version      1.3
 // @author       Nvirya
 // @match        *://link4m.com/*
 // @match        *://*.link4m.com/*
