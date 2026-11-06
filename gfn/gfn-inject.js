@@ -1,20 +1,38 @@
 let headers = $response.headers;
 let ct = headers['Content-Type'] || headers['content-type'] || '';
 
-// Chỉ xử lý nếu response trả về là trang HTML, bỏ qua toàn bộ JS/CSS/ảnh/API
+// Chỉ can thiệp vào request HTML
 if (!ct.includes('text/html')) {
   $done({});
 } else {
-  // Xóa sạch các rào cản CSP của GeForce NOW
-  delete headers['Content-Security-Policy'];
-  delete headers['content-security-policy'];
-  delete headers['Content-Security-Policy-Report-Only'];
-  delete headers['content-security-policy-report-only'];
+  // 1. Xóa toàn bộ CSP Headers
+  for (let k in headers) {
+    if (/content-security-policy/i.test(k)) {
+      delete headers[k];
+    }
+  }
 
   let body = $response.body;
-  if (body && body.includes('</head>')) {
-    const scriptTag = '<script src="https://raw.nvirya.com/gfn/gfn.user.js?t=' + Date.now() + '"></script>';
-    body = body.replace('</head>', scriptTag + '</head>');
+  if (body) {
+    // 2. Lột sạch thẻ <meta http-equiv="Content-Security-Policy" ...> trong HTML
+    body = body.replace(/<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+
+    // 3. Tiêm script trực tiếp
+    const injectHtml = `
+      <script>
+        console.log('[Nvirya] Injecting GFN Toolkit v3.0...');
+        const s = document.createElement('script');
+        s.src = 'https://raw.nvirya.com/gfn/gfn.user.js?t=' + Date.now();
+        s.crossOrigin = 'anonymous';
+        document.head.appendChild(s);
+      </script>
+    `;
+
+    if (body.includes('</head>')) {
+      body = body.replace('</head>', injectHtml + '</head>');
+    } else {
+      body = injectHtml + body;
+    }
   }
 
   $done({ headers, body });
