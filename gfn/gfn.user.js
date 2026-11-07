@@ -1,36 +1,32 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.0
+// @version      3.1
 // @author       Nvirya
-// @description  iOS PWA bypass, Native iOS Light Mode in-stream UI, Smart Battery Saver Mode, silent/PiP mode with auto-resume audio, stats HUD, crosshair, OLED dimmer, screenshot, color filters + WebGL CAS sharpen, 20ms ultra-fast loot macros + active-hold 1:1 Macro Recorder.
+// @description  iOS PWA bypass, Zero-Freeze Stream Input Engine, Native iOS Light Mode UI, Smart Battery Saver, Pro Macro Suite (Multi-Point, Circle/Spiral Drag, Rapid Burst, Auto-Walk, Sequence Chain), 1:1 Active-Hold Recorder, HUD & Aim Crosshair.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
 // @match        https://play.geforcenow.com/*
-// @downloadURL  https://raw.nvirya.com/gfn/gfn.user.js
-// @updateURL    https://raw.nvirya.com/gfn/gfn.user.js
 // @run-at       document-start
 // @grant        none
 // ==/UserScript==
 
 /*
- * v3.0 Release Notes
- * 1. Deep Audit & Fixes for Hidden Risks in v2.8.3:
- *    - Fixed Active-Hold Freeze on Pause: Previously in `playRawTimeline()`, when `isPaused()` triggered while a recorded finger was held down, the `while (isPaused())` loop blocked BEFORE the 30Hz hold heartbeat pump, causing the game to drop the held button. Now hold keepalive frames continue pumping smoothly even during pause!
- *    - Fixed Stuck Pointer on "Hold Button" (`mode === 'hold'`) Macro Release: Added window-level `pointerup` / `pointercancel` / `touchend` listeners so sliding your finger off a Hold Macro button before releasing never leaves the macro stuck running infinitely.
- *    - Fixed `localStorage` Quota Overflow (`QuotaExceededError`): Added automatic event compaction (`compactRawEv`) that trims redundant micro-frames while preserving 100% curve/hold accuracy, preventing long recordings from exceeding Safari's 5MB storage cap.
- *    - Fixed Stale `realTouches` Ghost Pause: Added automatic touch-list sanitization on `blur`, `visibilitychange`, and pointer completion so iOS gesture interruptions never leave phantom fingers in `realTouches`.
- *    - Fixed DOM Thrashing in `init()`: Consolidated the 400ms `querySelectorAll('button')` "BACK TO GAME" poll into a lightweight check only when an overlay dialog is actually present.
- * 2. Native iOS Light Mode In-Stream UI:
- *    - Redesigned all in-stream overlays (Panel, Macro floating buttons, HUD, Edit toolbar, Recorder bar, Toast, Countdown) in clean Apple HIG iOS Light Mode: translucent frosted alabaster glass (`rgba(248, 249, 252, 0.88)`), pure white cards (`#ffffff`), crisp ink typography (`#1c1c1e` / `#6c6c70`), subtle hairline borders (`rgba(60, 60, 67, 0.14)`), and iOS system accents (`#007aff` / `#34c759` / `#ff3b30`).
- * 3. Comprehensive Battery Saver Mode (`batterySaver`):
- *    - One-tap master switch in General & in-game menu that cuts iPhone/iPad power draw & heat by:
- *      • Auto-suspending or throttling WebGL CAS shader passes and disabling expensive CSS `backdrop-filter` blurs across overlays.
- *      • Throttling WebRTC `getStats()` polling from 1s to 3s and disabling DOM ripple animations (`macroRipple`).
- *      • Dimming stream brightness slightly (optional OLED power save) and reducing background timer wakeups.
- * 4. New Useful In-Game Features:
- *    - Custom Crosshair Overlay: 4 clean styles (Dot, Cross, Circle-Dot, T-Cross) with customizable size, color, and X/Y fine-tuning for shooters/aiming.
- *    - OLED Dimmer / Night Eye Shield: Extra hardware-friendly darkness layer (0%–75%) below iOS minimum brightness for late-night gaming or AFK farming.
- *    - Floating Quick-Ball (`quickBall`): Optional mini draggable pill on the screen edge to open the Nvirya panel or toggle Battery Saver/Crosshair with 1 tap without opening GFN's native top-left menu.
+ * v3.1 Release Notes
+ * 1. CRITICAL FIX: Stream Control Freeze / 5–10s Unresponsive Input on iOS ("Fix mất quyền điều khiển stream, 5-10s k thể tương tác"):
+ *    - Root Cause A (Dual Pointer + Touch Event Conflict): Previously `macroInput` defaulted to `'both'`, firing synthetic `PointerEvent` AND `TouchEvent` simultaneously. On iOS WebKit + GFN's streamer, dispatching synthetic `TouchEvent`s alongside `PointerEvent`s corrupts GFN's internal active-pointer state machine whenever your real finger lifts up while a macro touch is active (or vice versa), locking all stream input for 5–10s until an iOS Notification Center pull forces a native `touchcancel` reset!
+ *      • Fix: Switched default & recommended injection engine to pure `'pointer'` with smart `isPrimary` arbitration (`isPrimary: realPointers.size === 0 && primaryMacroPid === pid`) so synthetic macro pointers NEVER steal or corrupt your real finger's primary pointer stream!
+ *    - Root Cause B (Blocked `blur` / `visibilitychange` Events Preventing GFN Pointer Reset): Blocking `blur` and `visibilitychange` on `window`/`document` prevented GFN's input controller from flushing stuck pointers, while iOS Safari's gesture recognizer accumulated orphan touches.
+ *      • Fix: Replaced blind event blocking with selective background-keepalive + an automatic **Stream Input Watchdog & Unstick Engine (`unstickStreamInput()`)** that monitors real vs. synthetic pointer health, prevents orphan pointer IDs, and provides a 1-tap / automatic recovery flush without ever needing to pull down the iOS Notification Center!
+ *    - Root Cause C (Pointer Capture Leak on Floating Buttons): Removed `el.setPointerCapture()` on floating macro buttons during normal play (only used when dragging in Edit Mode), preventing iOS WebKit from trapping touch focus on the overlay button after a tap.
+ * 2. Expanded Pro Macro Suite ("Improved, Add thêm nhiều tính năng Macros hơn"):
+ *    - New Step Types:
+ *      • `multi` (Multi-Touch Simultaneous Tap): Presses 2 or 3 points at the exact same millisecond (e.g., Jump + Attack, Aim + Shoot, Elemental Burst combos).
+ *      • `circle` (Circular / Spiral Drag): Smoothly drags in a continuous circle around `(X, Y)` with configurable Radius (%) — ideal for 360° spin attacks, joystick anti-AFK movement, or area looting.
+ *      • `burst` (Rapid Burst Tap): Fires a high-speed burst of N taps at 16–25ms intervals inside a single step with optional random spread radius (`spread`).
+ *    - New Macro Features:
+ *      • **Chain Next Macro (`chainId`)**: Automatically trigger another macro when the current macro finishes!
+ *      • **Auto-Walk / Joystick Lock (`walk` template)** & **10 Built-in Pro Templates** (Turbo Loot 20ms, Auto-Walk Forward, Circle Spin 360°, Jump+Attack Multi-Touch, Rapid Burst, Charged Attack, Fast Skip, etc.).
+ *      • **Emergency Unstick / Reset Input** button right on the Quick Ball & Stop Bar.
  */
 
 (function () {
@@ -132,7 +128,11 @@
     eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
     grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
     leaf: 'M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.4 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10Z',
-    aim: 'M12 2v4M12 18v4M2 12h4M18 12h4M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'
+    aim: 'M12 2v4M12 18v4M2 12h4M18 12h4M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+    multi: 'M7 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM17 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+    circle: 'M12 21a9 9 0 1 1 6.36-2.64M18 14v5h-5',
+    burst: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83',
+    shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'
   };
   function ico(name, size) {
     const s = document.createElementNS(NS, 'svg');
@@ -189,29 +189,30 @@
 
   const TPL = {
     loot20: { label: 'Turbo Loot 20ms (hold)', name: 'Loot', mode: 'hold', interval: 20, steps: [
-      { t: 'tap', x: 66, y: 55, hold: 16, wait: 4 },
+      { t: 'burst', x: 66, y: 55, cnt: 4, hold: 14, spread: 1.5, wait: 4 },
       { t: 'zone', x: 62, y: 42, w: 18, h: 26, rows: 3, cols: 1, hold: 14, wait: 4 }] },
     pick: { label: 'Single Pick 20ms (hold)', name: 'Pick', mode: 'hold', interval: 20, steps: [
       { t: 'tap', x: 66, y: 55, hold: 16, wait: 4 }] },
-    skip: { label: 'Fast Skip Dialogue', name: 'Skip', mode: 'toggle', interval: 60, steps: [
-      { t: 'tap', x: 50, y: 60, hold: 20, wait: 20 },
-      { t: 'zone', x: 62, y: 34, w: 30, h: 26, rows: 3, hold: 18, wait: 20 }] },
-    rapid: { label: 'Rapid Attack 20ms (hold)', name: 'Rapid', mode: 'hold', interval: 20, steps: [
-      { t: 'tap', x: 84, y: 74, hold: 16, wait: 4 }] },
-    double: { label: 'Double tap', name: 'Double', mode: 'once', steps: [
-      { t: 'tap', x: 50, y: 50, hold: 24, wait: 45 },
-      { t: 'tap', x: 50, y: 50, hold: 24, wait: 0 }] },
+    skip: { label: 'Fast Skip Dialogue', name: 'Skip', mode: 'toggle', interval: 55, steps: [
+      { t: 'tap', x: 50, y: 60, hold: 18, wait: 18 },
+      { t: 'zone', x: 62, y: 34, w: 30, h: 26, rows: 3, hold: 18, wait: 18 }] },
+    walk: { label: 'Auto-Walk Forward (Toggle)', name: 'Walk', mode: 'toggle', interval: 30, steps: [
+      { t: 'swipe', x: 18, y: 72, x2: 18, y2: 42, dur: 2500, wait: 10 }] },
+    spin360: { label: 'Circle Spin 360° (Joystick/Attack)', name: 'Spin', mode: 'toggle', interval: 40, steps: [
+      { t: 'circle', x: 18, y: 72, rad: 9, dur: 750, wait: 10 }] },
+    jumpatk: { label: 'Jump + Attack (Multi-Touch)', name: 'J-Atk', mode: 'once', interval: 40, steps: [
+      { t: 'multi', x: 84, y: 74, x2: 91, y2: 58, hold: 45, wait: 20 }] },
+    rapid: { label: 'Rapid Burst 20ms (hold)', name: 'Burst', mode: 'hold', interval: 20, steps: [
+      { t: 'burst', x: 84, y: 74, cnt: 5, hold: 14, spread: 2, wait: 4 }] },
     combo: { label: 'Skill Combo (4 points)', name: 'Combo', mode: 'once', steps: [
-      { t: 'tap', x: 70, y: 78, hold: 28, wait: 70 },
-      { t: 'tap', x: 80, y: 70, hold: 28, wait: 70 },
-      { t: 'tap', x: 88, y: 60, hold: 28, wait: 70 },
+      { t: 'tap', x: 70, y: 78, hold: 28, wait: 65 },
+      { t: 'tap', x: 80, y: 70, hold: 28, wait: 65 },
+      { t: 'tap', x: 88, y: 60, hold: 28, wait: 65 },
       { t: 'tap', x: 92, y: 46, hold: 28, wait: 0 }] },
     charge: { label: 'Charged Attack (Hold)', name: 'Charge', mode: 'once', steps: [
       { t: 'tap', x: 84, y: 74, hold: 1100, wait: 0 }] },
     swipe: { label: 'Camera 180° Flick', name: 'Flick', mode: 'once', interval: 200, steps: [
-      { t: 'swipe', x: 75, y: 50, x2: 20, y2: 50, dur: 95, wait: 0 }] },
-    grid: { label: 'Tap grid (3×3)', name: 'Grid', mode: 'toggle', interval: 120, steps: [
-      { t: 'zone', x: 25, y: 25, w: 50, h: 50, rows: 3, cols: 3, hold: 20, wait: 20 }] }
+      { t: 'swipe', x: 75, y: 50, x2: 20, y2: 50, dur: 95, wait: 0 }] }
   };
 
   /* ================= macro & template model + Anti-Overlap Button Slot Engine ================= */
@@ -219,7 +220,8 @@
 
   function normStep(s) {
     s = s || {};
-    const t = ['tap', 'zone', 'swipe', 'wait'].includes(s.t) ? s.t : 'tap';
+    const validTypes = ['tap', 'zone', 'swipe', 'wait', 'multi', 'circle', 'burst'];
+    const t = validTypes.includes(s.t) ? s.t : 'tap';
     const o = { t };
     if (s.rec) o.rec = true;
     if (t === 'wait') { o.wait = cl(nv(s.wait, 100), 0, 30000); return o; }
@@ -228,6 +230,20 @@
     o.x = cl(nv(s.x, 50), 0, 100);
     o.y = cl(nv(s.y, 50), 0, 100);
     if (t === 'tap' || t === 'zone') o.hold = cl(nv(s.hold, 20), 10, 30000);
+    if (t === 'multi') {
+      o.x2 = cl(nv(s.x2, 75), 0, 100);
+      o.y2 = cl(nv(s.y2, 60), 0, 100);
+      o.hold = cl(nv(s.hold, 35), 10, 30000);
+    }
+    if (t === 'circle') {
+      o.rad = cl(nv(s.rad, 8), 1, 40);
+      o.dur = cl(nv(s.dur, 700), 60, 30000);
+    }
+    if (t === 'burst') {
+      o.cnt = cl(Math.round(nv(s.cnt, 5)), 2, 40);
+      o.hold = cl(nv(s.hold, 15), 10, 1000);
+      o.spread = cl(nv(s.spread, 1.5), 0, 20);
+    }
     if (t === 'swipe') {
       o.x2 = cl(nv(s.x2, 70), 0, 100);
       o.y2 = cl(nv(s.y2, 50), 0, 100);
@@ -249,7 +265,6 @@
     return o;
   }
 
-  // Compacts raw timeline events to prevent localStorage QuotaExceededError while keeping 100% curve & hold fidelity
   function normRawEv(ev) {
     if (!Array.isArray(ev)) return null;
     const cleaned = [];
@@ -267,7 +282,6 @@
 
       if (type === 1) {
         const prev = lastMoveBySlot.get(slot);
-        // Deduplicate near-identical intermediate move frames (< 8ms & < 0.2% delta) to save storage
         if (prev && (t - prev[0] < 8) && Math.hypot(x - prev[3], y - prev[4]) < 0.2) {
           continue;
         }
@@ -293,6 +307,7 @@
       loops: cl(Math.round(nv(m.loops, 0)), 0, 999),
       delay: cl(nv(m.delay, 0), 0, 5000),
       speed: cl(nv(m.speed, 1), 0.5, 2.5),
+      chainId: m.chainId ? String(m.chainId) : '',
       size: cl(nv(m.size, 1), 0.6, 1.8),
       opacity: cl(nv(m.opacity, 0.92), 0.2, 1),
       label: m.label !== false,
@@ -435,6 +450,7 @@
     silent: false,
     batterySaver: false,
     afkGuard: false,
+    inputGuard: true,
     quickBall: false,
     quickHideBtns: false,
     oledDim: 0,
@@ -444,8 +460,8 @@
     fxTint: 'none', fxTintA: 0.12, fxVig: 0, sharpen: 0, sharpenEco: false,
     viewX: 0, viewY: 0, viewZoom: 1,
     shotBtn: false, shotFormat: 'png', shotShare: true,
-    macroEnabled: false, macroPauseMode: 'never', macroPauseRadius: 70, macroPauseMs: 400,
-    macroMaxMin: 15, macroInput: 'both', macroRipple: true,
+    macroEnabled: false, macroPauseMode: 'never', macroPauseRadius: 70, macroPauseMs: 350,
+    macroMaxMin: 15, macroInput: 'pointer', macroRipple: true,
     recCountdown: true, recAutoBtn: true
   };
   function loadCfg() {
@@ -454,6 +470,8 @@
     delete o.vres; delete o.vresW; delete o.vresH;
     delete o.tcHide; delete o.tcOpacity; delete o.tcScale; delete o.tcIconScale; delete o.tcX; delete o.tcY;
     delete o.macroPause;
+    // Migrate legacy `macroInput: 'both'` to `'pointer'` to eliminate iOS dual-event stream freezes!
+    if (o.macroInput === 'both') o.macroInput = 'pointer';
     const c = Object.assign({}, DEF, o);
     c.shotBtnPos = Object.assign({ x: 94, y: 8 }, o.shotBtnPos);
     c.quickBallPos = Object.assign({ x: 4, y: 50 }, o.quickBallPos);
@@ -476,7 +494,6 @@
       try {
         localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
       } catch (e) {
-        // Fallback if localStorage quota is exceeded: trim oldest raw events from customTemplates
         try {
           if (cfg.customTemplates && cfg.customTemplates.length > 1) {
             cfg.customTemplates[cfg.customTemplates.length - 1].ev = null;
@@ -539,16 +556,17 @@
     };
   }, 'play/pause');
 
-  // Keep stream alive in background
+  // CRITICAL FIX for Stream Input Freeze:
+  // Only spoof `document.hidden` / `visibilityState` and block `visibilitychange`/`pagehide` so background PiP stays alive,
+  // but DO NOT block `blur` on Window/Document! Blocking `blur` prevents GFN's input controller from resetting stuck pointer states!
   guard(() => {
     Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
     Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
     Object.defineProperty(document, 'webkitVisibilityState', { get: () => 'visible', configurable: true });
   }, 'visibility');
-  guard(() => Object.defineProperty(window, 'onblur', { set: () => {}, get: () => null }), 'onblur');
   guard(() => Object.defineProperty(document, 'onvisibilitychange', { set: () => {}, get: () => null }), 'onvis');
   guard(() => {
-    const blocked = ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide'];
+    const blocked = ['visibilitychange', 'webkitvisibilitychange', 'pagehide'];
     const wrap = orig => function (type, l, o) { return blocked.includes(type) ? undefined : orig.call(this, type, l, o); };
     Document.prototype.addEventListener = wrap(Document.prototype.addEventListener);
     Window.prototype.addEventListener = wrap(Window.prototype.addEventListener);
@@ -637,10 +655,10 @@
   /* ================= styles (Native iOS Light Mode for In-Stream UI & Macros) ================= */
   const CSS = `
 :root{
-  --sx-bg:rgba(246,247,250,0.92);
+  --sx-bg:rgba(246,247,250,0.94);
   --sx-s1:#ffffff;
   --sx-s2:#eef0f5;
-  --sx-s3:#dcdFe6;
+  --sx-s3:#dcdfe6;
   --sx-line:rgba(60,60,67,0.12);
   --sx-line2:rgba(60,60,67,0.22);
   --sx-tx:#1c1c1e;
@@ -684,18 +702,18 @@
 
 #sx-m{position:absolute;inset:0;z-index:2;pointer-events:none}
 .sx-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.sx-lines line,.sx-lines polyline{stroke:var(--sx-bl);stroke-width:2.2;stroke-dasharray:5 4;fill:none;vector-effect:non-scaling-stroke}
+.sx-lines line,.sx-lines polyline,.sx-lines circle{stroke:var(--sx-bl);stroke-width:2.2;stroke-dasharray:5 4;fill:none;vector-effect:non-scaling-stroke}
 
 #sx-bar{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 16px);padding:5px;border-radius:14px;background:rgba(255,255,255,0.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--sx-line2);box-shadow:0 10px 28px rgba(0,0,0,0.18);pointer-events:auto}
 #sx-bar.on{display:flex}
 #sx-bar .sx-sel{height:32px;padding-top:0;padding-bottom:0;margin-right:2px}
-.sx-tb{display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:0;border-radius:9px;background:transparent;color:var(--sx-tx);font:500 12.5px var(--sx-font)}
+.sx-tb{display:flex;align-items:center;gap:5px;height:32px;padding:0 9px;border:0;border-radius:9px;background:transparent;color:var(--sx-tx);font:500 12px var(--sx-font)}
 .sx-tb:active{background:var(--sx-s2)}
 .sx-tb.pri{background:var(--sx-bl);color:#ffffff;font-weight:600}
 #sx-stop{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;height:36px;padding:0 15px;border:0;border-radius:18px;background:var(--sx-red);color:#fff;font:600 12.5px var(--sx-font);box-shadow:0 6px 20px rgba(255,59,48,0.35);pointer-events:auto}
 #sx-stop.on{display:flex}
 
-#sx-panel{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:min(410px,calc(100% - 16px));display:none;flex-direction:column;background:var(--sx-bg);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid var(--sx-line2);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,0.22);overflow:hidden;pointer-events:auto;transition:opacity .15s;color:var(--sx-tx)}
+#sx-panel{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:min(415px,calc(100% - 16px));display:none;flex-direction:column;background:var(--sx-bg);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid var(--sx-line2);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,0.22);overflow:hidden;pointer-events:auto;transition:opacity .15s;color:var(--sx-tx)}
 #sx-panel.open{display:flex}
 #sx-panel.peek{opacity:.16}
 .sx-ph{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px 16px;background:rgba(255,255,255,0.65)}
@@ -783,7 +801,6 @@
 .sx-btn.blue{background:var(--sx-bl);color:#fff;border-color:transparent}
 .sx-btn.danger{background:rgba(255,59,48,0.08);color:var(--sx-red);border-color:rgba(255,59,48,0.3)}
 
-/* Keep Lobby Settings section readable against GFN's dark lobby page */
 .sx-ghead{grid-column:1/-1;padding:18px 24px 6px;font-size:14px;font-weight:600;color:#ededf0}
 #sx-section .sx-sel,#sx-section .sx-btn.alt{background:#22252b;color:#ededf0;border-color:rgba(255,255,255,0.14)}
 #sx-section .sx-rv{color:#9297a0}
@@ -1053,7 +1070,6 @@
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
   function updateSharpen() {
-    // In Battery Saver mode, if sharpen is 0 or user wants max battery saving, keep WebGL off unless explicitly > 0
     const want = cfg.sharpen > 0 && streaming() && !GL.fail;
     if (want) { if (!GL.on || GL.video !== vid()) glStart(); }
     else if (GL.on) glStop();
@@ -1073,6 +1089,11 @@
     if (GL.on && GL.c && !GL.c.isConnected) { glStop(); updateSharpen(); }
 
     const now = Date.now();
+    // Automatic Input Watchdog: clean up any orphan macro pointers older than 12s when no macro is running
+    if (cfg.inputGuard && runners.size === 0 && activeMacroPointers.size > 0) {
+      unstickStreamInput(true);
+    }
+
     if (st && cfg.afkGuard && !runners.size && !recState.on && now - lastUserAct > 210000 && now - lastAfkPulse > 180000) {
       lastAfkPulse = now;
       guard(() => {
@@ -1090,7 +1111,6 @@
     if (!show) { prevStat = null; return; }
     hud.dataset.pos = cfg.hudPos;
     hud.style.opacity = cfg.hudOpacity;
-    // In Battery Saver mode, poll WebRTC stats every 3 seconds instead of every 1 second to save CPU wakeups
     if (cfg.batterySaver && (tickCount % 3 !== 0)) return;
     if (!pcs.size) return;
     const reps = await Promise.all([...pcs].map(p => p.getStats().catch(() => null)));
@@ -1187,14 +1207,46 @@
     preview.classList.add('on');
   }
 
-  /* ================= macro engine (Active-Hold Heartbeat + Pause-Safe Hold + 20ms Loot) ================= */
+  /* ================= ZERO-FREEZE STREAM INPUT & MACRO ENGINE ================= */
   const runners = new Map();
-  const activeMacroTouches = new Map();
-  const targetCache = new Map();
+  const activeMacroPointers = new Map(); // pid -> { target, x, y, t }
+  const activeMacroTouches = new Map();  // pid -> Touch
+  const targetCache = new Map();         // pid -> Element
+  const realPointers = new Map();        // pointerId -> timestamp (tracks real human fingers on stream)
   const holdIds = new Map();
-  const activeHoldBtnMacros = new Set(); // Track macros started via "Hold Button" so window pointerup always stops them
+  const activeHoldBtnMacros = new Set();
+  let primaryMacroPid = null;
   let pauseUntil = 0, pidSeq = 0, editing = false, realTouches = [];
-  const nextPid = () => 10400 + (pidSeq++ % 900);
+  // Keep pointer IDs in compact range [100..220] so GFN's pointer table never overflows
+  const nextPid = () => 100 + (pidSeq++ % 120);
+
+  // Stream Input Recovery / Unstick Engine:
+  // Emulates what happens when you pull down the iOS Notification Center (flushes any stuck synthetic/orphan pointers on GFN's stream targets)
+  function unstickStreamInput(silent) {
+    guard(() => {
+      activeMacroPointers.forEach((info, pid) => {
+        const tgt = (info.target && info.target.isConnected) ? info.target : (vid() || document.body);
+        try {
+          tgt.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, cancelable: true, composed: true, view: window,
+            pointerId: pid, pointerType: 'touch', isPrimary: pid === primaryMacroPid,
+            clientX: info.x, clientY: info.y, screenX: info.x, screenY: info.y,
+            pressure: 0, button: 0, buttons: 0
+          }));
+        } catch (_) {}
+      });
+      activeMacroPointers.clear();
+      activeMacroTouches.clear();
+      targetCache.clear();
+      primaryMacroPid = null;
+      holdIds.clear();
+      // Also blur any accidentally focused overlay button so GFN regains keyboard/pointer focus
+      if (document.activeElement && root && root.contains(document.activeElement)) {
+        try { document.activeElement.blur(); } catch (_) {}
+      }
+      if (!silent) toast('Stream input state refreshed');
+    }, 'unstickStreamInput');
+  }
 
   function actionsOf(m) {
     const out = [];
@@ -1203,6 +1255,9 @@
       for (let r = 0; r < reps; r++) {
         if (s.t === 'wait') out.push({ k: 'wait', ms: s.wait, rec: !!s.rec });
         else if (s.t === 'tap') out.push({ k: 'tap', x: s.x, y: s.y, hold: s.hold, wait: s.wait, rec: !!s.rec });
+        else if (s.t === 'multi') out.push({ k: 'multi', x: s.x, y: s.y, x2: s.x2, y2: s.y2, hold: s.hold, wait: s.wait });
+        else if (s.t === 'circle') out.push({ k: 'circle', x: s.x, y: s.y, rad: s.rad, dur: s.dur, wait: s.wait });
+        else if (s.t === 'burst') out.push({ k: 'burst', x: s.x, y: s.y, cnt: s.cnt, hold: s.hold, spread: s.spread, wait: s.wait });
         else if (s.t === 'swipe') out.push({ k: 'swipe', x: s.x, y: s.y, x2: s.x2, y2: s.y2, dur: s.dur, wait: s.wait, pts: s.pts || null, rec: !!s.rec });
         else {
           const rows = s.rows || 1, cols = s.cols || 1;
@@ -1248,6 +1303,9 @@
     return null;
   }
 
+  // Zero-Freeze Injection Engine:
+  // 1. Arbitrates `isPrimary`: only ONE pointer is primary when no real finger is touching; never steals `isPrimary` from a real finger!
+  // 2. Tracks `activeMacroPointers` so every `pointerdown` is guaranteed a matching `pointerup` on the exact same target element.
   function inject(phase, x, y, pid, prevX, prevY) {
     const cx = cl(x, 1, Math.max(2, window.innerWidth - 1));
     const cy = cl(y, 1, Math.max(2, window.innerHeight - 1));
@@ -1256,10 +1314,18 @@
       target = pickTarget(cx, cy);
       if (target && phase === 'down') targetCache.set(pid, target);
     }
-    if (phase === 'up') targetCache.delete(pid);
+    if (phase === 'up') {
+      targetCache.delete(pid);
+      activeMacroPointers.delete(pid);
+      if (primaryMacroPid === pid) primaryMacroPid = null;
+    } else {
+      activeMacroPointers.set(pid, { target, x: cx, y: cy, t: Date.now() });
+      if (primaryMacroPid === null && realPointers.size === 0) primaryMacroPid = pid;
+    }
     if (!target) return;
 
     const mode = cfg.macroInput, down = phase !== 'up';
+    const isPrim = (realPointers.size === 0) && (primaryMacroPid === pid || primaryMacroPid === null);
     const movX = (phase === 'move' && prevX != null) ? (cx - prevX) : 0;
     const movY = (phase === 'move' && prevY != null) ? (cy - prevY) : 0;
     const base = {
@@ -1280,11 +1346,11 @@
         target.dispatchEvent(new PointerEvent(type, Object.assign({}, base, {
           pointerId: pid,
           pointerType: 'touch',
-          isPrimary: true,
+          isPrimary: isPrim,
           width: 2.5,
           height: 2.5,
           pressure: down ? 0.65 : 0,
-          button: 0,
+          button: down ? 0 : -1,
           buttons: down ? 1 : 0
         })));
       }, 'pointer');
@@ -1316,7 +1382,6 @@
   }
 
   function ripple(x, y) {
-    // Skip DOM ripple creation when Battery Saver is active to avoid extra DOM allocations & layout animations
     if (!root || cfg.batterySaver || !cfg.macroRipple) return;
     const r = h('div', 'sx-rip');
     r.style.left = x + 'px';
@@ -1357,6 +1422,68 @@
       }
     } finally {
       inject('up', x, y, st.pid, x, y);
+    }
+  }
+
+  // Simultaneous 2-Finger Multi-Touch Step (`multi`)
+  async function multiTapAt(a, st, speed = 1) {
+    const [bx1, by1] = px(a.x, a.y);
+    const [bx2, by2] = px(a.x2, a.y2);
+    const x1 = jitterCoord(bx1, 2), y1 = jitterCoord(by1, 2);
+    const x2 = jitterCoord(bx2, 2), y2 = jitterCoord(by2, 2);
+    const pid1 = st.pid, pid2 = nextPid();
+    const actualHold = Math.max(10, jitterHold(a.hold || 35, false) / speed);
+    ripple(x1, y1);
+    ripple(x2, y2);
+    inject('down', x1, y1, pid1);
+    inject('down', x2, y2, pid2);
+    try {
+      await waitExact(actualHold, st);
+    } finally {
+      inject('up', x2, y2, pid2, x2, y2);
+      inject('up', x1, y1, pid1, x1, y1);
+    }
+  }
+
+  // Continuous Circular / Spiral Drag Step (`circle`)
+  async function circleAt(a, st, speed = 1) {
+    const [cx, cy] = px(a.x, a.y);
+    const radPx = (cl(nv(a.rad, 8), 1, 40) / 100) * Math.min(window.innerWidth, window.innerHeight);
+    const totalDur = Math.max(40, jitterTime(a.dur || 700, false) / speed);
+    let curX = cx + radPx, curY = cy;
+    let prevX = curX, prevY = curY;
+    ripple(cx, cy);
+    inject('down', curX, curY, st.pid);
+    try {
+      const tStart = performance.now();
+      while (!st.stop) {
+        await nextFrame();
+        if (st.stop) break;
+        const elapsed = performance.now() - tStart;
+        const prog = cl(elapsed / totalDur, 0, 1);
+        const angle = prog * Math.PI * 2;
+        curX = cx + Math.cos(angle) * radPx + randRange(-0.5, 0.5);
+        curY = cy + Math.sin(angle) * radPx + randRange(-0.5, 0.5);
+        inject('move', curX, curY, st.pid, prevX, prevY);
+        prevX = curX; prevY = curY;
+        if (prog >= 1) break;
+      }
+    } finally {
+      inject('up', curX, curY, st.pid, prevX, prevY);
+    }
+  }
+
+  // Rapid Burst Tap Step (`burst`)
+  async function burstAt(a, st, speed = 1) {
+    const cnt = cl(Math.round(nv(a.cnt, 5)), 2, 40);
+    const spreadPct = cl(nv(a.spread, 1.5), 0, 20);
+    for (let i = 0; i < cnt && !st.stop; i++) {
+      const ox = cl(a.x + randRange(-spreadPct, spreadPct), 1, 99);
+      const oy = cl(a.y + randRange(-spreadPct, spreadPct), 1, 99);
+      await tapAt({ x: ox, y: oy, hold: a.hold || 14, rec: false }, st, speed);
+      if (i < cnt - 1 && !st.stop) {
+        await waitExact(Math.max(4, jitterTime(10, false) / speed), st);
+      }
     }
   }
 
@@ -1420,8 +1547,6 @@
     }
   }
 
-  // Fixed Pause-Safe Raw Timeline Replay:
-  // Keeps pumping 30Hz hold heartbeats even if `isPaused()` is true, and shifts `t0` by paused duration so timeline never skips!
   async function playRawTimeline(evList, st, speed = 1) {
     if (!evList || !evList.length) return;
     const slotPids = new Map();
@@ -1458,7 +1583,7 @@
           const pStart = performance.now();
           pumpHeldSlots(pStart);
           await sleep(20);
-          t0 += (performance.now() - pStart); // Compensate t0 so timeline doesn't fast-forward after unpausing
+          t0 += (performance.now() - pStart);
         }
         if (st.stop) break;
 
@@ -1521,7 +1646,7 @@
   function isPaused() {
     if (cfg.macroPauseMode === 'never') return false;
     const now = Date.now();
-    holdIds.forEach((t, id) => { if (now - t > 5000) holdIds.delete(id); });
+    holdIds.forEach((t, id) => { if (now - t > 4000) holdIds.delete(id); });
     return holdIds.size > 0 || now < pauseUntil;
   }
 
@@ -1531,6 +1656,9 @@
       return;
     }
     if (a.k === 'tap') await tapAt(a, st, speed);
+    else if (a.k === 'multi') await multiTapAt(a, st, speed);
+    else if (a.k === 'circle') await circleAt(a, st, speed);
+    else if (a.k === 'burst') await burstAt(a, st, speed);
     else await swipeAt(a, st, speed);
     if (!st.stop && a.wait > 0) {
       await waitExact(jitterTime(a.wait, a.rec) / speed, st);
@@ -1542,6 +1670,7 @@
     const st = { stop: false, t0: Date.now(), pid: nextPid() };
     runners.set(m.id, st);
     markRunning();
+    let completedNaturally = false;
     try {
       const hasRawEv = Array.isArray(m.ev) && m.ev.length > 0;
       const actions = actionsOf(m);
@@ -1564,7 +1693,8 @@
           }
         }
         n++;
-        if (st.stop || (maxLoops && n >= maxLoops)) break;
+        if (st.stop) break;
+        if (maxLoops && n >= maxLoops) { completedNaturally = true; break; }
         if (Date.now() - st.t0 > cfg.macroMaxMin * 60000) {
           toast('Macro stopped: time limit reached');
           break;
@@ -1572,11 +1702,18 @@
         await waitExact(jitterTime(Math.max(10, m.interval), isRecMacro), st);
       }
     } finally {
+      activeMacroPointers.delete(st.pid);
       activeMacroTouches.delete(st.pid);
       targetCache.delete(st.pid);
+      if (primaryMacroPid === st.pid) primaryMacroPid = null;
       runners.delete(m.id);
       activeHoldBtnMacros.delete(m.id);
       markRunning();
+      // Trigger Chained Macro if configured and completed naturally
+      if (completedNaturally && m.chainId && m.chainId !== m.id && streaming()) {
+        const nextM = cfg.macros.find(x => x.id === m.chainId);
+        if (nextM) setTimeout(() => runMacro(nextM, true), 25);
+      }
     }
   }
   function stopMacro(id) {
@@ -1587,6 +1724,7 @@
   function stopAll() {
     activeHoldBtnMacros.clear();
     runners.forEach(r => { r.stop = true; });
+    setTimeout(() => unstickStreamInput(true), 40);
   }
   function toggleMacro(m) { if (runners.has(m.id)) stopMacro(m.id); else runMacro(m); }
   function markRunning() {
@@ -1602,7 +1740,7 @@
       for (const a of actionsOf(m)) {
         if (a.k === 'wait') continue;
         const pts = [[a.x, a.y]];
-        if (a.k === 'swipe') pts.push([a.x2, a.y2], [(a.x + a.x2) / 2, (a.y + a.y2) / 2]);
+        if (a.k === 'swipe' || a.k === 'multi') pts.push([a.x2, a.y2], [(a.x + a.x2) / 2, (a.y + a.y2) / 2]);
         for (const p of pts) {
           const q = px(p[0], p[1]);
           if (Math.hypot(q[0] - x, q[1] - y) <= r) return true;
@@ -1612,29 +1750,37 @@
     return false;
   }
 
+  // Track real human fingers so `isPrimary` arbitration never conflicts with user touch
   document.addEventListener('pointerdown', e => {
     if (!e.isTrusted) return;
     lastUserAct = Date.now();
+    if (!(root && root.contains(e.target))) {
+      realPointers.set(e.pointerId, Date.now());
+    }
     if (!runners.size || cfg.macroPauseMode === 'never') return;
     if (root && root.contains(e.target)) return;
     if (cfg.macroPauseMode === 'near' && !nearTarget(e.clientX, e.clientY)) return;
     holdIds.set(e.pointerId, Date.now());
   }, { capture: true, passive: true });
+
   ['pointerup', 'pointercancel'].forEach(t => {
     document.addEventListener(t, e => {
-      if (e.isTrusted) lastUserAct = Date.now();
+      if (!e.isTrusted) return;
+      lastUserAct = Date.now();
+      realPointers.delete(e.pointerId);
       if (holdIds.delete(e.pointerId)) pauseUntil = Date.now() + cfg.macroPauseMs;
-      // Global safety release for any "Hold Button" macros if finger slid off the button before releasing
-      if (e.isTrusted && activeHoldBtnMacros.size > 0 && realTouches.length === 0) {
+      if (activeHoldBtnMacros.size > 0 && realTouches.length === 0) {
         activeHoldBtnMacros.forEach(id => stopMacro(id));
       }
     }, { capture: true, passive: true });
   });
+
   ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(t => {
     document.addEventListener(t, e => {
       if (!e.isTrusted) return;
       realTouches = Array.from(e.touches);
       if (e.touches.length === 0) {
+        realPointers.clear();
         holdIds.clear();
         if (activeHoldBtnMacros.size > 0) {
           activeHoldBtnMacros.forEach(id => stopMacro(id));
@@ -2071,8 +2217,8 @@
 
   async function exportTemplates(singleTpl) {
     const payload = singleTpl
-      ? { sxTpl: 3.0, templates: [singleTpl] }
-      : { sxTpl: 3.0, templates: cfg.customTemplates };
+      ? { sxTpl: 3.1, templates: [singleTpl] }
+      : { sxTpl: 3.1, templates: cfg.customTemplates };
     const txt = JSON.stringify(payload);
     try {
       await navigator.clipboard.writeText(txt);
@@ -2154,7 +2300,7 @@
     }
   }
   async function exportMacros() {
-    const txt = JSON.stringify({ sx: 3.0, macros: cfg.macros });
+    const txt = JSON.stringify({ sx: 3.1, macros: cfg.macros });
     try { await navigator.clipboard.writeText(txt); toast('Macros copied to clipboard'); }
     catch (_) { prompt('Copy your macros', txt); }
   }
@@ -2179,6 +2325,9 @@
     const wait = (m.steps.length && m.steps[m.steps.length - 1].wait) || 20;
     const base = {
       tap: { x: 50, y: 50, hold: 20 },
+      burst: { x: 66, y: 55, cnt: 5, hold: 14, spread: 1.5 },
+      multi: { x: 84, y: 74, x2: 91, y2: 58, hold: 40 },
+      circle: { x: 18, y: 72, rad: 8, dur: 700 },
       zone: { x: 60, y: 35, w: 30, h: 30, rows: 3, hold: 20 },
       swipe: { x: 60, y: 50, x2: 40, y2: 50, dur: 160 },
       wait: {}
@@ -2280,9 +2429,17 @@
     const card = h('div', 'sx-step');
     const head = h('div', 'sx-sh');
     const isLongHold = s.t === 'tap' && s.hold >= 180;
-    const TN = { tap: isLongHold ? 'Tap & Hold' : 'Tap', zone: 'Zone', swipe: s.pts ? 'Swipe (1:1 Curve)' : 'Swipe', wait: 'Wait' };
+    const TN = {
+      tap: isLongHold ? 'Tap & Hold' : 'Tap',
+      burst: 'Rapid Burst (' + (s.cnt || 5) + '×)',
+      multi: 'Multi-Touch (2 Fingers)',
+      circle: 'Circle Spin 360°',
+      zone: 'Zone Grid',
+      swipe: s.pts ? 'Swipe (1:1 Curve)' : 'Swipe',
+      wait: 'Wait'
+    };
     const name = h('div', 'sx-sn');
-    name.append(ico(s.t, 16), h('span', null, (i + 1) + ' · ' + TN[s.t]));
+    name.append(ico(s.t, 16), h('span', null, (i + 1) + ' · ' + (TN[s.t] || s.t)));
     const ib = (icon, title, fn, cls) => {
       const b = h('button', 'sx-ib ' + (cls || ''));
       b.type = 'button';
@@ -2331,14 +2488,26 @@
         F('To X (%)', 'x2', 0, 100);
         F('To Y (%)', 'y2', 0, 100);
         F('Time (ms)', 'dur', 10, 30000);
-      }
-      if (s.t === 'zone') {
+      } else if (s.t === 'multi') {
+        F('2nd X (%)', 'x2', 0, 100);
+        F('2nd Y (%)', 'y2', 0, 100);
+        F('Hold (ms)', 'hold', 10, 30000);
+      } else if (s.t === 'circle') {
+        F('Radius (%)', 'rad', 1, 40);
+        F('Time (ms)', 'dur', 60, 30000);
+      } else if (s.t === 'burst') {
+        F('Clicks', 'cnt', 2, 40);
+        F('Hold (ms)', 'hold', 10, 1000);
+        F('Spread (%)', 'spread', 0, 20);
+      } else if (s.t === 'zone') {
         F('Width (%)', 'w', 2, 100);
         F('Height (%)', 'h', 2, 100);
         F('Rows', 'rows', 1, 12);
         F('Columns', 'cols', 1, 12);
+        F('Hold (ms)', 'hold', 10, 30000);
+      } else {
+        F('Hold (ms, min 10)', 'hold', 10, 30000);
       }
-      if (s.t !== 'swipe') F('Hold (ms, min 10)', 'hold', 10, 30000);
       F('Wait after (ms)', 'wait', 0, 30000);
       F('Repeat', 'rep', 1, 50);
     }
@@ -2504,22 +2673,24 @@
 
   function macroItems() {
     const items = [
-      { k: 'macroEnabled', type: 'switch', label: 'Enable macros', desc: 'Master switch. Supports 20ms ultra-fast loot clicks & active-hold 1:1 replay.' },
+      { k: 'macroEnabled', type: 'switch', label: 'Enable macros', desc: 'Master switch. Zero-Freeze Pointer Engine prevents stream input lockups.' },
       { k: 'quickHideBtns', type: 'switch', label: 'Temp hide floating buttons', desc: 'Quickly hides all macro buttons on screen without deleting them.' },
-      { type: 'buttons', label: 'Button Layout Cleanup', desc: 'Automatically separates any overlapping buttons and removes duplicates.', btns: [['Auto-Arrange Buttons', autoArrangeAllButtons, 'alt', 'grid']] },
-      { k: 'macroPauseMode', type: 'select', label: 'While I play', desc: '“Keep running” lets your joystick/touches and macros run at the exact same time without interrupting holds.', opts: [['never', 'Keep running (Recommended)'], ['near', 'Pause near macro taps'], ['any', 'Pause on any touch']] },
+      { type: 'buttons', label: 'Input & Layout Tools', desc: 'Arrange overlapping buttons or refresh stream input if controls ever feel sticky.', btns: [['Auto-Arrange', autoArrangeAllButtons, 'alt', 'grid'], ['Unstick Input', () => unstickStreamInput(false), 'alt', 'shield']] },
+      { k: 'macroPauseMode', type: 'select', label: 'While I play', desc: '“Keep running” lets your joystick/touches and macros run concurrently.', opts: [['never', 'Keep running (Recommended)'], ['near', 'Pause near macro taps'], ['any', 'Pause on any touch']] },
       { k: 'macroPauseRadius', type: 'range', label: 'Pause radius', min: 20, max: 200, step: 5, fmt: v => v + ' px', show: () => cfg.macroPauseMode === 'near' },
       { k: 'macroPauseMs', type: 'range', label: 'Resume delay', min: 0, max: 3000, step: 50, fmt: v => (v / 1000).toFixed(2) + ' s', show: () => cfg.macroPauseMode !== 'never' },
       { k: 'macroMaxMin', type: 'range', label: 'Auto-stop after', min: 1, max: 60, step: 1, fmt: v => v + ' min' },
       { k: 'macroRipple', type: 'switch', label: 'Show tap indicator', desc: 'Subtle ring at every injected coordinate (auto-paused in Battery Saver).' },
-      { k: 'macroInput', type: 'select', label: 'Input type', desc: '“Pointer + touch” ensures both GFN virtual gamepad holds and direct stream touches work reliably.', opts: [['both', 'Pointer + touch (Best for Hold)'], ['pointer', 'Pointer events'], ['touch', 'Touch events'], ['mouse', 'Mouse events']] },
+      { k: 'macroInput', type: 'select', label: 'Input type', desc: '“Pointer events” is strongly recommended on iOS to prevent 5–10s touch freeze.', opts: [['pointer', 'Pointer events (Zero-Freeze Recommended)'], ['touch', 'Touch events'], ['both', 'Pointer + touch (Legacy)'], ['mouse', 'Mouse events']] },
       { type: 'select', label: 'Macro', desc: 'Select which active macro button to configure.', opts: () => cfg.macros.map(x => [x.id, x.name + (x.tplId ? ' [Rec]' : '')]), get: () => macroSel, set: v => { macroSel = v; rebuildUI(); if (editing) renderEdit(); } }
     ];
     const m = curMacro();
     if (m) {
+      const chainOpts = () => [['', 'None']].concat(cfg.macros.filter(x => x.id !== m.id).map(x => [x.id, '→ ' + x.name]));
       items.push(
         { type: 'switch', label: 'Show button in game', get: () => m.on, set: v => { m.on = v; commit('macros', true); } },
         { type: 'select', label: 'Trigger', opts: [['toggle', 'Tap to start / stop'], ['hold', 'Run while holding'], ['once', 'Run once per tap']], get: () => m.mode, set: v => { m.mode = v; commit('macros', true); } },
+        { type: 'select', label: 'Chain next macro', desc: 'Automatically trigger another macro right after this one finishes.', opts: chainOpts, get: () => m.chainId || '', set: v => { m.chainId = v; commit('macro'); } },
         { type: 'range', label: 'Playback speed', desc: '1.0× = exact recorded speed. Increase up to 2.5× for faster combos/looting.', min: 0.5, max: 2.5, step: 0.1, fmt: v => v.toFixed(1) + '×', get: () => m.speed || 1, set: v => { m.speed = v; commit('macro'); } },
         { type: 'range', label: 'Repeat', desc: 'Number of loop cycles (0 = infinite).', min: 0, max: 100, step: 1, fmt: v => (v ? v + '×' : 'Forever'), get: () => m.loops, set: v => { m.loops = v; commit('macro'); }, show: () => m.mode !== 'once' },
         { type: 'range', label: 'Pause between loops (min 20ms)', desc: 'Set to 20ms for maximum speed item looting.', min: 20, max: 2000, step: 5, fmt: v => v + ' ms', get: () => m.interval, set: v => { m.interval = v; commit('macro'); }, show: () => m.mode !== 'once' },
@@ -2528,8 +2699,9 @@
         { type: 'range', label: 'Button opacity', min: 0.2, max: 1, step: 0.05, fmt: pct, get: () => m.opacity, set: v => { m.opacity = v; commit('macro'); } },
         { type: 'switch', label: 'Show name on button', get: () => m.label, set: v => { m.label = v; commit('macro'); } },
         { type: 'buttons', label: 'Manage', btns: [['Rename', () => renameMacro(m), 'alt', 'edit'], ['Duplicate', () => dupMacro(m), 'alt', 'copy'], ['Delete', () => delMacro(m.id), 'danger', 'trash']] },
-        { type: 'buttons', only: 'game', label: 'Layout', desc: 'Drag taps, zones, swipes and the macro button on the stream.', btns: [['Edit on screen', enterEdit, 'blue', 'tap'], ['Test once', () => runMacro(m, true), 'alt', 'play']] },
-        { type: 'buttons', only: 'game', label: 'Steps', desc: 'Steps run top to bottom. Long holds automatically pump active heartbeat frames.', btns: [['Tap / Hold', () => addStepTo(m, 'tap'), 'alt', 'plus'], ['Zone', () => addStepTo(m, 'zone'), 'alt', 'plus'], ['Swipe', () => addStepTo(m, 'swipe'), 'alt', 'plus'], ['Wait', () => addStepTo(m, 'wait'), 'alt', 'plus']] }
+        { type: 'buttons', only: 'game', label: 'Layout', desc: 'Drag taps, zones, swipes, circles and the macro button on the stream.', btns: [['Edit on screen', enterEdit, 'blue', 'tap'], ['Test once', () => runMacro(m, true), 'alt', 'play']] },
+        { type: 'buttons', only: 'game', label: 'Add Basic Steps', desc: 'Tap/Hold, Rapid Burst, Swipe, or Wait.', btns: [['Tap/Hold', () => addStepTo(m, 'tap'), 'alt', 'plus'], ['Burst', () => addStepTo(m, 'burst'), 'alt', 'burst'], ['Swipe', () => addStepTo(m, 'swipe'), 'alt', 'swipe'], ['Wait', () => addStepTo(m, 'wait'), 'alt', 'wait']] },
+        { type: 'buttons', only: 'game', label: 'Add Pro Steps', desc: 'Multi-Touch (2 fingers), 360° Circle Spin, or Grid Zone.', btns: [['2-Finger Multi', () => addStepTo(m, 'multi'), 'alt', 'multi'], ['360° Circle', () => addStepTo(m, 'circle'), 'alt', 'circle'], ['Grid Zone', () => addStepTo(m, 'zone'), 'alt', 'zone']] }
       );
       m.steps.forEach((s, i) => items.push({ type: 'step', only: 'game', m, i }));
     }
@@ -2583,9 +2755,10 @@
     return [
       { id: 'gen', title: 'General', items: [
         { k: 'batterySaver', type: 'switch', label: 'Battery Saver Mode (Eco & Cool)', desc: 'Reduces iOS heat & battery drain: removes GPU blur effects, caps WebGL shader resolution/FPS, slows background stats polling, and skips DOM ripples.' },
+        { k: 'inputGuard', type: 'switch', label: 'Stream Input Watchdog (Anti-Freeze)', desc: 'Automatically flushes orphan pointer states and prevents 5–10s stream touch lockups on iOS.' },
         { k: 'silent', type: 'switch', label: 'Silent mode (Background / PiP)', desc: 'Mutes GFN audio to yield playback rights to YouTube/PiP. Turning off auto-resumes WebKit audio on next touch.' },
         { k: 'afkGuard', type: 'switch', label: 'Anti-AFK Guard (Prevent Kick)', desc: 'Automatically sends a subtle micro-input when idle for 3.5+ minutes so GFN does not disconnect your session.' },
-        { k: 'quickBall', type: 'switch', label: 'Floating Quick-Menu Ball', desc: 'Shows a compact draggable Light Mode pill on the screen edge to open Nvirya settings with 1 tap.' },
+        { k: 'quickBall', type: 'switch', label: 'Floating Quick-Menu Ball', desc: 'Shows a compact draggable Light Mode pill on the screen edge (tap to open menu, double-tap to Unstick Input).' },
         { k: 'oledDim', type: 'range', label: 'OLED Night Dimmer (Power Save)', desc: 'Dims the stream below iOS minimum brightness to save OLED battery during AFK farming or night play.', min: 0, max: 0.75, step: 0.05, fmt: v => (v ? pct(v) : 'Off') }
       ] },
       { id: 'hud', title: 'HUD & Aim', items: [
@@ -2593,7 +2766,7 @@
         { k: 'hudDetail', type: 'select', label: 'Detail', opts: [['mini', 'Compact'], ['full', 'Detailed']] },
         { k: 'hudPos', type: 'select', label: 'Position', opts: [['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']] },
         { k: 'hudOpacity', type: 'range', label: 'HUD opacity', min: 0.3, max: 1, step: 0.05, fmt: pct },
-        { k: 'crosshair', type: 'select', label: 'Custom Crosshair (Aim)', desc: ' lightweight SVG reticle for bow/shooter aiming.', opts: [['off', 'Off'], ['dot', 'Center Dot'], ['cross', 'Precision Cross'], ['circle', 'Circle + Dot'], ['tcross', 'Tactical T-Cross']] },
+        { k: 'crosshair', type: 'select', label: 'Custom Crosshair (Aim)', desc: 'Lightweight SVG reticle for bow/shooter aiming.', opts: [['off', 'Off'], ['dot', 'Center Dot'], ['cross', 'Precision Cross'], ['circle', 'Circle + Dot'], ['tcross', 'Tactical T-Cross']] },
         { k: 'crosshairSize', type: 'range', label: 'Crosshair size', min: 8, max: 32, step: 1, fmt: v => v + ' px', show: () => cfg.crosshair !== 'off' },
         { k: 'crosshairColor', type: 'select', label: 'Crosshair color', opts: [['#007aff', 'iOS Blue'], ['#34c759', 'Vibrant Green'], ['#ff3b30', 'Crimson Red'], ['#ffcc00', 'Amber Gold'], ['#ffffff', 'Pure White']], show: () => cfg.crosshair !== 'off' },
         { k: 'crosshairX', type: 'range', label: 'Crosshair X (%)', min: 30, max: 70, step: 0.5, fmt: v => v + '%', show: () => cfg.crosshair !== 'off' },
@@ -2690,7 +2863,7 @@
       ng.className = grid.className;
       Array.from(grid.attributes).forEach(a => ng.setAttribute(a.name, a.value));
       ng.removeAttribute('id');
-      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.0)' : g.title));
+      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.1)' : g.title));
       items.forEach(i => ng.append(nativeRow(ref, i)));
       sec.append(ng);
     });
@@ -2720,6 +2893,7 @@
     [
       ['Nvirya GeForce NOW', 'sliders', () => openPanel()],
       ['Macro Recorder', 'rec', () => openPanel('rec')],
+      ['Unstick Stream Input', 'shield', () => unstickStreamInput(false)],
       [cfg.batterySaver ? 'Battery Saver: ON' : 'Battery Saver: OFF', 'leaf', () => set('batterySaver', !cfg.batterySaver)],
       [cfg.quickHideBtns ? 'Macro buttons: Hidden' : 'Macro buttons: Visible', 'eye', () => { set('quickHideBtns', !cfg.quickHideBtns); toast(cfg.quickHideBtns ? 'Macro buttons hidden' : 'Macro buttons visible'); }],
       ['Screenshot', 'camera', () => screenshot()],
@@ -2769,7 +2943,7 @@
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
     const t = h('div', 'sx-pt', 'Nvirya GeForce NOW');
-    t.append(h('span', 'sx-pv', 'v3.0 Light'));
+    t.append(h('span', 'sx-pv', 'v3.1 Pro'));
     const x = h('button', 'sx-ib');
     x.type = 'button';
     x.setAttribute('aria-label', 'Close');
@@ -2860,7 +3034,7 @@
 
     stopBtn = h('button'); stopBtn.id = 'sx-stop'; stopBtn.type = 'button';
     stopBtn.append(ico('stop', 14), document.createTextNode('Stop macros'));
-    stopBtn.addEventListener('pointerdown', e => { e.preventDefault(); stopAll(); });
+    stopBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); stopAll(); });
 
     panel = h('div'); panel.id = 'sx-panel';
     preview = h('div'); preview.id = 'sx-preview';
@@ -2883,6 +3057,7 @@
       () => save()
     );
 
+    let lastQbTap = 0;
     qBallEl = h('button');
     qBallEl.id = 'sx-qball';
     qBallEl.type = 'button';
@@ -2899,8 +3074,16 @@
       moved => {
         save();
         if (!moved) {
-          if (panel.classList.contains('open')) closePanel();
-          else openPanel();
+          const now = Date.now();
+          if (now - lastQbTap < 320) {
+            stopAll();
+            unstickStreamInput(false);
+            lastQbTap = 0;
+          } else {
+            lastQbTap = now;
+            if (panel.classList.contains('open')) closePanel();
+            else openPanel();
+          }
         }
       }
     );
@@ -2946,7 +3129,8 @@
         if (Math.abs(dx) + Math.abs(dy) > 5) moved = true;
         move(s, dx / window.innerWidth * 100, dy / window.innerHeight * 100);
       };
-      const up = () => {
+      const up = ev => {
+        try { el.releasePointerCapture(ev.pointerId); } catch (_) {}
         el.removeEventListener('pointermove', mv);
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
@@ -3003,11 +3187,13 @@
           () => save()
         );
       } else {
+        // CRITICAL FIX: Do NOT call b.setPointerCapture() during gameplay!
+        // Calling setPointerCapture on iOS Safari can trap touch routing on the overlay button if focus shifts.
         b.addEventListener('pointerdown', e => {
           e.preventDefault();
           e.stopPropagation();
+          b.blur();
           if (m.mode === 'hold') {
-            try { b.setPointerCapture(e.pointerId); } catch (_) {}
             activeHoldBtnMacros.add(m.id);
             runMacro(m);
           } else if (m.mode === 'once') {
@@ -3020,7 +3206,7 @@
           const stop = () => stopMacro(m.id);
           b.addEventListener('pointerup', stop);
           b.addEventListener('pointercancel', stop);
-          b.addEventListener('lostpointercapture', stop);
+          b.addEventListener('pointerleave', stop);
         }
       }
       mLayer.append(b);
@@ -3072,6 +3258,9 @@
     barEl.append(
       sel,
       tb('tap', 'Tap', () => m && addStepTo(m, 'tap')),
+      tb('burst', 'Burst', () => m && addStepTo(m, 'burst')),
+      tb('multi', '2-Finger', () => m && addStepTo(m, 'multi')),
+      tb('circle', 'Circle', () => m && addStepTo(m, 'circle')),
       tb('zone', 'Zone', () => m && addStepTo(m, 'zone')),
       tb('swipe', 'Swipe', () => m && addStepTo(m, 'swipe')),
       tb('grid', 'Arrange', () => { autoArrangeAllButtons(); renderMacros(); }),
@@ -3139,7 +3328,7 @@
         const p = h('div', 'sx-mk', String(i + 1));
         p.style.left = s.x + '%';
         p.style.top = s.y + '%';
-        let line = null, poly = null, q = null;
+        let line = null, poly = null, circ = null, q = null;
         const upd = () => {
           p.style.left = s.x + '%';
           p.style.top = s.y + '%';
@@ -3151,21 +3340,29 @@
             line.setAttribute('x2', s.x2);
             line.setAttribute('y2', s.y2);
           }
+          if (circ) {
+            circ.setAttribute('cx', s.x);
+            circ.setAttribute('cy', s.y);
+            circ.setAttribute('r', s.rad || 8);
+          }
           if (q) {
             q.style.left = s.x2 + '%';
             q.style.top = s.y2 + '%';
           }
         };
-        if (s.t === 'swipe') {
-          if (Array.isArray(s.pts) && s.pts.length >= 2) {
+        if (s.t === 'circle') {
+          circ = document.createElementNS(NS, 'circle');
+          svg.append(circ);
+        } else if (s.t === 'swipe' || s.t === 'multi') {
+          if (s.t === 'swipe' && Array.isArray(s.pts) && s.pts.length >= 2) {
             poly = document.createElementNS(NS, 'polyline');
             svg.append(poly);
           } else {
             line = document.createElementNS(NS, 'line');
             svg.append(line);
           }
-          q = h('div', 'sx-mk end');
-          q.append(ico('arrowr', 14));
+          q = h('div', 'sx-mk end', s.t === 'multi' ? (i + 1) + 'B' : '');
+          if (s.t === 'swipe') q.append(ico('arrowr', 14));
           dragify(
             q,
             () => ({ x: s.x2, y: s.y2 }),
@@ -3218,7 +3415,6 @@
     if (anchor && !document.getElementById('sx-section')) injectLobby(anchor);
     injectMenu();
     updateSharpen();
-    // Auto-dismiss "BACK TO GAME" dialog only when an overlay dialog exists (zero idle CPU waste)
     if (document.querySelector('.cdk-overlay-container button')) {
       const b = Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(x => x.textContent && x.textContent.includes('BACK TO GAME'));
       if (b) b.click();
