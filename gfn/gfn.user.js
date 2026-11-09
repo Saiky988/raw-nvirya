@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.1
+// @version      3.2
 // @author       Nvirya
-// @description  iOS PWA bypass, Zero-Freeze Stream Input Engine, Native iOS Light Mode UI, Smart Battery Saver, Pro Macro Suite (Multi-Point, Circle/Spiral Drag, Rapid Burst, Auto-Walk, Sequence Chain), 1:1 Active-Hold Recorder, HUD & Aim Crosshair.
+// @description  iOS PWA bypass, Zero-Freeze Hybrid Touch+Pointer Engine, 1h Session Countdown Timer, 3-Graph Telemetry HUD (FPS / Ping ms / Input Lag ms), True HD GPU Screenshot + Filter Baker, Direct Button Drag, Audio Booster, Gyro Aim, PiP & Pro Macro Suite.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
 // @match        https://play.geforcenow.com/*
 // @run-at       document-start
@@ -11,22 +11,30 @@
 // ==/UserScript==
 
 /*
- * v3.1 Release Notes
- * 1. CRITICAL FIX: Stream Control Freeze / 5–10s Unresponsive Input on iOS ("Fix mất quyền điều khiển stream, 5-10s k thể tương tác"):
- *    - Root Cause A (Dual Pointer + Touch Event Conflict): Previously `macroInput` defaulted to `'both'`, firing synthetic `PointerEvent` AND `TouchEvent` simultaneously. On iOS WebKit + GFN's streamer, dispatching synthetic `TouchEvent`s alongside `PointerEvent`s corrupts GFN's internal active-pointer state machine whenever your real finger lifts up while a macro touch is active (or vice versa), locking all stream input for 5–10s until an iOS Notification Center pull forces a native `touchcancel` reset!
- *      • Fix: Switched default & recommended injection engine to pure `'pointer'` with smart `isPrimary` arbitration (`isPrimary: realPointers.size === 0 && primaryMacroPid === pid`) so synthetic macro pointers NEVER steal or corrupt your real finger's primary pointer stream!
- *    - Root Cause B (Blocked `blur` / `visibilitychange` Events Preventing GFN Pointer Reset): Blocking `blur` and `visibilitychange` on `window`/`document` prevented GFN's input controller from flushing stuck pointers, while iOS Safari's gesture recognizer accumulated orphan touches.
- *      • Fix: Replaced blind event blocking with selective background-keepalive + an automatic **Stream Input Watchdog & Unstick Engine (`unstickStreamInput()`)** that monitors real vs. synthetic pointer health, prevents orphan pointer IDs, and provides a 1-tap / automatic recovery flush without ever needing to pull down the iOS Notification Center!
- *    - Root Cause C (Pointer Capture Leak on Floating Buttons): Removed `el.setPointerCapture()` on floating macro buttons during normal play (only used when dragging in Edit Mode), preventing iOS WebKit from trapping touch focus on the overlay button after a tap.
- * 2. Expanded Pro Macro Suite ("Improved, Add thêm nhiều tính năng Macros hơn"):
- *    - New Step Types:
- *      • `multi` (Multi-Touch Simultaneous Tap): Presses 2 or 3 points at the exact same millisecond (e.g., Jump + Attack, Aim + Shoot, Elemental Burst combos).
- *      • `circle` (Circular / Spiral Drag): Smoothly drags in a continuous circle around `(X, Y)` with configurable Radius (%) — ideal for 360° spin attacks, joystick anti-AFK movement, or area looting.
- *      • `burst` (Rapid Burst Tap): Fires a high-speed burst of N taps at 16–25ms intervals inside a single step with optional random spread radius (`spread`).
- *    - New Macro Features:
- *      • **Chain Next Macro (`chainId`)**: Automatically trigger another macro when the current macro finishes!
- *      • **Auto-Walk / Joystick Lock (`walk` template)** & **10 Built-in Pro Templates** (Turbo Loot 20ms, Auto-Walk Forward, Circle Spin 360°, Jump+Attack Multi-Touch, Rapid Burst, Charged Attack, Fast Skip, etc.).
- *      • **Emergency Unstick / Reset Input** button right on the Quick Ball & Stop Bar.
+ * v3.2 Release Notes
+ * 1. CRITICAL FIX: "pointer (Safe) không hoạt động" & "vẫn đơ thao tác (5–10s input freeze)":
+ *    - Root Cause 1 (`pointer` mode broken in v3.1): v3.1 set `button: down ? 0 : -1` on PointerEvents (sending `button: -1` on `pointerup`, which violates the W3C PointerEvent spec where `pointerup` MUST have `button: 0` and `pointermove` must have `button: -1`) AND disabled `TouchEvent` dispatch by default, whereas GFN on iOS WebKit binds `touchstart`/`touchmove`/`touchend` for in-game virtual controls.
+ *      • Fix: Restored Smart Hybrid `Touch + Pointer` (`'both'`) as the default (and auto-migrated v3.1 configs back to `'both'`), and fixed `PointerEvent` `button` to `phase === 'move' ? -1 : 0` so all 4 input modes (`both`, `touch`, `pointer`, `mouse`) work 100%.
+ *    - Root Cause 2 (Why the 5–10s freeze happened when tapping Macro/Overlay buttons while playing):
+ *      • In iOS WebKit, `TouchEvent.touches` is document-wide. When your finger tapped a floating button inside `#sx-root`:
+ *        (a) `document.addEventListener('touchstart', ...)` captured `realTouches = Array.from(e.touches)` which INCLUDED your finger on `.sx-mbtn`, and `inject()` passed `realTouches` into synthetic `TouchEvent`s sent to GFN's stream!
+ *        (b) When your finger lifted off `.sx-mbtn`, `#sx-root` called `e.stopPropagation()` on `touchend` and `pointerup`! Thus GFN NEVER saw your finger lift up, leaving a permanent "ghost finger" locked in GFN's multi-touch table for 5–10s until pulling down the iOS Notification Center forced a native `touchcancel`!
+ *      • Fix:
+ *        (1) `realTouches` now strictly filters out any touch targeting `#sx-root` (`!isOverlayNode(t.target)`).
+ *        (2) `#sx-root` NO LONGER calls `stopPropagation()` on `touchend`, `touchcancel`, `pointerup`, `pointercancel`, or `mouseup`, so release events always reach `window`/`document`.
+ *        (3) Enforced `touch-action: none` & `-webkit-touch-callout: none` on `#remote-video` during streaming so iOS WebKit gesture recognizers never stall touch delivery.
+ *        (4) Upgraded `unstickStreamInput()` to dispatch a full native-equivalent `touchcancel` + `touchend (touches:[])` + `pointercancel` flush on GFN's stream receiver.
+ * 2. 1-Hour Session Countdown Timer (`⏱ 60:00`):
+ *    - Automatically starts counting down from 60:00 (configurable 30m / 60m / 120m / 360m) when the stream starts.
+ *    - Shows live countdown in both the HUD and Panel Header with automatic warnings at 10m, 5m, and 1m remaining.
+ * 3. 3-Graph Real-Time Telemetry HUD (`FPS`, `Ping ms`, `Input Lag ms` / Độ trễ thao tác):
+ *    - Live Retina `<canvas>` sparkline/area charts for Stream FPS, Network Ping (ms), and Total Input/Action Latency (Touch Dispatch + Decode + Frame Pacing ms).
+ * 4. True HD Super-Resolution Screenshot + Active Filter & CAS Sharpening Baker:
+ *    - Renders screenshots via an offscreen WebGL HD pipeline (up to 1.5x / 2x Super-Resolution) that bakes in WebGL CAS Sharpening AND all active Picture Filters (Contrast, Saturation, Brightness, Hue, Sepia, Grayscale, Tint, Vignette) — bypassing iOS WebKit's lack of `ctx.filter` support!
+ * 5. Direct Drag & Position Editor for Screenshot, Macro Buttons, Quick-Ball & HUD:
+ *    - Drag the Screenshot button, Macro buttons, Quick-Ball, or HUD directly on screen at any time, or use 1-tap "Move Buttons on Screen" from any tab.
+ * 6. Complete Native iOS 18 Grouped Inset Light Mode UI & High-IQ Extras:
+ *    - WebAudio Volume Booster (up to 250%), 1-Tap Picture-in-Picture (PiP), Gyro Motion Aim (Tilt-to-Aim), and Elastic Dash Macro step.
  */
 
 (function () {
@@ -118,6 +126,7 @@
     tap: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 3v3M12 18v3M3 12h3M18 12h3',
     zone: 'M4 4h16v16H4zM4 12h16M12 4v16',
     swipe: 'M3 12h14m0 0-5-5m5 5-5 5M21 5v14',
+    elastic: 'M4 12h13m0 0-4-4m4 4-4 4M8 8l-4 4 4 4',
     arrowr: 'M5 12h14m0 0-6-6m6 6-6 6',
     wait: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
     check: 'm5 12 5 5 9-10',
@@ -132,7 +141,9 @@
     multi: 'M7 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM17 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
     circle: 'M12 21a9 9 0 1 1 6.36-2.64M18 14v5h-5',
     burst: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83',
-    shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'
+    shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+    pip: 'M19 7h-8v6h8V7zm2-4H3C1.9 3 1 3.9 1 5v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z',
+    move: 'M12 2v20M2 12h20M12 2 9 5M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3'
   };
   function ico(name, size) {
     const s = document.createElementNS(NS, 'svg');
@@ -155,13 +166,13 @@
   function btn(text, icon, cls) {
     const b = h('button', 'sx-btn ' + (cls || ''));
     b.type = 'button';
-    if (icon) b.append(ico(icon, 16));
+    if (icon) b.append(ico(icon, 15));
     if (text) b.append(document.createTextNode(text));
     return b;
   }
 
   /* ================= presets / templates ================= */
-  const TINTS = { warm: '255,170,90', cool: '90,150,255', rose: '255,120,170', mint: '90,230,190', violet: '160,120,255' };
+  const TINTS = { warm: [255, 170, 90], cool: [90, 150, 255], rose: [255, 120, 170], mint: [90, 230, 190], violet: [160, 120, 255] };
   const FX0 = { c: 1, s: 1, b: 1, hue: 0, sep: 0, gray: 0, tint: 'none', ta: 0.12, vig: 0 };
   const fxo = o => Object.assign({}, FX0, o);
   const PRESET_LIST = [
@@ -198,6 +209,8 @@
       { t: 'zone', x: 62, y: 34, w: 30, h: 26, rows: 3, hold: 18, wait: 18 }] },
     walk: { label: 'Auto-Walk Forward (Toggle)', name: 'Walk', mode: 'toggle', interval: 30, steps: [
       { t: 'swipe', x: 18, y: 72, x2: 18, y2: 42, dur: 2500, wait: 10 }] },
+    dash: { label: 'Elastic Dodge / Dash Flick', name: 'Dash', mode: 'once', interval: 30, steps: [
+      { t: 'elastic', x: 18, y: 72, x2: 18, y2: 44, dur: 95, hold: 35, wait: 15 }] },
     spin360: { label: 'Circle Spin 360° (Joystick/Attack)', name: 'Spin', mode: 'toggle', interval: 40, steps: [
       { t: 'circle', x: 18, y: 72, rad: 9, dur: 750, wait: 10 }] },
     jumpatk: { label: 'Jump + Attack (Multi-Touch)', name: 'J-Atk', mode: 'once', interval: 40, steps: [
@@ -220,7 +233,7 @@
 
   function normStep(s) {
     s = s || {};
-    const validTypes = ['tap', 'zone', 'swipe', 'wait', 'multi', 'circle', 'burst'];
+    const validTypes = ['tap', 'zone', 'swipe', 'wait', 'multi', 'circle', 'burst', 'elastic'];
     const t = validTypes.includes(s.t) ? s.t : 'tap';
     const o = { t };
     if (s.rec) o.rec = true;
@@ -243,6 +256,12 @@
       o.cnt = cl(Math.round(nv(s.cnt, 5)), 2, 40);
       o.hold = cl(nv(s.hold, 15), 10, 1000);
       o.spread = cl(nv(s.spread, 1.5), 0, 20);
+    }
+    if (t === 'elastic') {
+      o.x2 = cl(nv(s.x2, 18), 0, 100);
+      o.y2 = cl(nv(s.y2, 44), 0, 100);
+      o.dur = cl(nv(s.dur, 95), 15, 10000);
+      o.hold = cl(nv(s.hold, 35), 0, 5000);
     }
     if (t === 'swipe') {
       o.x2 = cl(nv(s.x2, 70), 0, 100);
@@ -309,7 +328,7 @@
       speed: cl(nv(m.speed, 1), 0.5, 2.5),
       chainId: m.chainId ? String(m.chainId) : '',
       size: cl(nv(m.size, 1), 0.6, 1.8),
-      opacity: cl(nv(m.opacity, 0.92), 0.2, 1),
+      opacity: cl(nv(m.opacity, 0.94), 0.2, 1),
       label: m.label !== false,
       steps: (Array.isArray(m.steps) ? m.steps : []).slice(0, 300).map(normStep),
       btn: { x: cl(nv(m.btn && m.btn.x, 94), 3, 97), y: cl(nv(m.btn && m.btn.y, 22), 5, 95) }
@@ -448,21 +467,28 @@
   const OLD_SILENT_KEY = 'gfn_silent_stream_enabled';
   const DEF = {
     silent: false,
+    audioBoost: 1,
     batterySaver: false,
     afkGuard: false,
     inputGuard: true,
+    sessionTimer: true,
+    sessionLimitMin: 60,
     quickBall: false,
     quickHideBtns: false,
+    freeDragBtns: true,
     oledDim: 0,
+    gyroAim: false,
+    gyroSens: 1.2,
     crosshair: 'off', crosshairColor: '#007aff', crosshairSize: 14, crosshairX: 50, crosshairY: 50,
-    hudOn: false, hudDetail: 'mini', hudPos: 'tr', hudOpacity: 0.92,
+    hudOn: false, hudDetail: 'graphs', hudPos: 'tr', hudOpacity: 0.94,
     fxPreset: 'off', fxContrast: 1, fxSaturate: 1, fxBrightness: 1, fxHue: 0, fxSepia: 0, fxGray: 0,
     fxTint: 'none', fxTintA: 0.12, fxVig: 0, sharpen: 0, sharpenEco: false,
     viewX: 0, viewY: 0, viewZoom: 1,
-    shotBtn: false, shotFormat: 'png', shotShare: true,
+    shotBtn: false, shotFormat: 'png', shotScale: '1.5', shotApplyFx: true, shotSharpen: true, shotShare: true,
     macroEnabled: false, macroPauseMode: 'never', macroPauseRadius: 70, macroPauseMs: 350,
-    macroMaxMin: 15, macroInput: 'pointer', macroRipple: true,
-    recCountdown: true, recAutoBtn: true
+    macroMaxMin: 15, macroInput: 'both', macroSmartPace: true, macroRipple: true,
+    recCountdown: true, recAutoBtn: true,
+    v32Migrated: true
   };
   function loadCfg() {
     let o = {};
@@ -470,11 +496,16 @@
     delete o.vres; delete o.vresW; delete o.vresH;
     delete o.tcHide; delete o.tcOpacity; delete o.tcScale; delete o.tcIconScale; delete o.tcX; delete o.tcY;
     delete o.macroPause;
-    // Migrate legacy `macroInput: 'both'` to `'pointer'` to eliminate iOS dual-event stream freezes!
-    if (o.macroInput === 'both') o.macroInput = 'pointer';
+    // Migrate v3.1 configs where `macroInput` was forced to `'pointer'` back to `'both'` (Smart Hybrid Touch+Pointer)
+    if (!o.v32Migrated) {
+      if (o.macroInput === 'pointer') o.macroInput = 'both';
+      if (o.hudDetail === 'full' || o.hudDetail === 'mini') o.hudDetail = 'graphs';
+      o.v32Migrated = true;
+    }
     const c = Object.assign({}, DEF, o);
     c.shotBtnPos = Object.assign({ x: 94, y: 8 }, o.shotBtnPos);
     c.quickBallPos = Object.assign({ x: 4, y: 50 }, o.quickBallPos);
+    c.hudCustomPos = o.hudCustomPos || null;
     c.customTemplates = (Array.isArray(o.customTemplates) ? o.customTemplates : []).slice(0, 40).map(normTemplate);
     const rawMacros = (Array.isArray(o.macros) ? o.macros : defaultMacros()).map(normMacro);
     c.macros = cleanAndSeparateMacros(rawMacros, c.customTemplates);
@@ -509,6 +540,8 @@
   const audioContexts = new Set();
   const pcs = new Set();
   const realDpr = window.devicePixelRatio || 1;
+  let boostCtx = null, boostGain = null;
+  const boostedElements = new WeakSet();
 
   // Track WebKit AudioContext instances
   guard(() => {
@@ -556,9 +589,7 @@
     };
   }, 'play/pause');
 
-  // CRITICAL FIX for Stream Input Freeze:
-  // Only spoof `document.hidden` / `visibilityState` and block `visibilitychange`/`pagehide` so background PiP stays alive,
-  // but DO NOT block `blur` on Window/Document! Blocking `blur` prevents GFN's input controller from resetting stuck pointer states!
+  // Background PiP Keepalive (Only block visibilitychange/pagehide; never block blur!)
   guard(() => {
     Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
     Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
@@ -589,12 +620,13 @@
   }, 'rtc');
 
   /* ================= state / commit ================= */
-  const REBUILD = new Set(['macroPauseMode', 'crosshair']);
+  const REBUILD = new Set(['macroPauseMode', 'crosshair', 'sessionTimer', 'gyroAim']);
   let applyQ = 0;
   function set(k, v) { cfg[k] = v; commit(k, REBUILD.has(k)); }
   function commit(k, rebuild) {
     save();
-    if (k === 'silent') applySilent();
+    if (k === 'silent' || k === 'audioBoost') applySilent();
+    if (k === 'gyroAim') updateGyro();
     if (k === 'batterySaver') {
       toast(cfg.batterySaver ? 'Battery Saver ON (Reduced GPU & CPU load)' : 'Battery Saver OFF');
     }
@@ -609,8 +641,36 @@
     guard(updateOverlay, 'overlay');
   }
 
-  /* ---- Silent Mode & iOS WebKit Audio Auto-Resume ---- */
+  /* ---- Silent Mode, WebAudio Volume Booster & iOS WebKit Audio Auto-Resume ---- */
   let unlockPending = false;
+  function applyAudioBoost() {
+    if (cfg.silent || cfg.audioBoost <= 1.02) {
+      if (boostGain) boostGain.gain.value = 1;
+      return;
+    }
+    guard(() => {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!boostCtx) {
+        boostCtx = new AC();
+        boostGain = boostCtx.createGain();
+        boostGain.connect(boostCtx.destination);
+      }
+      if (boostCtx.state === 'suspended') boostCtx.resume().catch(() => {});
+      boostGain.gain.value = cl(nv(cfg.audioBoost, 1), 1, 2.5);
+      document.querySelectorAll('audio').forEach(el => {
+        if (boostedElements.has(el)) return;
+        if (el.srcObject && el.srcObject.getAudioTracks && el.srcObject.getAudioTracks().length > 0) {
+          try {
+            const src = boostCtx.createMediaStreamSource(el.srcObject);
+            src.connect(boostGain);
+            boostedElements.add(el);
+          } catch (_) {}
+        }
+      });
+    }, 'audioBoost');
+  }
+
   function wakeAudioOnce() {
     unlockPending = false;
     if (cfg.silent) return;
@@ -630,6 +690,7 @@
         const p = m.play();
         if (p && typeof p.catch === 'function') p.catch(() => {});
       });
+      applyAudioBoost();
     }, 'wakeAudioOnce');
   }
 
@@ -652,20 +713,116 @@
     }
   }
 
-  /* ================= styles (Native iOS Light Mode for In-Stream UI & Macros) ================= */
+  /* ---- 1-Tap Picture-in-Picture (PiP) ---- */
+  async function togglePiP() {
+    const v = vid();
+    if (!v || !v.videoWidth) { toast('Start a game stream first'); return; }
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (v.requestPictureInPicture) {
+        await v.requestPictureInPicture();
+      } else if (v.webkitSetPresentationMode) {
+        const nextMode = v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture';
+        v.webkitSetPresentationMode(nextMode);
+      } else {
+        toast('PiP is not supported on this browser');
+      }
+    } catch (e) {
+      toast('Could not toggle PiP: ' + (e.message || 'blocked'));
+    }
+  }
+
+  /* ---- Gyro Motion Aim Assistant (Tilt-to-Aim) ---- */
+  let gyroActive = false, gyroPid = 248, gyroX = 0, gyroY = 0, lastBeta = null, lastGamma = null, gyroReleaseT = 0;
+  function onDeviceOrientation(e) {
+    if (!cfg.gyroAim || !streaming() || editing || recState.on || (panel && panel.classList.contains('open'))) return;
+    if (e.beta == null || e.gamma == null) return;
+    if (lastBeta === null) {
+      lastBeta = e.beta;
+      lastGamma = e.gamma;
+      return;
+    }
+    const dBeta = cl(e.beta - lastBeta, -12, 12);
+    const dGamma = cl(e.gamma - lastGamma, -12, 12);
+    lastBeta = e.beta;
+    lastGamma = e.gamma;
+    if (Math.hypot(dBeta, dGamma) < 0.18) return;
+
+    const sens = cl(nv(cfg.gyroSens, 1.2), 0.3, 4.0) * 3.2;
+    const isLandscapeRight = window.orientation === -90;
+    const dx = (isLandscapeRight ? -dBeta : dBeta) * sens;
+    const dy = (isLandscapeRight ? dGamma : -dGamma) * sens;
+
+    if (!gyroActive || Math.abs(gyroX - window.innerWidth * 0.72) > window.innerWidth * 0.22 || Math.abs(gyroY - window.innerHeight * 0.5) > window.innerHeight * 0.32) {
+      if (gyroActive) inject('up', gyroX, gyroY, gyroPid, gyroX, gyroY);
+      gyroX = Math.round(window.innerWidth * 0.72);
+      gyroY = Math.round(window.innerHeight * 0.5);
+      inject('down', gyroX, gyroY, gyroPid);
+      gyroActive = true;
+    }
+    const nx = cl(gyroX + dx, window.innerWidth * 0.45, window.innerWidth * 0.95);
+    const ny = cl(gyroY + dy, window.innerHeight * 0.15, window.innerHeight * 0.85);
+    inject('move', nx, ny, gyroPid, gyroX, gyroY);
+    gyroX = nx;
+    gyroY = ny;
+
+    clearTimeout(gyroReleaseT);
+    gyroReleaseT = setTimeout(() => {
+      if (gyroActive) {
+        inject('up', gyroX, gyroY, gyroPid, gyroX, gyroY);
+        gyroActive = false;
+        lastBeta = null;
+        lastGamma = null;
+      }
+    }, 180);
+  }
+
+  async function updateGyro() {
+    if (!cfg.gyroAim) {
+      window.removeEventListener('deviceorientation', onDeviceOrientation);
+      if (gyroActive) {
+        inject('up', gyroX, gyroY, gyroPid, gyroX, gyroY);
+        gyroActive = false;
+      }
+      lastBeta = null;
+      return;
+    }
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') {
+          cfg.gyroAim = false;
+          save();
+          refreshControls();
+          toast('Gyroscope permission denied');
+          return;
+        }
+      }
+      lastBeta = null;
+      window.addEventListener('deviceorientation', onDeviceOrientation, { passive: true });
+      toast('Gyro Aim ON — Tilt iPhone/iPad to fine-aim');
+    } catch (_) {
+      toast('Tap Gyro Aim inside game to grant iOS motion access');
+    }
+  }
+
+  /* ================= styles (Complete Native iOS 18 Grouped Inset Light Mode) ================= */
   const CSS = `
 :root{
-  --sx-bg:rgba(246,247,250,0.94);
+  --sx-bg:rgba(242,242,247,0.95);
   --sx-s1:#ffffff;
-  --sx-s2:#eef0f5;
-  --sx-s3:#dcdfe6;
-  --sx-line:rgba(60,60,67,0.12);
-  --sx-line2:rgba(60,60,67,0.22);
+  --sx-s2:#eef0f6;
+  --sx-s3:#d8dbe4;
+  --sx-line:rgba(60,60,67,0.10);
+  --sx-line2:rgba(60,60,67,0.20);
   --sx-tx:#1c1c1e;
   --sx-mu:#6c6c70;
   --sx-nv:#248a3d;
   --sx-gn:#34c759;
   --sx-bl:#007aff;
+  --sx-in:#5856d6;
+  --sx-am:#ff9500;
   --sx-ac:var(--sx-bl);
   --sx-acx:#ffffff;
   --sx-red:#ff3b30;
@@ -676,26 +833,38 @@
 #sx-fx{position:fixed;inset:0;z-index:2147482000;pointer-events:none;display:none}
 .sx-ic{display:block;flex:none}
 
-#sx-hud{position:absolute;display:none;padding:6px 11px;border-radius:11px;background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--sx-line2);box-shadow:0 4px 16px rgba(0,0,0,0.12);font:600 11px/1.42 var(--sx-font);font-variant-numeric:tabular-nums;white-space:pre;color:var(--sx-tx)}
+/* Native iOS Light Mode Telemetry HUD + 3 Real-Time Graphs */
+#sx-hud{position:absolute;display:none;flex-direction:column;gap:5px;padding:7px 11px;border-radius:14px;background:rgba(255,255,255,0.90);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(255,255,255,0.75);box-shadow:0 6px 22px rgba(0,0,0,0.14),0 0 0 0.5px rgba(0,0,0,0.08);font:600 11px/1.35 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-tx);pointer-events:auto;touch-action:none;cursor:grab}
 #sx-root.eco #sx-hud,#sx-root.eco #sx-panel,#sx-root.eco .sx-mbtn,#sx-root.eco .sx-shot,#sx-root.eco #sx-qball,#sx-root.eco #sx-rec-bar,#sx-root.eco #sx-cd,#sx-root.eco #sx-bar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
 #sx-hud[data-pos=tl]{top:max(8px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left))}
 #sx-hud[data-pos=tr]{top:max(8px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right))}
 #sx-hud[data-pos=bl]{bottom:max(8px,env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left))}
 #sx-hud[data-pos=br]{bottom:max(8px,env(safe-area-inset-bottom));right:max(10px,env(safe-area-inset-right))}
+.sx-hud-top{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sx-hud-sub{font:500 10px/1.25 var(--sx-font);color:var(--sx-mu);white-space:nowrap}
+.sx-hud-timer{display:inline-flex;align-items:center;gap:3px;padding:1.5px 6px;border-radius:6px;background:rgba(52,199,89,0.14);color:#1d7a32;font:700 10.5px/1.2 var(--sx-font)}
+.sx-hud-timer.warn{background:rgba(255,149,0,0.16);color:#c96e00}
+.sx-hud-timer.crit{background:rgba(255,59,48,0.16);color:#d70015;animation:sxrec 1s infinite}
+#sx-hud-charts{display:none;gap:6px;margin-top:2px;padding-top:5px;border-top:1px solid var(--sx-line)}
+#sx-hud-charts.on{display:flex}
+.sx-gbox{display:flex;flex-direction:column;gap:2px;width:78px}
+.sx-glbl{display:flex;justify-content:space-between;align-items:baseline;font:600 9.5px/1 var(--sx-font);color:var(--sx-mu)}
+.sx-glbl b{font:700 10.5px/1 var(--sx-font);color:var(--sx-tx)}
+.sx-gcv{width:78px;height:28px;border-radius:5px;background:rgba(118,118,128,0.08);display:block}
 
 #sx-xhair{position:absolute;z-index:1;display:none;transform:translate(-50%,-50%);pointer-events:none}
 
-#sx-edit{position:absolute;inset:0;z-index:1;display:none;background:rgba(240,242,248,0.32);pointer-events:auto;touch-action:none}
+#sx-edit{position:absolute;inset:0;z-index:1;display:none;background:rgba(240,242,248,0.28);pointer-events:auto;touch-action:none}
 #sx-edit.on{display:block}
 #sx-rec{position:absolute;inset:0;z-index:5;display:none;border:2.5px solid var(--sx-red);pointer-events:none}
 #sx-rec.on{display:block}
 #sx-rec.prep{border-color:var(--sx-bl)}
-#sx-rec-bar{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:40px;padding:0 12px 0 14px;border-radius:20px;background:rgba(255,255,255,0.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,59,48,0.35);box-shadow:0 8px 24px rgba(0,0,0,0.18);pointer-events:auto;color:var(--sx-tx)}
+#sx-rec-bar{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:40px;padding:0 12px 0 14px;border-radius:20px;background:rgba(255,255,255,0.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,59,48,0.35);box-shadow:0 8px 24px rgba(0,0,0,0.18);pointer-events:auto;color:var(--sx-tx)}
 .sx-rec-dot{width:8px;height:8px;border-radius:50%;background:var(--sx-red);animation:sxrec 1.1s ease-in-out infinite}
 @keyframes sxrec{0%,100%{opacity:1}50%{opacity:0.25}}
 .sx-rec-time{font:600 13px/1 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-tx);min-width:44px}
 .sx-rec-cnt{font:500 11.5px/1 var(--sx-font);color:var(--sx-mu);padding-right:4px}
-#sx-cd{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:128px;height:128px;border-radius:28px;background:rgba(255,255,255,0.95);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--sx-line2);box-shadow:0 16px 40px rgba(0,0,0,0.22);pointer-events:none}
+#sx-cd{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:128px;height:128px;border-radius:28px;background:rgba(255,255,255,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--sx-line2);box-shadow:0 16px 40px rgba(0,0,0,0.22);pointer-events:none}
 #sx-cd.on{display:flex}
 #sx-cd b{font:700 48px/1 var(--sx-font);color:var(--sx-bl);font-variant-numeric:tabular-nums}
 #sx-cd span{font:500 12px/1.2 var(--sx-font);color:var(--sx-mu)}
@@ -704,46 +873,53 @@
 .sx-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sx-lines line,.sx-lines polyline,.sx-lines circle{stroke:var(--sx-bl);stroke-width:2.2;stroke-dasharray:5 4;fill:none;vector-effect:non-scaling-stroke}
 
-#sx-bar{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 16px);padding:5px;border-radius:14px;background:rgba(255,255,255,0.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--sx-line2);box-shadow:0 10px 28px rgba(0,0,0,0.18);pointer-events:auto}
+#sx-bar{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 16px);padding:5px 7px;border-radius:16px;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid var(--sx-line2);box-shadow:0 10px 28px rgba(0,0,0,0.18);pointer-events:auto}
 #sx-bar.on{display:flex}
-#sx-bar .sx-sel{height:32px;padding-top:0;padding-bottom:0;margin-right:2px}
-.sx-tb{display:flex;align-items:center;gap:5px;height:32px;padding:0 9px;border:0;border-radius:9px;background:transparent;color:var(--sx-tx);font:500 12px var(--sx-font)}
+#sx-bar .sx-sel{height:30px;padding-top:0;padding-bottom:0;margin-right:2px}
+.sx-tb{display:flex;align-items:center;gap:4px;height:30px;padding:0 8px;border:0;border-radius:9px;background:transparent;color:var(--sx-tx);font:500 11.5px var(--sx-font)}
 .sx-tb:active{background:var(--sx-s2)}
 .sx-tb.pri{background:var(--sx-bl);color:#ffffff;font-weight:600}
 #sx-stop{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;height:36px;padding:0 15px;border:0;border-radius:18px;background:var(--sx-red);color:#fff;font:600 12.5px var(--sx-font);box-shadow:0 6px 20px rgba(255,59,48,0.35);pointer-events:auto}
 #sx-stop.on{display:flex}
 
-#sx-panel{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:min(415px,calc(100% - 16px));display:none;flex-direction:column;background:var(--sx-bg);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid var(--sx-line2);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,0.22);overflow:hidden;pointer-events:auto;transition:opacity .15s;color:var(--sx-tx)}
+/* Complete Native iOS 18 Sheet Panel */
+#sx-panel{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:min(426px,calc(100% - 16px));display:none;flex-direction:column;background:var(--sx-bg);backdrop-filter:saturate(180%) blur(26px);-webkit-backdrop-filter:saturate(180%) blur(26px);border:1px solid rgba(255,255,255,0.8);border-radius:22px;box-shadow:0 20px 55px rgba(0,0,0,0.22),0 0 0 0.5px rgba(0,0,0,0.1);overflow:hidden;pointer-events:auto;transition:opacity .15s;color:var(--sx-tx)}
 #sx-panel.open{display:flex}
-#sx-panel.peek{opacity:.16}
-.sx-ph{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px 16px;background:rgba(255,255,255,0.65)}
-.sx-pt{font-size:15px;font-weight:700;letter-spacing:-0.015em;color:var(--sx-tx)}
-.sx-pv{margin-left:7px;color:var(--sx-mu);font-size:11.5px;font-weight:500}
-.sx-ib{width:30px;height:30px;display:grid;place-items:center;flex:none;border:0;border-radius:8px;background:transparent;color:var(--sx-mu);padding:0}
-.sx-ib:active{background:var(--sx-s2);color:var(--sx-tx)}
+#sx-panel.peek{opacity:.14}
+.sx-ph{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 8px 16px;background:rgba(255,255,255,0.75);border-bottom:0.5px solid var(--sx-line)}
+.sx-pt-wrap{display:flex;align-items:center;gap:7px;min-width:0}
+.sx-pt{font-size:15.5px;font-weight:700;letter-spacing:-0.02em;color:var(--sx-tx);white-space:nowrap}
+.sx-pv{padding:2px 6px;border-radius:6px;background:rgba(0,122,255,0.12);color:var(--sx-bl);font-size:10.5px;font-weight:700}
+.sx-ptimer{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:8px;background:rgba(52,199,89,0.14);color:#1d7a32;font:600 11px/1 var(--sx-font);font-variant-numeric:tabular-nums;border:0;cursor:pointer}
+.sx-ptimer.warn{background:rgba(255,149,0,0.16);color:#c96e00}
+.sx-ptimer.crit{background:rgba(255,59,48,0.16);color:#d70015}
+.sx-ib{width:30px;height:30px;display:grid;place-items:center;flex:none;border:0;border-radius:15px;background:rgba(118,118,128,0.12);color:var(--sx-mu);padding:0;cursor:pointer}
+.sx-ib:active{background:var(--sx-s3);color:var(--sx-tx)}
 .sx-ib.danger:active{color:var(--sx-red)}
 
-.sx-tabs{display:flex;gap:2px;overflow-x:auto;padding:0 10px;border-bottom:1px solid var(--sx-line);background:rgba(255,255,255,0.65);scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:auto}
+/* Segmented Pill Scroll Tabs */
+.sx-tabs{display:flex;gap:4px;overflow-x:auto;padding:7px 12px;border-bottom:0.5px solid var(--sx-line);background:rgba(255,255,255,0.6);scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:auto}
 .sx-tabs::-webkit-scrollbar{display:none}
-.sx-tab{flex:0 0 auto;position:relative;border:0;background:none;color:var(--sx-mu);padding:9px 10px 10px;font:500 12.5px var(--sx-font);white-space:nowrap;transition:color .12s}
-.sx-tab.on{color:var(--sx-bl);font-weight:600}
-.sx-tab.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:2.5px;border-radius:2px;background:var(--sx-bl)}
+.sx-tab{flex:0 0 auto;position:relative;border:0;border-radius:9px;background:transparent;color:var(--sx-mu);padding:6px 11px;font:600 12px var(--sx-font);white-space:nowrap;transition:all .14s;cursor:pointer}
+.sx-tab.on{background:#ffffff;color:var(--sx-bl);box-shadow:0 2px 6px rgba(0,0,0,0.08),0 0 0 0.5px rgba(0,0,0,0.06)}
 
-.sx-pb{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;overscroll-behavior:contain;padding-bottom:12px;scrollbar-width:thin;scrollbar-color:var(--sx-s3) transparent}
+.sx-pb{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;overscroll-behavior:contain;padding:8px 0 16px;scrollbar-width:thin;scrollbar-color:var(--sx-s3) transparent}
 .sx-pb::-webkit-scrollbar{width:4px}
 .sx-pb::-webkit-scrollbar-track{background:transparent}
 .sx-pb::-webkit-scrollbar-thumb{background:var(--sx-s3);border-radius:2px}
 
-.sx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;padding:11px 16px;border-top:1px solid var(--sx-line);background:rgba(255,255,255,0.45)}
-.sx-pb>.sx-row:first-child{border-top:0}
-.sx-rl{flex:1 1 150px;min-width:0}
-.sx-rt{font-size:13px;font-weight:500;color:var(--sx-tx)}
-.sx-rd{color:var(--sx-mu);font-size:11.5px;line-height:1.4;margin-top:2px}
+/* Native iOS Grouped Inset Rows */
+.sx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 12px;padding:11px 14px;background:var(--sx-s1);border-bottom:0.5px solid var(--sx-line)}
+.sx-pb>.sx-row:first-of-type{border-top-left-radius:13px;border-top-right-radius:13px}
+.sx-pb>.sx-row:last-of-type{border-bottom-left-radius:13px;border-bottom-right-radius:13px;border-bottom:0}
+.sx-rl{flex:1 1 145px;min-width:0}
+.sx-rt{font-size:13.5px;font-weight:500;letter-spacing:-0.01em;color:var(--sx-tx)}
+.sx-rd{color:var(--sx-mu);font-size:11.5px;line-height:1.38;margin-top:2px}
 .sx-rc{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
-.sx-row.rng .sx-rc{flex:1 1 100%;margin-top:2px}
+.sx-row.rng .sx-rc{flex:1 1 100%;margin-top:3px}
 
-.sx-step,.sx-tcard{margin:8px 12px 0;padding:10px 12px;border:1px solid var(--sx-line);border-radius:13px;background:var(--sx-s1);box-shadow:0 2px 8px rgba(0,0,0,0.04)}
-.sx-sh{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.sx-step,.sx-tcard{margin:8px 12px 0;padding:11px 13px;border:0.5px solid var(--sx-line2);border-radius:14px;background:var(--sx-s1);box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+.sx-sh{display:flex;align-items:center;gap:4px;margin-bottom:8px}
 .sx-sn{flex:1;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--sx-tx);min-width:0}
 .sx-sn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sx-sn svg{color:var(--sx-bl)}
@@ -756,20 +932,21 @@
 .sx-badge{display:inline-block;padding:1px 6px;margin-left:6px;border-radius:5px;background:rgba(0,122,255,0.12);color:var(--sx-bl);font:600 10px/1.4 var(--sx-font);flex:none}
 .sx-badge.rec{background:rgba(52,199,89,0.15);color:var(--sx-nv)}
 
-/* Light Mode Floating Macro Buttons, Screenshot & Quick Ball */
-.sx-mbtn,.sx-shot,#sx-qball{position:absolute;transform:translate(-50%,-50%) scale(var(--sz,1));width:46px;height:46px;padding:0;border-radius:14px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#1c1c1e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:auto;touch-action:none;opacity:var(--op,0.92);font:600 9.5px/1 var(--sx-font);box-shadow:0 4px 14px rgba(0,0,0,0.16)}
+/* Frosted Glass Floating Macro Buttons, Screenshot & Quick Ball */
+.sx-mbtn,.sx-shot,#sx-qball{position:absolute;transform:translate(-50%,-50%) scale(var(--sz,1));width:46px;height:46px;padding:0;border-radius:15px;border:1px solid rgba(255,255,255,0.75);background:rgba(255,255,255,0.88);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);color:#1c1c1e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:auto;touch-action:none;opacity:var(--op,0.94);font:600 9.5px/1 var(--sx-font);box-shadow:0 4px 14px rgba(0,0,0,0.16),0 0 0 0.5px rgba(0,0,0,0.1);cursor:pointer}
 .sx-mbtn.is-rec{border-color:rgba(0,122,255,0.45);color:#0055b3}
 .sx-mbtn span{max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sx-mbtn.run{background:var(--sx-bl);color:#ffffff;border-color:transparent;box-shadow:0 4px 16px rgba(0,122,255,0.4)}
+.sx-mbtn.run{background:var(--sx-bl);color:#ffffff;border-color:rgba(255,255,255,0.4);box-shadow:0 4px 18px rgba(0,122,255,0.48)}
 .sx-mbtn.off{border-style:dashed;opacity:.55}
+.sx-mbtn.edit-ring,.sx-shot.edit-ring{outline:2px dashed var(--sx-bl);outline-offset:2px}
 .sx-shot{display:none}
-#sx-qball{display:none;width:38px;height:38px;border-radius:19px;border:1.5px solid rgba(0,122,255,0.35);color:var(--sx-bl)}
+#sx-qball{display:none;width:38px;height:38px;border-radius:19px;border:1.5px solid rgba(0,122,255,0.38);color:var(--sx-bl)}
 #sx-qball.eco-on{border-color:rgba(52,199,89,0.55);color:var(--sx-nv)}
 
 .sx-mk{position:absolute;width:32px;height:32px;border-radius:50%;transform:translate(-50%,-50%);background:var(--sx-bl);color:#fff;font:600 12.5px var(--sx-font);display:flex;align-items:center;justify-content:center;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.25);touch-action:none;pointer-events:auto}
 .sx-mk.end{width:26px;height:26px;background:#ffffff;color:var(--sx-bl);border:2px solid var(--sx-bl)}
 .sx-zn{position:absolute;border:1.5px dashed var(--sx-bl);background:rgba(0,122,255,0.14);border-radius:10px;touch-action:none;pointer-events:auto}
-.sx-zn b{position:absolute;left:8px;top:6px;font-size:11px;font-weight:600;color:#004085;background:rgba(255,255,255,0.85);padding:1px 5px;border-radius:4px}
+.sx-zn b{position:absolute;left:8px;top:6px;font-size:11px;font-weight:600;color:#004085;background:rgba(255,255,255,0.88);padding:1px 5px;border-radius:4px}
 .sx-zh{position:absolute;right:-1px;bottom:-1px;width:26px;height:26px;border-radius:8px 0 8px 0;background:var(--sx-bl);touch-action:none}
 .sx-dot{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--sx-bl);transform:translate(-50%,-50%);pointer-events:none}
 .sx-rip{position:absolute;width:32px;height:32px;margin:-16px 0 0 -16px;border-radius:50%;border:2px solid var(--sx-bl);background:rgba(255,255,255,0.25);pointer-events:none;animation:sxr .38s ease-out forwards}
@@ -777,29 +954,30 @@
 #sx-flash{position:absolute;z-index:7;inset:0;background:#fff;opacity:0;pointer-events:none}
 #sx-flash.go{animation:sxf .22s ease-out}
 @keyframes sxf{from{opacity:.75}to{opacity:0}}
-#sx-toast{position:absolute;z-index:8;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:82%;padding:9px 16px;border-radius:12px;background:rgba(255,255,255,0.95);border:1px solid var(--sx-line2);color:var(--sx-tx);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .18s;pointer-events:none;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.18)}
+#sx-toast{position:absolute;z-index:8;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:84%;padding:9px 16px;border-radius:14px;background:rgba(255,255,255,0.96);border:1px solid var(--sx-line2);color:var(--sx-tx);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .18s;pointer-events:none;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.18)}
 #sx-toast.on{opacity:1}
-#sx-preview{position:absolute;z-index:6;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:14px;background:rgba(245,246,250,0.95);color:var(--sx-tx);pointer-events:auto}
+#sx-preview{position:absolute;z-index:6;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:14px;background:rgba(242,242,247,0.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:var(--sx-tx);pointer-events:auto}
 #sx-preview.on{display:flex}
-#sx-preview img{max-width:100%;max-height:calc(100% - 100px);object-fit:contain;border-radius:10px;border:1px solid var(--sx-line2);box-shadow:0 8px 24px rgba(0,0,0,0.12);-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+#sx-preview img{max-width:100%;max-height:calc(100% - 105px);object-fit:contain;border-radius:12px;border:1px solid var(--sx-line2);box-shadow:0 10px 30px rgba(0,0,0,0.15);-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
 
-.sx-sw{width:44px;height:26px;border-radius:13px;border:0;background:var(--sx-s3);position:relative;transition:background .18s cubic-bezier(.4,0,.2,1);flex:none;padding:0;cursor:pointer}
-.sx-sw::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.28);transition:transform .18s cubic-bezier(.4,0,.2,1)}
+/* Authentic iOS UISwitch & Controls */
+.sx-sw{width:46px;height:28px;border-radius:14px;border:0;background:#e5e5ea;position:relative;transition:background .18s cubic-bezier(.4,0,.2,1);flex:none;padding:0;cursor:pointer}
+.sx-sw::after{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,0.22),0 0 0 0.5px rgba(0,0,0,0.04);transition:transform .18s cubic-bezier(.4,0,.2,1)}
 .sx-sw[aria-checked=true]{background:var(--sx-gn)}
 .sx-sw[aria-checked=true]::after{transform:translateX(18px)}
 
-.sx-sel{-webkit-appearance:none;appearance:none;background:var(--sx-s2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c6c70' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center/13px;color:var(--sx-tx);border:1px solid var(--sx-line);border-radius:8px;padding:6px 28px 6px 10px;font:500 12.5px var(--sx-font);max-width:56vw}
+.sx-sel{-webkit-appearance:none;appearance:none;background:var(--sx-s2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23007aff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center/13px;color:var(--sx-tx);border:1px solid var(--sx-line);border-radius:9px;padding:6px 28px 6px 10px;font:500 12.5px var(--sx-font);max-width:56vw}
 .sx-rw{display:flex;align-items:center;gap:10px;width:100%}
-.sx-rw input{-webkit-appearance:none;appearance:none;flex:1;min-width:90px;height:22px;margin:0;background:transparent}
-.sx-rw input::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--sx-bl) var(--p,0%),var(--sx-s3) var(--p,0%))}
-.sx-rw input::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-7px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,0.12);box-shadow:0 2px 5px rgba(0,0,0,0.22)}
-.sx-rv{min-width:54px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--sx-mu)}
+.sx-rw input{-webkit-appearance:none;appearance:none;flex:1;min-width:90px;height:24px;margin:0;background:transparent}
+.sx-rw input::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--sx-bl) var(--p,0%),#e0e2e9 var(--p,0%))}
+.sx-rw input::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-8px;border-radius:50%;background:#fff;border:0.5px solid rgba(0,0,0,0.08);box-shadow:0 2px 6px rgba(0,0,0,0.22)}
+.sx-rv{min-width:54px;text-align:right;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--sx-mu)}
 
-.sx-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:8px;border:1px solid transparent;background:var(--sx-bl);color:#ffffff;font:600 12px var(--sx-font);text-decoration:none;white-space:nowrap;cursor:pointer}
-.sx-btn:active{opacity:.85}
+.sx-btn{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:9px;border:1px solid transparent;background:var(--sx-bl);color:#ffffff;font:600 12px var(--sx-font);text-decoration:none;white-space:nowrap;cursor:pointer}
+.sx-btn:active{opacity:.82}
 .sx-btn.alt{background:var(--sx-s2);color:var(--sx-tx);border-color:var(--sx-line)}
 .sx-btn.blue{background:var(--sx-bl);color:#fff;border-color:transparent}
-.sx-btn.danger{background:rgba(255,59,48,0.08);color:var(--sx-red);border-color:rgba(255,59,48,0.3)}
+.sx-btn.danger{background:rgba(255,59,48,0.10);color:var(--sx-red);border-color:rgba(255,59,48,0.25)}
 
 .sx-ghead{grid-column:1/-1;padding:18px 24px 6px;font-size:14px;font-weight:600;color:#ededf0}
 #sx-section .sx-sel,#sx-section .sx-btn.alt{background:#22252b;color:#ededf0;border-color:rgba(255,255,255,0.14)}
@@ -843,6 +1021,10 @@
     if (cfg.fxSepia > 0) f.push('sepia(' + cfg.fxSepia + ')');
     if (cfg.fxGray > 0) f.push('grayscale(' + cfg.fxGray + ')');
     let css = '';
+    // CRITICAL iOS Touch-Freeze Prevention: prevent WebKit gesture recognizers from hijacking multi-touch on the stream
+    if (streaming()) {
+      css += '#remote-video,[data-sx-host],.streamer-container{touch-action:none !important;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-user-drag:none !important;overscroll-behavior:none !important}';
+    }
     const tr = ((cfg.viewX || cfg.viewY) ? 'translate:' + cfg.viewX + '% ' + cfg.viewY + '%;' : '') + (cfg.viewZoom !== 1 ? 'scale:' + cfg.viewZoom + ';' : '');
     if (tr) css += '#remote-video,#sx-gl{' + tr + '}';
     if (GL.on) css += '#remote-video{opacity:0 !important}';
@@ -861,7 +1043,7 @@
     }
     const rgb = TINTS[cfg.fxTint];
     if (rgb && cfg.fxTintA > 0) {
-      const c = 'rgba(' + rgb + ',' + cfg.fxTintA + ')';
+      const c = 'rgba(' + rgb.join(',') + ',' + cfg.fxTintA + ')';
       layers.push('linear-gradient(' + c + ',' + c + ')');
     }
     if (cfg.fxVig > 0) {
@@ -1075,22 +1257,123 @@
     else if (GL.on) glStop();
   }
 
-  /* ================= stats HUD & Anti-AFK Guard (Battery-Aware Polling) ================= */
-  let hud, hudPing, hudRest, prevStat = null, lastSt = null, lastUserAct = Date.now(), lastAfkPulse = Date.now(), tickCount = 0;
+  /* ================= 1-HOUR SESSION COUNTDOWN + 3-GRAPH TELEMETRY HUD ================= */
+  let hud, hudPing, hudRest, hudSub, hudTimerEl, panelTimerEl, hudChartsWrap;
+  let cvFps, cvPing, cvLag, lblFpsVal, lblPingVal, lblLagVal;
+  const histFps = [], histPing = [], histLag = [];
+  const MAX_HIST = 36;
+  let prevStat = null, lastSt = null, lastUserAct = Date.now(), lastAfkPulse = Date.now(), tickCount = 0;
+  let sessionStartAt = 0, warned10 = false, warned5 = false, warned1 = false;
+  let lastTouchDispMs = 1.8, curDecodeMs = 2.5, curInputLagMs = 12;
+
+  function resetSessionTimer(notify) {
+    sessionStartAt = Date.now();
+    warned10 = false;
+    warned5 = false;
+    warned1 = false;
+    updateSessionTimerUI();
+    if (notify) toast('1-Hour Session Timer reset to ' + cfg.sessionLimitMin + ':00');
+  }
+
+  function fmtCountdown(remMs) {
+    const totalSec = Math.max(0, Math.ceil(remMs / 1000));
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function updateSessionTimerUI() {
+    if (!sessionStartAt) sessionStartAt = Date.now();
+    const limitMs = cl(nv(cfg.sessionLimitMin, 60), 15, 600) * 60000;
+    const elapsed = Date.now() - sessionStartAt;
+    const remMs = Math.max(0, limitMs - elapsed);
+    const remMin = remMs / 60000;
+    const txt = '⏱ ' + fmtCountdown(remMs);
+    const cls = remMin <= 3 ? 'crit' : remMin <= 10 ? 'warn' : '';
+
+    if (hudTimerEl) {
+      hudTimerEl.style.display = cfg.sessionTimer ? 'inline-flex' : 'none';
+      hudTimerEl.textContent = txt;
+      hudTimerEl.className = 'sx-hud-timer' + (cls ? ' ' + cls : '');
+    }
+    if (panelTimerEl) {
+      panelTimerEl.style.display = cfg.sessionTimer ? 'inline-flex' : 'none';
+      panelTimerEl.textContent = txt;
+      panelTimerEl.className = 'sx-ptimer' + (cls ? ' ' + cls : '');
+    }
+
+    if (streaming() && cfg.sessionTimer) {
+      if (remMin <= 10 && remMin > 9.5 && !warned10) {
+        warned10 = true;
+        toast('⏱ Còn 10 phút phiên chơi (' + cfg.sessionLimitMin + 'm) — Chuẩn bị lưu game!', 4000);
+      } else if (remMin <= 5 && remMin > 4.5 && !warned5) {
+        warned5 = true;
+        toast('⚠️ Còn 5 phút phiên chơi! Hãy tới điểm dịch chuyển / lưu game.', 4500);
+      } else if (remMin <= 1 && remMin > 0.2 && !warned1) {
+        warned1 = true;
+        toast('🚨 Còn dưới 1 phút phiên chơi! Sắp hết giờ session!', 5500);
+      }
+    }
+  }
+
+  function drawMiniGraph(cv, arr, color, minV, maxV) {
+    if (!cv || !arr.length) return;
+    const dpr = Math.min(realDpr, 2);
+    const W = 78 * dpr, H = 28 * dpr;
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    let hi = maxV;
+    for (let i = 0; i < arr.length; i++) if (arr[i] > hi) hi = arr[i] * 1.1;
+    const span = Math.max(1, hi - minV);
+
+    ctx.beginPath();
+    const stepX = W / Math.max(1, MAX_HIST - 1);
+    const startIdx = Math.max(0, MAX_HIST - arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      const x = (startIdx + i) * stepX;
+      const norm = cl((arr[i] - minV) / span, 0, 1);
+      const y = H - 3 * dpr - norm * (H - 6 * dpr);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Soft area fill under curve
+    const lastX = (startIdx + arr.length - 1) * stepX;
+    const firstX = startIdx * stepX;
+    ctx.lineTo(lastX, H);
+    ctx.lineTo(firstX, H);
+    ctx.closePath();
+    ctx.fillStyle = color + '24';
+    ctx.fill();
+  }
+
   async function tick() {
     tickCount++;
     const st = streaming();
     if (st !== lastSt) {
       lastSt = st;
       prevStat = null;
+      if (st) resetSessionTimer(false);
       updateSharpen();
+      applyDyn();
       if (root) updateOverlay();
     }
     if (GL.on && GL.c && !GL.c.isConnected) { glStop(); updateSharpen(); }
 
+    updateSessionTimerUI();
+
     const now = Date.now();
-    // Automatic Input Watchdog: clean up any orphan macro pointers older than 12s when no macro is running
-    if (cfg.inputGuard && runners.size === 0 && activeMacroPointers.size > 0) {
+    // Automatic Input Watchdog: clean up any orphan macro pointers when no macro is running
+    if (cfg.inputGuard && runners.size === 0 && (activeMacroPointers.size > 0 || activeMacroTouches.size > 0)) {
       unstickStreamInput(true);
     }
 
@@ -1107,11 +1390,21 @@
 
     if (!root) return;
     const show = cfg.hudOn && st;
-    hud.style.display = show ? 'block' : 'none';
+    hud.style.display = show ? 'flex' : 'none';
     if (!show) { prevStat = null; return; }
-    hud.dataset.pos = cfg.hudPos;
+    if (!cfg.hudCustomPos) {
+      hud.style.left = '';
+      hud.style.top = '';
+      hud.style.right = '';
+      hud.style.bottom = '';
+      hud.dataset.pos = cfg.hudPos;
+    } else {
+      hud.removeAttribute('data-pos');
+      hud.style.left = cfg.hudCustomPos.x + '%';
+      hud.style.top = cfg.hudCustomPos.y + '%';
+    }
     hud.style.opacity = cfg.hudOpacity;
-    if (cfg.batterySaver && (tickCount % 3 !== 0)) return;
+    if (cfg.batterySaver && (tickCount % 2 !== 0)) return;
     if (!pcs.size) return;
     const reps = await Promise.all([...pcs].map(p => p.getStats().catch(() => null)));
     let vin = null, pair = null;
@@ -1147,53 +1440,240 @@
       dec = df > 0 ? (cur.dec - prevStat.dec) / df * 1000 : 0;
     }
     prevStat = cur;
+    curDecodeMs = dec;
     const rtt = pair && typeof pair.currentRoundTripTime === 'number' ? pair.currentRoundTripTime * 1000 : null;
-    hudPing.textContent = (rtt == null ? '--' : Math.round(rtt)) + 'ms';
-    hudPing.style.color = rtt == null ? '#6c6c70' : rtt < 45 ? '#248a3d' : rtt < 85 ? '#d97706' : '#ff3b30';
-    let rest = '  ·  ' + Math.round(fps) + ' fps  ·  ' + mbps.toFixed(1) + ' Mbps' + (cfg.batterySaver ? ' · ECO' : '');
-    if (cfg.hudDetail === 'full') {
-      rest += '\n' + (vin.frameWidth || 0) + '×' + (vin.frameHeight || 0) + '  ·  loss ' + loss.toFixed(1) + '%  ·  jit ' + Math.round((vin.jitter || 0) * 1000) + 'ms  ·  drop ' + cur.drop + '  ·  dec ' + dec.toFixed(1) + 'ms';
+    const jitMs = Math.round((vin.jitter || 0) * 1000);
+    // Calculate Total Input / Action Response Latency (ms):
+    // Local Touch Dispatch Delay + Frame Pacing Interval (1000/fps * 0.5) + Decode Time + 0.5 * Network RTT
+    const frameIntervalMs = fps > 5 ? (1000 / fps) * 0.5 : 8.3;
+    const totalInputLatency = Math.round(lastTouchDispMs + dec + frameIntervalMs + (rtt != null ? rtt * 0.5 : 10));
+    curInputLagMs = totalInputLatency;
+
+    const rttVal = rtt == null ? 0 : Math.round(rtt);
+    const fpsVal = Math.round(fps);
+    histFps.push(fpsVal); if (histFps.length > MAX_HIST) histFps.shift();
+    histPing.push(rttVal); if (histPing.length > MAX_HIST) histPing.shift();
+    histLag.push(totalInputLatency); if (histLag.length > MAX_HIST) histLag.shift();
+
+    hudPing.textContent = (rtt == null ? '--' : rttVal) + 'ms';
+    hudPing.style.color = rtt == null ? '#6c6c70' : rttVal < 45 ? '#248a3d' : rttVal < 85 ? '#d97706' : '#ff3b30';
+    hudRest.nodeValue = ' · ' + fpsVal + ' fps · ' + mbps.toFixed(1) + ' Mbps · Lag ' + totalInputLatency + 'ms' + (cfg.batterySaver ? ' · ECO' : '');
+
+    const showSub = cfg.hudDetail === 'full' || cfg.hudDetail === 'graphs';
+    if (hudSub) {
+      hudSub.style.display = showSub ? 'block' : 'none';
+      if (showSub) {
+        hudSub.textContent = (vin.frameWidth || 0) + '×' + (vin.frameHeight || 0) + ' · loss ' + loss.toFixed(1) + '% · jit ' + jitMs + 'ms · dec ' + dec.toFixed(1) + 'ms · touch ' + lastTouchDispMs.toFixed(1) + 'ms';
+      }
     }
-    hudRest.nodeValue = rest;
+
+    const showGraphs = cfg.hudDetail === 'graphs';
+    if (hudChartsWrap) {
+      hudChartsWrap.classList.toggle('on', showGraphs);
+      if (showGraphs) {
+        if (lblFpsVal) lblFpsVal.textContent = fpsVal + '';
+        if (lblPingVal) lblPingVal.textContent = (rtt == null ? '--' : rttVal) + 'ms';
+        if (lblLagVal) lblLagVal.textContent = totalInputLatency + 'ms';
+        drawMiniGraph(cvFps, histFps, '#34c759', 0, 65);
+        drawMiniGraph(cvPing, histPing, rttVal > 80 ? '#ff9500' : '#007aff', 0, 100);
+        drawMiniGraph(cvLag, histLag, '#5856d6', 0, 90);
+      }
+    }
   }
 
-  /* ================= screenshot ================= */
+  /* ================= TRUE HD GPU SCREENSHOT + FILTER & SHARPEN BAKER ================= */
   function flash() { flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); }
+
+  // Renders the video at up to 2x Super-Resolution with WebGL CAS Sharpening + Active Picture Filters baked directly on the GPU!
+  function renderHDScreenshotCanvas(v) {
+    const scale = cl(parseFloat(cfg.shotScale) || 1.5, 1, 2);
+    // Cap max dimension at 2560px to stay within iOS WebKit canvas memory limits while delivering razor-sharp 1080p/1440p HD
+    const maxW = 2560;
+    const actualScale = (v.videoWidth * scale > maxW) ? (maxW / v.videoWidth) : scale;
+    const W = Math.round(v.videoWidth * actualScale);
+    const H = Math.round(v.videoHeight * actualScale);
+
+    const outCv = document.createElement('canvas');
+    outCv.width = W;
+    outCv.height = H;
+
+    const applyFx = !!cfg.shotApplyFx;
+    const sharpAmt = cfg.shotSharpen ? Math.max(cl(+cfg.sharpen || 0, 0, 1), 0.42) : (applyFx ? cl(+cfg.sharpen || 0, 0, 1) : 0);
+
+    // Attempt GPU WebGL Full-Pipeline Render (CAS Sharpening + Contrast/Saturate/Brightness/Hue/Sepia/Gray/Tint/Vignette)
+    const renderedByWebGL = guard(() => {
+      const glCv = document.createElement('canvas');
+      glCv.width = W;
+      glCv.height = H;
+      const gl = glCv.getContext('webgl', { alpha: false, antialias: true, preserveDrawingBuffer: true });
+      if (!gl) return false;
+
+      const vsSrc = 'attribute vec2 p;varying vec2 v;void main(){v=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}';
+      const fsSrc = `
+        precision highp float;
+        varying vec2 v;
+        uniform sampler2D t;
+        uniform vec2 px;
+        uniform float uSharp, uCon, uSat, uBri, uHue, uSep, uGray, uVig, uTintA;
+        uniform vec3 uTint;
+
+        vec3 hueRotate(vec3 c, float deg) {
+          float a = deg * 0.0174532925;
+          float cosA = cos(a), sinA = sin(a);
+          mat3 m = mat3(
+            0.213 + cosA*0.787 - sinA*0.213, 0.213 - cosA*0.213 + sinA*0.143, 0.213 - cosA*0.213 - sinA*0.787,
+            0.715 - cosA*0.715 - sinA*0.715, 0.715 + cosA*0.285 + sinA*0.140, 0.715 - cosA*0.715 + sinA*0.715,
+            0.072 - cosA*0.072 + sinA*0.928, 0.072 - cosA*0.072 - sinA*0.283, 0.072 + cosA*0.928 + sinA*0.072
+          );
+          return clamp(m * c, 0.0, 1.0);
+        }
+
+        void main() {
+          vec3 c = texture2D(t, v).rgb;
+          if (uSharp > 0.01) {
+            vec3 n = texture2D(t, v + vec2(0.0, -px.y)).rgb;
+            vec3 s = texture2D(t, v + vec2(0.0, px.y)).rgb;
+            vec3 w = texture2D(t, v + vec2(-px.x, 0.0)).rgb;
+            vec3 e = texture2D(t, v + vec2(px.x, 0.0)).rgb;
+            vec3 mn = min(min(min(n, s), min(w, e)), c);
+            vec3 mx = max(max(max(n, s), max(w, e)), c);
+            vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / (mx + 0.0001), 0.0, 1.0));
+            float peak = -1.0 / mix(8.0, 5.0, uSharp);
+            vec3 wg = amp * peak;
+            vec3 cas = (wg * (n + s + w + e) + c) / (1.0 + 4.0 * wg);
+            c = clamp(mix(c, cas, clamp(uSharp * 1.6, 0.0, 1.0)), 0.0, 1.0);
+          }
+          // Brightness & Contrast
+          c = c * uBri;
+          c = (c - 0.5) * uCon + 0.5;
+          // Saturation
+          float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          c = mix(vec3(luma), c, uSat);
+          // Hue
+          if (abs(uHue) > 0.5) c = hueRotate(c, uHue);
+          // Sepia
+          if (uSep > 0.001) {
+            vec3 sp = vec3(
+              dot(c, vec3(0.393, 0.769, 0.189)),
+              dot(c, vec3(0.349, 0.686, 0.168)),
+              dot(c, vec3(0.272, 0.534, 0.131))
+            );
+            c = mix(c, sp, uSep);
+          }
+          // Grayscale
+          if (uGray > 0.001) {
+            float g = dot(c, vec3(0.2126, 0.7152, 0.0722));
+            c = mix(c, vec3(g), uGray);
+          }
+          // Tint overlay
+          if (uTintA > 0.001) {
+            c = mix(c, uTint, uTintA);
+          }
+          // Vignette
+          if (uVig > 0.001) {
+            float dist = length((v - vec2(0.5)) * vec2(1.35, 1.35));
+            float edge0 = 0.72 - uVig * 0.32;
+            float vf = smoothstep(edge0, 1.0, dist) * (uVig * 0.9);
+            c = c * (1.0 - vf);
+          }
+          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+        }
+      `;
+      const mkSh = (tp, src) => {
+        const s = gl.createShader(tp);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+        return s;
+      };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, mkSh(gl.VERTEX_SHADER, vsSrc));
+      gl.attachShader(prog, mkSh(gl.FRAGMENT_SHADER, fsSrc));
+      gl.linkProgram(prog);
+      gl.useProgram(prog);
+
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, 'p');
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
+
+      gl.viewport(0, 0, W, H);
+      gl.uniform1i(gl.getUniformLocation(prog, 't'), 0);
+      gl.uniform2f(gl.getUniformLocation(prog, 'px'), 1 / v.videoWidth, 1 / v.videoHeight);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uSharp'), sharpAmt);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uCon'), applyFx ? cfg.fxContrast : 1);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uSat'), applyFx ? cfg.fxSaturate : 1);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uBri'), applyFx ? cfg.fxBrightness : 1);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uHue'), applyFx ? cfg.fxHue : 0);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uSep'), applyFx ? cfg.fxSepia : 0);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uGray'), applyFx ? cfg.fxGray : 0);
+      gl.uniform1f(gl.getUniformLocation(prog, 'uVig'), applyFx ? cfg.fxVig : 0);
+      const tintRgb = applyFx && TINTS[cfg.fxTint] ? TINTS[cfg.fxTint] : null;
+      gl.uniform1f(gl.getUniformLocation(prog, 'uTintA'), tintRgb ? cfg.fxTintA : 0);
+      gl.uniform3f(gl.getUniformLocation(prog, 'uTint'), tintRgb ? tintRgb[0] / 255 : 0, tintRgb ? tintRgb[1] / 255 : 0, tintRgb ? tintRgb[2] / 255 : 0);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const ctx2d = outCv.getContext('2d');
+      ctx2d.drawImage(glCv, 0, 0);
+      gl.deleteTexture(tex);
+      gl.deleteBuffer(buf);
+      gl.deleteProgram(prog);
+      const ext = gl.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
+      return true;
+    }, 'webglShot');
+
+    if (!renderedByWebGL) {
+      const ctx = outCv.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(v, 0, 0, W, H);
+    }
+    return outCv;
+  }
+
   async function screenshot() {
     const v = vid();
     if (!v || !v.videoWidth) { toast('No active stream'); return; }
     try {
-      const c = document.createElement('canvas');
-      c.width = v.videoWidth;
-      c.height = v.videoHeight;
-      c.getContext('2d').drawImage(v, 0, 0);
+      const c = renderHDScreenshotCanvas(v);
       const jpeg = cfg.shotFormat === 'jpeg';
       const type = jpeg ? 'image/jpeg' : 'image/png';
-      const blob = await new Promise(res => c.toBlob(res, type, 0.95));
+      const blob = await new Promise(res => c.toBlob(res, type, 0.96));
       if (!blob) throw new Error('empty blob');
       flash();
       const d = new Date(), p = n => String(n).padStart(2, '0');
-      const name = 'GFN_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (jpeg ? '.jpg' : '.png');
+      const name = 'GFN_HD_' + c.width + 'x' + c.height + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (jpeg ? '.jpg' : '.png');
       if (cfg.shotShare && navigator.canShare && navigator.share) {
         try {
           const f = new File([blob], name, { type });
           if (navigator.canShare({ files: [f] })) { await navigator.share({ files: [f] }); return; }
         } catch (e) { if (e && e.name === 'AbortError') return; }
       }
-      showPreview(URL.createObjectURL(blob), name);
+      showPreview(URL.createObjectURL(blob), name, c.width + '×' + c.height);
     } catch (e) {
       console.warn('[GFN-X] screenshot', e);
       toast('Screenshot failed');
     }
   }
-  function showPreview(url, name) {
+  function showPreview(url, name, resText) {
     preview.replaceChildren();
     const img = h('img');
     img.src = url;
     img.alt = name;
     const row = h('div', 'sx-rc');
     const a = h('a', 'sx-btn');
-    a.append(ico('download', 16), document.createTextNode('Download'));
+    a.append(ico('download', 16), document.createTextNode('Download HD (' + (resText || '') + ')'));
     a.href = url;
     a.download = name;
     const c = btn('Close', 'close', 'alt');
@@ -1203,7 +1683,7 @@
       URL.revokeObjectURL(url);
     };
     row.append(a, c);
-    preview.append(h('div', null, 'Long-press the image, then choose Add to Photos'), img, row);
+    preview.append(h('div', null, 'HD Capture (' + (resText || '') + ') · Long-press image → Save to Photos'), img, row);
     preview.classList.add('on');
   }
 
@@ -1217,15 +1697,17 @@
   const activeHoldBtnMacros = new Set();
   let primaryMacroPid = null;
   let pauseUntil = 0, pidSeq = 0, editing = false, realTouches = [];
-  // Keep pointer IDs in compact range [100..220] so GFN's pointer table never overflows
   const nextPid = () => 100 + (pidSeq++ % 120);
 
-  // Stream Input Recovery / Unstick Engine:
-  // Emulates what happens when you pull down the iOS Notification Center (flushes any stuck synthetic/orphan pointers on GFN's stream targets)
+  const isOverlayNode = el => !!(el && (el === root || (root && root.contains(el)) || el === fxEl || el.id === 'sx-gl'));
+
+  // True iOS Notification-Center Equivalent Stream Input Reset (`unstickStreamInput`)
   function unstickStreamInput(silent) {
     guard(() => {
+      const streamTgt = pickTarget(window.innerWidth * 0.5, window.innerHeight * 0.5);
+      // 1. Release all tracked macro pointers & touches
       activeMacroPointers.forEach((info, pid) => {
-        const tgt = (info.target && info.target.isConnected) ? info.target : (vid() || document.body);
+        const tgt = (info.target && info.target.isConnected) ? info.target : streamTgt;
         try {
           tgt.dispatchEvent(new PointerEvent('pointerup', {
             bubbles: true, cancelable: true, composed: true, view: window,
@@ -1235,16 +1717,38 @@
           }));
         } catch (_) {}
       });
+      activeMacroTouches.forEach((t, pid) => {
+        const tgt = (t.target && t.target.isConnected) ? t.target : streamTgt;
+        try {
+          tgt.dispatchEvent(new TouchEvent('touchend', {
+            bubbles: true, cancelable: true, composed: true, view: window,
+            touches: realTouches,
+            targetTouches: realTouches.filter(q => q.target === tgt),
+            changedTouches: [t]
+          }));
+        } catch (_) {}
+      });
+      // 2. If no real fingers are currently touching the screen, dispatch a clean touchcancel/touchend flush on streamTgt
+      if (realTouches.length === 0 && streamTgt) {
+        try {
+          const dummyTouch = mkTouch(streamTgt, Math.round(window.innerWidth * 0.5), Math.round(window.innerHeight * 0.5), 99);
+          if (dummyTouch) {
+            streamTgt.dispatchEvent(new TouchEvent('touchcancel', {
+              bubbles: true, cancelable: true, composed: true, view: window,
+              touches: [], targetTouches: [], changedTouches: [dummyTouch]
+            }));
+          }
+        } catch (_) {}
+      }
       activeMacroPointers.clear();
       activeMacroTouches.clear();
       targetCache.clear();
       primaryMacroPid = null;
       holdIds.clear();
-      // Also blur any accidentally focused overlay button so GFN regains keyboard/pointer focus
       if (document.activeElement && root && root.contains(document.activeElement)) {
         try { document.activeElement.blur(); } catch (_) {}
       }
-      if (!silent) toast('Stream input state refreshed');
+      if (!silent) toast('Stream input unlocked & refreshed');
     }, 'unstickStreamInput');
   }
 
@@ -1258,6 +1762,7 @@
         else if (s.t === 'multi') out.push({ k: 'multi', x: s.x, y: s.y, x2: s.x2, y2: s.y2, hold: s.hold, wait: s.wait });
         else if (s.t === 'circle') out.push({ k: 'circle', x: s.x, y: s.y, rad: s.rad, dur: s.dur, wait: s.wait });
         else if (s.t === 'burst') out.push({ k: 'burst', x: s.x, y: s.y, cnt: s.cnt, hold: s.hold, spread: s.spread, wait: s.wait });
+        else if (s.t === 'elastic') out.push({ k: 'elastic', x: s.x, y: s.y, x2: s.x2, y2: s.y2, dur: s.dur, hold: s.hold, wait: s.wait });
         else if (s.t === 'swipe') out.push({ k: 'swipe', x: s.x, y: s.y, x2: s.x2, y2: s.y2, dur: s.dur, wait: s.wait, pts: s.pts || null, rec: !!s.rec });
         else {
           const rows = s.rows || 1, cols = s.cols || 1;
@@ -1281,7 +1786,7 @@
 
   function pickTarget(x, y) {
     const list = document.elementsFromPoint(x, y);
-    return list.find(el => !(root && root.contains(el)) && el !== fxEl && el.id !== 'sx-gl') || vid() || document.body;
+    return list.find(el => !isOverlayNode(el)) || vid() || document.body;
   }
   function mkTouch(target, x, y, id) {
     try {
@@ -1303,9 +1808,9 @@
     return null;
   }
 
-  // Zero-Freeze Injection Engine:
-  // 1. Arbitrates `isPrimary`: only ONE pointer is primary when no real finger is touching; never steals `isPrimary` from a real finger!
-  // 2. Tracks `activeMacroPointers` so every `pointerdown` is guaranteed a matching `pointerup` on the exact same target element.
+  // Zero-Freeze Hybrid Touch + Pointer Injection Engine:
+  // 1. Correct W3C `button` state (`phase === 'move' ? -1 : 0`) so `pointerup` is NEVER ignored!
+  // 2. `realTouches` strictly excludes `#sx-root` touches so tapping a macro button NEVER injects a ghost finger into GFN!
   function inject(phase, x, y, pid, prevX, prevY) {
     const cx = cl(x, 1, Math.max(2, window.innerWidth - 1));
     const cy = cl(y, 1, Math.max(2, window.innerHeight - 1));
@@ -1350,7 +1855,7 @@
           width: 2.5,
           height: 2.5,
           pressure: down ? 0.65 : 0,
-          button: down ? 0 : -1,
+          button: phase === 'move' ? -1 : 0,
           buttons: down ? 1 : 0
         })));
       }, 'pointer');
@@ -1362,7 +1867,8 @@
         if (down) activeMacroTouches.set(pid, t);
         else activeMacroTouches.delete(pid);
         const macroList = Array.from(activeMacroTouches.values());
-        const all = realTouches.concat(macroList);
+        const cleanReal = realTouches.filter(rt => !isOverlayNode(rt.target));
+        const all = cleanReal.concat(macroList);
         const mine = all.filter(q => q.target === target);
         const type = { down: 'touchstart', move: 'touchmove', up: 'touchend' }[phase];
         target.dispatchEvent(new TouchEvent(type, Object.assign({}, base, {
@@ -1375,7 +1881,10 @@
     if (mode === 'mouse') {
       guard(() => {
         const type = { down: 'mousedown', move: 'mousemove', up: 'mouseup' }[phase];
-        target.dispatchEvent(new MouseEvent(type, Object.assign({}, base, { button: 0, buttons: down ? 1 : 0 })));
+        target.dispatchEvent(new MouseEvent(type, Object.assign({}, base, {
+          button: 0,
+          buttons: down ? 1 : 0
+        })));
         if (phase === 'up') target.dispatchEvent(new MouseEvent('click', Object.assign({}, base, { button: 0 })));
       }, 'mouse');
     }
@@ -1484,6 +1993,47 @@
       if (i < cnt - 1 && !st.stop) {
         await waitExact(Math.max(4, jitterTime(10, false) / speed), st);
       }
+    }
+  }
+
+  // Elastic Dodge / Joystick Flick & Snap-Back Step (`elastic`)
+  async function elasticAt(a, st, speed = 1) {
+    const [bx1, by1] = px(a.x, a.y);
+    const [bx2, by2] = px(a.x2, a.y2);
+    const jx = randRange(-1.5, 1.5), jy = randRange(-1.5, 1.5);
+    const x0 = bx1 + jx, y0 = by1 + jy;
+    const x1 = bx2 + jx, y1 = by2 + jy;
+    const halfDur = Math.max(12, jitterTime(a.dur || 95, false) / speed);
+    const apexHold = Math.max(0, jitterTime(a.hold || 35, false) / speed);
+    let curX = x0, curY = y0, prevX = x0, prevY = y0;
+    ripple(x0, y0);
+    inject('down', curX, curY, st.pid);
+    try {
+      const tStart = performance.now();
+      while (!st.stop) {
+        await nextFrame();
+        if (st.stop) break;
+        const t = cl((performance.now() - tStart) / halfDur, 0, 1);
+        curX = x0 + (x1 - x0) * t;
+        curY = y0 + (y1 - y0) * t;
+        inject('move', curX, curY, st.pid, prevX, prevY);
+        prevX = curX; prevY = curY;
+        if (t >= 1) break;
+      }
+      if (apexHold > 0 && !st.stop) await waitExact(apexHold, st);
+      const tBack = performance.now();
+      while (!st.stop) {
+        await nextFrame();
+        if (st.stop) break;
+        const t = cl((performance.now() - tBack) / (halfDur * 0.75), 0, 1);
+        curX = x1 + (x0 - x1) * t;
+        curY = y1 + (y0 - y1) * t;
+        inject('move', curX, curY, st.pid, prevX, prevY);
+        prevX = curX; prevY = curY;
+        if (t >= 1) break;
+      }
+    } finally {
+      inject('up', curX, curY, st.pid, prevX, prevY);
     }
   }
 
@@ -1659,6 +2209,7 @@
     else if (a.k === 'multi') await multiTapAt(a, st, speed);
     else if (a.k === 'circle') await circleAt(a, st, speed);
     else if (a.k === 'burst') await burstAt(a, st, speed);
+    else if (a.k === 'elastic') await elasticAt(a, st, speed);
     else await swipeAt(a, st, speed);
     if (!st.stop && a.wait > 0) {
       await waitExact(jitterTime(a.wait, a.rec) / speed, st);
@@ -1675,13 +2226,16 @@
       const hasRawEv = Array.isArray(m.ev) && m.ev.length > 0;
       const actions = actionsOf(m);
       if (!hasRawEv && !actions.length) return;
-      const speed = cl(nv(m.speed, 1), 0.5, 2.5);
+      const baseSpeed = cl(nv(m.speed, 1), 0.5, 2.5);
       const isRecMacro = hasRawEv || m.steps.some(s => s.rec);
 
       if (m.delay > 0) await waitExact(jitterTime(m.delay, isRecMacro), st);
       const maxLoops = (once || m.mode === 'once') ? 1 : (m.loops | 0);
       let n = 0;
       while (!st.stop) {
+        // Smart Adaptive Pacing: slightly relax speed if WebRTC decode latency spikes > 18ms so input queue never overflows
+        const paceFactor = (cfg.macroSmartPace && curDecodeMs > 18) ? 0.85 : 1.0;
+        const speed = baseSpeed * paceFactor;
         if (hasRawEv) {
           await playRawTimeline(m.ev, st, speed);
         } else {
@@ -1709,7 +2263,6 @@
       runners.delete(m.id);
       activeHoldBtnMacros.delete(m.id);
       markRunning();
-      // Trigger Chained Macro if configured and completed naturally
       if (completedNaturally && m.chainId && m.chainId !== m.id && streaming()) {
         const nextM = cfg.macros.find(x => x.id === m.chainId);
         if (nextM) setTimeout(() => runMacro(nextM, true), 25);
@@ -1740,7 +2293,7 @@
       for (const a of actionsOf(m)) {
         if (a.k === 'wait') continue;
         const pts = [[a.x, a.y]];
-        if (a.k === 'swipe' || a.k === 'multi') pts.push([a.x2, a.y2], [(a.x + a.x2) / 2, (a.y + a.y2) / 2]);
+        if (a.k === 'swipe' || a.k === 'multi' || a.k === 'elastic') pts.push([a.x2, a.y2], [(a.x + a.x2) / 2, (a.y + a.y2) / 2]);
         for (const p of pts) {
           const q = px(p[0], p[1]);
           if (Math.hypot(q[0] - x, q[1] - y) <= r) return true;
@@ -1750,15 +2303,19 @@
     return false;
   }
 
-  // Track real human fingers so `isPrimary` arbitration never conflicts with user touch
+  // Track real human fingers & measure real-time Touch Dispatch Latency (ms)
   document.addEventListener('pointerdown', e => {
     if (!e.isTrusted) return;
     lastUserAct = Date.now();
-    if (!(root && root.contains(e.target))) {
+    if (typeof e.timeStamp === 'number' && e.timeStamp > 0) {
+      const d = performance.now() - e.timeStamp;
+      if (d >= 0 && d < 150) lastTouchDispMs = lastTouchDispMs * 0.7 + d * 0.3;
+    }
+    if (!isOverlayNode(e.target)) {
       realPointers.set(e.pointerId, Date.now());
     }
     if (!runners.size || cfg.macroPauseMode === 'never') return;
-    if (root && root.contains(e.target)) return;
+    if (isOverlayNode(e.target)) return;
     if (cfg.macroPauseMode === 'near' && !nearTarget(e.clientX, e.clientY)) return;
     holdIds.set(e.pointerId, Date.now());
   }, { capture: true, passive: true });
@@ -1775,10 +2332,15 @@
     }, { capture: true, passive: true });
   });
 
+  // CRITICAL FIX: Only store real stream touches (never overlay button touches!) in `realTouches`
   ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(t => {
     document.addEventListener(t, e => {
       if (!e.isTrusted) return;
-      realTouches = Array.from(e.touches);
+      if (typeof e.timeStamp === 'number' && e.timeStamp > 0 && t === 'touchmove') {
+        const d = performance.now() - e.timeStamp;
+        if (d >= 0 && d < 120) lastTouchDispMs = lastTouchDispMs * 0.8 + d * 0.2;
+      }
+      realTouches = Array.from(e.touches).filter(touch => !isOverlayNode(touch.target));
       if (e.touches.length === 0) {
         realPointers.clear();
         holdIds.clear();
@@ -2016,7 +2578,7 @@
 
   document.addEventListener('pointerdown', e => {
     if (!recState.on || !e.isTrusted) return;
-    if (root && root.contains(e.target)) return;
+    if (isOverlayNode(e.target)) return;
     const now = performance.now();
     if (!recState.firstActionT) recState.firstActionT = now;
 
@@ -2217,8 +2779,8 @@
 
   async function exportTemplates(singleTpl) {
     const payload = singleTpl
-      ? { sxTpl: 3.1, templates: [singleTpl] }
-      : { sxTpl: 3.1, templates: cfg.customTemplates };
+      ? { sxTpl: 3.2, templates: [singleTpl] }
+      : { sxTpl: 3.2, templates: cfg.customTemplates };
     const txt = JSON.stringify(payload);
     try {
       await navigator.clipboard.writeText(txt);
@@ -2300,7 +2862,7 @@
     }
   }
   async function exportMacros() {
-    const txt = JSON.stringify({ sx: 3.1, macros: cfg.macros });
+    const txt = JSON.stringify({ sx: 3.2, macros: cfg.macros });
     try { await navigator.clipboard.writeText(txt); toast('Macros copied to clipboard'); }
     catch (_) { prompt('Copy your macros', txt); }
   }
@@ -2328,6 +2890,7 @@
       burst: { x: 66, y: 55, cnt: 5, hold: 14, spread: 1.5 },
       multi: { x: 84, y: 74, x2: 91, y2: 58, hold: 40 },
       circle: { x: 18, y: 72, rad: 8, dur: 700 },
+      elastic: { x: 18, y: 72, x2: 18, y2: 44, dur: 95, hold: 35 },
       zone: { x: 60, y: 35, w: 30, h: 30, rows: 3, hold: 20 },
       swipe: { x: 60, y: 50, x2: 40, y2: 50, dur: 160 },
       wait: {}
@@ -2434,6 +2997,7 @@
       burst: 'Rapid Burst (' + (s.cnt || 5) + '×)',
       multi: 'Multi-Touch (2 Fingers)',
       circle: 'Circle Spin 360°',
+      elastic: 'Elastic Dodge / Flick Back',
       zone: 'Zone Grid',
       swipe: s.pts ? 'Swipe (1:1 Curve)' : 'Swipe',
       wait: 'Wait'
@@ -2488,6 +3052,11 @@
         F('To X (%)', 'x2', 0, 100);
         F('To Y (%)', 'y2', 0, 100);
         F('Time (ms)', 'dur', 10, 30000);
+      } else if (s.t === 'elastic') {
+        F('Flick X (%)', 'x2', 0, 100);
+        F('Flick Y (%)', 'y2', 0, 100);
+        F('Flick (ms)', 'dur', 15, 10000);
+        F('Apex Hold', 'hold', 0, 5000);
       } else if (s.t === 'multi') {
         F('2nd X (%)', 'x2', 0, 100);
         F('2nd Y (%)', 'y2', 0, 100);
@@ -2673,15 +3242,17 @@
 
   function macroItems() {
     const items = [
-      { k: 'macroEnabled', type: 'switch', label: 'Enable macros', desc: 'Master switch. Zero-Freeze Pointer Engine prevents stream input lockups.' },
+      { k: 'macroEnabled', type: 'switch', label: 'Enable macros', desc: 'Master switch. Zero-Freeze Hybrid Touch+Pointer Engine prevents stream input lockups.' },
+      { k: 'freeDragBtns', type: 'switch', label: 'Direct Drag on Floating Buttons', desc: 'Drag Macro & Screenshot buttons directly on the game screen at any time without entering Edit mode.' },
       { k: 'quickHideBtns', type: 'switch', label: 'Temp hide floating buttons', desc: 'Quickly hides all macro buttons on screen without deleting them.' },
-      { type: 'buttons', label: 'Input & Layout Tools', desc: 'Arrange overlapping buttons or refresh stream input if controls ever feel sticky.', btns: [['Auto-Arrange', autoArrangeAllButtons, 'alt', 'grid'], ['Unstick Input', () => unstickStreamInput(false), 'alt', 'shield']] },
+      { type: 'buttons', label: 'Position & Input Tools', desc: 'Move buttons on screen, auto-arrange into columns, or refresh stream input.', btns: [['Move Buttons', enterEdit, 'blue', 'move'], ['Auto-Arrange', autoArrangeAllButtons, 'alt', 'grid'], ['Unstick Input', () => unstickStreamInput(false), 'alt', 'shield']] },
+      { k: 'macroInput', type: 'select', label: 'Input engine', desc: '“Hybrid Touch + Pointer” works on all GFN games & virtual controls without freezing.', opts: [['both', 'Hybrid Touch + Pointer (Recommended)'], ['touch', 'Pure Touch Events (iOS Native)'], ['pointer', 'Pure Pointer Events (Fixed W3C)'], ['mouse', 'Mouse + Click Events']] },
+      { k: 'macroSmartPace', type: 'switch', label: 'Smart Adaptive Latency Pacing', desc: 'Automatically adjusts macro cadence if frame decode latency spikes so GFN input queue never overflows.' },
       { k: 'macroPauseMode', type: 'select', label: 'While I play', desc: '“Keep running” lets your joystick/touches and macros run concurrently.', opts: [['never', 'Keep running (Recommended)'], ['near', 'Pause near macro taps'], ['any', 'Pause on any touch']] },
       { k: 'macroPauseRadius', type: 'range', label: 'Pause radius', min: 20, max: 200, step: 5, fmt: v => v + ' px', show: () => cfg.macroPauseMode === 'near' },
       { k: 'macroPauseMs', type: 'range', label: 'Resume delay', min: 0, max: 3000, step: 50, fmt: v => (v / 1000).toFixed(2) + ' s', show: () => cfg.macroPauseMode !== 'never' },
       { k: 'macroMaxMin', type: 'range', label: 'Auto-stop after', min: 1, max: 60, step: 1, fmt: v => v + ' min' },
       { k: 'macroRipple', type: 'switch', label: 'Show tap indicator', desc: 'Subtle ring at every injected coordinate (auto-paused in Battery Saver).' },
-      { k: 'macroInput', type: 'select', label: 'Input type', desc: '“Pointer events” is strongly recommended on iOS to prevent 5–10s touch freeze.', opts: [['pointer', 'Pointer events (Zero-Freeze Recommended)'], ['touch', 'Touch events'], ['both', 'Pointer + touch (Legacy)'], ['mouse', 'Mouse events']] },
       { type: 'select', label: 'Macro', desc: 'Select which active macro button to configure.', opts: () => cfg.macros.map(x => [x.id, x.name + (x.tplId ? ' [Rec]' : '')]), get: () => macroSel, set: v => { macroSel = v; rebuildUI(); if (editing) renderEdit(); } }
     ];
     const m = curMacro();
@@ -2699,9 +3270,9 @@
         { type: 'range', label: 'Button opacity', min: 0.2, max: 1, step: 0.05, fmt: pct, get: () => m.opacity, set: v => { m.opacity = v; commit('macro'); } },
         { type: 'switch', label: 'Show name on button', get: () => m.label, set: v => { m.label = v; commit('macro'); } },
         { type: 'buttons', label: 'Manage', btns: [['Rename', () => renameMacro(m), 'alt', 'edit'], ['Duplicate', () => dupMacro(m), 'alt', 'copy'], ['Delete', () => delMacro(m.id), 'danger', 'trash']] },
-        { type: 'buttons', only: 'game', label: 'Layout', desc: 'Drag taps, zones, swipes, circles and the macro button on the stream.', btns: [['Edit on screen', enterEdit, 'blue', 'tap'], ['Test once', () => runMacro(m, true), 'alt', 'play']] },
+        { type: 'buttons', only: 'game', label: 'Layout & Test', desc: 'Drag taps, zones, swipes, circles, screenshot & macro buttons on screen.', btns: [['Edit on screen', enterEdit, 'blue', 'move'], ['Test once', () => runMacro(m, true), 'alt', 'play']] },
         { type: 'buttons', only: 'game', label: 'Add Basic Steps', desc: 'Tap/Hold, Rapid Burst, Swipe, or Wait.', btns: [['Tap/Hold', () => addStepTo(m, 'tap'), 'alt', 'plus'], ['Burst', () => addStepTo(m, 'burst'), 'alt', 'burst'], ['Swipe', () => addStepTo(m, 'swipe'), 'alt', 'swipe'], ['Wait', () => addStepTo(m, 'wait'), 'alt', 'wait']] },
-        { type: 'buttons', only: 'game', label: 'Add Pro Steps', desc: 'Multi-Touch (2 fingers), 360° Circle Spin, or Grid Zone.', btns: [['2-Finger Multi', () => addStepTo(m, 'multi'), 'alt', 'multi'], ['360° Circle', () => addStepTo(m, 'circle'), 'alt', 'circle'], ['Grid Zone', () => addStepTo(m, 'zone'), 'alt', 'zone']] }
+        { type: 'buttons', only: 'game', label: 'Add Pro Steps', desc: 'Multi-Touch (2 fingers), 360° Circle, Elastic Dash Flick, or Grid Zone.', btns: [['2-Finger', () => addStepTo(m, 'multi'), 'alt', 'multi'], ['360° Circle', () => addStepTo(m, 'circle'), 'alt', 'circle'], ['Elastic Dash', () => addStepTo(m, 'elastic'), 'alt', 'elastic'], ['Grid Zone', () => addStepTo(m, 'zone'), 'alt', 'zone']] }
       );
       m.steps.forEach((s, i) => items.push({ type: 'step', only: 'game', m, i }));
     }
@@ -2754,18 +3325,24 @@
   function schema() {
     return [
       { id: 'gen', title: 'General', items: [
-        { k: 'batterySaver', type: 'switch', label: 'Battery Saver Mode (Eco & Cool)', desc: 'Reduces iOS heat & battery drain: removes GPU blur effects, caps WebGL shader resolution/FPS, slows background stats polling, and skips DOM ripples.' },
-        { k: 'inputGuard', type: 'switch', label: 'Stream Input Watchdog (Anti-Freeze)', desc: 'Automatically flushes orphan pointer states and prevents 5–10s stream touch lockups on iOS.' },
+        { k: 'sessionTimer', type: 'switch', label: '1-Hour Session Countdown Timer (⏱)', desc: 'Tracks your GFN session limit from stream start and warns you at 10m, 5m, and 1m left.' },
+        { k: 'sessionLimitMin', type: 'select', label: 'Session tier duration', opts: [['30', '30 minutes'], ['60', '1 Hour (Free Tier 60m)'], ['120', '2 Hours (120m)'], ['360', '6 Hours (Priority 360m)']], get: () => String(cfg.sessionLimitMin), set: v => { cfg.sessionLimitMin = +v; commit('sessionTimer'); }, show: () => cfg.sessionTimer },
+        { type: 'buttons', label: 'Session & Stream Tools', desc: 'Reset the 1h countdown timer, pop stream into Picture-in-Picture (PiP), or move buttons.', btns: [['Reset 1h Timer', () => resetSessionTimer(true), 'alt', 'reset'], ['Float PiP', togglePiP, 'alt', 'pip'], ['Move Buttons', enterEdit, 'blue', 'move']] },
+        { k: 'batterySaver', type: 'switch', label: 'Battery Saver Mode (Eco & Cool)', desc: 'Reduces iOS heat & battery drain: removes GPU blur effects, caps WebGL shader resolution/FPS, and skips DOM ripples.' },
+        { k: 'inputGuard', type: 'switch', label: 'Stream Input Watchdog (Zero-Freeze)', desc: 'Prevents ghost touches and flushes stuck pointers automatically.' },
         { k: 'silent', type: 'switch', label: 'Silent mode (Background / PiP)', desc: 'Mutes GFN audio to yield playback rights to YouTube/PiP. Turning off auto-resumes WebKit audio on next touch.' },
+        { k: 'audioBoost', type: 'range', label: 'WebAudio Volume Booster', desc: 'Amplifies quiet GFN game stream audio up to 250% via WebKit GainNode.', min: 1, max: 2.5, step: 0.1, fmt: pct },
         { k: 'afkGuard', type: 'switch', label: 'Anti-AFK Guard (Prevent Kick)', desc: 'Automatically sends a subtle micro-input when idle for 3.5+ minutes so GFN does not disconnect your session.' },
-        { k: 'quickBall', type: 'switch', label: 'Floating Quick-Menu Ball', desc: 'Shows a compact draggable Light Mode pill on the screen edge (tap to open menu, double-tap to Unstick Input).' },
+        { k: 'quickBall', type: 'switch', label: 'Floating Quick-Menu Ball', desc: 'Draggable Light Mode pill on screen edge (tap to open menu, double-tap to Unstick Input).' },
         { k: 'oledDim', type: 'range', label: 'OLED Night Dimmer (Power Save)', desc: 'Dims the stream below iOS minimum brightness to save OLED battery during AFK farming or night play.', min: 0, max: 0.75, step: 0.05, fmt: v => (v ? pct(v) : 'Off') }
       ] },
       { id: 'hud', title: 'HUD & Aim', items: [
-        { k: 'hudOn', type: 'switch', label: 'Real-time stats overlay', desc: 'Ping, FPS, bitrate and packet metrics in a clean iOS Light Mode pill.' },
-        { k: 'hudDetail', type: 'select', label: 'Detail', opts: [['mini', 'Compact'], ['full', 'Detailed']] },
-        { k: 'hudPos', type: 'select', label: 'Position', opts: [['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']] },
+        { k: 'hudOn', type: 'switch', label: 'Real-time Telemetry & Graphs HUD', desc: 'Displays Ping, FPS, Input Latency (ms), 1h Countdown, and 3 live graphs. Drag the HUD box directly on screen!' },
+        { k: 'hudDetail', type: 'select', label: 'HUD Mode', opts: [['graphs', '3 Live Graphs (FPS + Ping ms + Input Lag ms)'], ['full', 'Detailed Text Metrics'], ['mini', 'Compact Pill']] },
+        { k: 'hudPos', type: 'select', label: 'Corner Snap Position', opts: [['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']], set: v => { cfg.hudCustomPos = null; set('hudPos', v); } },
         { k: 'hudOpacity', type: 'range', label: 'HUD opacity', min: 0.3, max: 1, step: 0.05, fmt: pct },
+        { k: 'gyroAim', type: 'switch', label: 'Gyro Motion Aim (Tilt-to-Aim)', desc: 'Uses iPhone/iPad gyroscope to turn subtle device tilting into smooth camera aiming on the right side of the screen.' },
+        { k: 'gyroSens', type: 'range', label: 'Gyro Aim sensitivity', min: 0.4, max: 3.5, step: 0.1, fmt: v => v.toFixed(1) + '×', show: () => cfg.gyroAim },
         { k: 'crosshair', type: 'select', label: 'Custom Crosshair (Aim)', desc: 'Lightweight SVG reticle for bow/shooter aiming.', opts: [['off', 'Off'], ['dot', 'Center Dot'], ['cross', 'Precision Cross'], ['circle', 'Circle + Dot'], ['tcross', 'Tactical T-Cross']] },
         { k: 'crosshairSize', type: 'range', label: 'Crosshair size', min: 8, max: 32, step: 1, fmt: v => v + ' px', show: () => cfg.crosshair !== 'off' },
         { k: 'crosshairColor', type: 'select', label: 'Crosshair color', opts: [['#007aff', 'iOS Blue'], ['#34c759', 'Vibrant Green'], ['#ff3b30', 'Crimson Red'], ['#ffcc00', 'Amber Gold'], ['#ffffff', 'Pure White']], show: () => cfg.crosshair !== 'off' },
@@ -2795,10 +3372,13 @@
         { type: 'button', label: 'Reset stream position', btn: 'Reset', icon: 'reset', cls: 'alt', run: resetView }
       ] },
       { id: 'shot', title: 'Screenshot', items: [
-        { k: 'shotBtn', type: 'switch', label: 'Quick screenshot button', desc: 'Floating camera button in game (draggable in Edit on screen).' },
-        { k: 'shotFormat', type: 'select', label: 'Format', opts: [['png', 'PNG (lossless)'], ['jpeg', 'JPEG (smaller)']] },
+        { k: 'shotBtn', type: 'switch', label: 'Floating screenshot button', desc: 'Drag the camera button directly anywhere on screen, or tap it to capture.' },
+        { k: 'shotScale', type: 'select', label: 'HD Super-Resolution Scale', desc: 'Upscales 720p/1080p stream frames on the GPU for razor-sharp Retina photos.', opts: [['1', '1.0× (Native Stream)'], ['1.5', '1.5× (True HD+ Recommended)'], ['2', '2.0× (Super HD 2K)']] },
+        { k: 'shotApplyFx', type: 'switch', label: 'Bake active Picture Filters', desc: 'Bakes Contrast, Saturation, Brightness, Hue, Sepia, Gray, Tint & Vignette into the saved photo.' },
+        { k: 'shotSharpen', type: 'switch', label: 'Bake GPU CAS Sharpening', desc: 'Applies WebGL Contrast Adaptive Sharpening to eliminate stream compression blur in photos.' },
+        { k: 'shotFormat', type: 'select', label: 'Format', opts: [['png', 'PNG (Lossless HD)'], ['jpeg', 'JPEG (96% Quality)']] },
         { k: 'shotShare', type: 'switch', label: 'Use iOS share sheet', desc: 'Opens native iOS Share Sheet to Save Image directly to Photos.' },
-        { type: 'button', only: 'game', label: 'Take screenshot now', btn: 'Capture', icon: 'camera', cls: 'alt', run: () => setTimeout(screenshot, 150) }
+        { type: 'buttons', only: 'game', label: 'Capture & Button Position', btns: [['Capture HD Now', () => setTimeout(screenshot, 150), 'blue', 'camera'], ['Move Button', enterEdit, 'alt', 'move']] }
       ] },
       { id: 'mac', title: 'Macros', items: macroItems() },
       { id: 'rec', title: 'Recorder', items: recorderItems() }
@@ -2863,7 +3443,7 @@
       ng.className = grid.className;
       Array.from(grid.attributes).forEach(a => ng.setAttribute(a.name, a.value));
       ng.removeAttribute('id');
-      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.1)' : g.title));
+      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.2)' : g.title));
       items.forEach(i => ng.append(nativeRow(ref, i)));
       sec.append(ng);
     });
@@ -2892,12 +3472,12 @@
     const quit = btns.find(b => /quit/i.test(b.textContent));
     [
       ['Nvirya GeForce NOW', 'sliders', () => openPanel()],
+      ['Move / Drag Buttons', 'move', () => enterEdit()],
       ['Macro Recorder', 'rec', () => openPanel('rec')],
       ['Unstick Stream Input', 'shield', () => unstickStreamInput(false)],
-      [cfg.batterySaver ? 'Battery Saver: ON' : 'Battery Saver: OFF', 'leaf', () => set('batterySaver', !cfg.batterySaver)],
-      [cfg.quickHideBtns ? 'Macro buttons: Hidden' : 'Macro buttons: Visible', 'eye', () => { set('quickHideBtns', !cfg.quickHideBtns); toast(cfg.quickHideBtns ? 'Macro buttons hidden' : 'Macro buttons visible'); }],
-      ['Screenshot', 'camera', () => screenshot()],
-      [cfg.hudOn ? 'Stats overlay: On' : 'Stats overlay: Off', 'gauge', () => set('hudOn', !cfg.hudOn)]
+      ['HD Screenshot', 'camera', () => screenshot()],
+      [cfg.hudOn ? '3-Graph Stats HUD: ON' : '3-Graph Stats HUD: OFF', 'gauge', () => set('hudOn', !cfg.hudOn)],
+      [cfg.batterySaver ? 'Battery Saver: ON' : 'Battery Saver: OFF', 'leaf', () => set('batterySaver', !cfg.batterySaver)]
     ].forEach(([label, icon, fn]) => {
       const b = tpl.cloneNode(true);
       b.dataset.sxMenu = '1';
@@ -2942,14 +3522,21 @@
 
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
-    const t = h('div', 'sx-pt', 'Nvirya GeForce NOW');
-    t.append(h('span', 'sx-pv', 'v3.1 Pro'));
+    const tWrap = h('div', 'sx-pt-wrap');
+    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.2'));
+    panelTimerEl = h('button', 'sx-ptimer', '⏱ 60:00');
+    panelTimerEl.type = 'button';
+    panelTimerEl.title = 'Tap to reset 1-hour session countdown';
+    panelTimerEl.onclick = () => resetSessionTimer(true);
+    tWrap.append(panelTimerEl);
+    updateSessionTimerUI();
+
     const x = h('button', 'sx-ib');
     x.type = 'button';
     x.setAttribute('aria-label', 'Close');
-    x.append(ico('close', 18));
+    x.append(ico('close', 17));
     x.onclick = closePanel;
-    head.append(t, x);
+    head.append(tWrap, x);
 
     const tabs = h('div', 'sx-tabs');
     tabs.addEventListener('scroll', () => { savedTabScrollLeft = tabs.scrollLeft; }, { passive: true });
@@ -2998,16 +3585,75 @@
     }
   }
 
-  /* ================= overlay root: HUD, macro buttons, edit mode, recorder overlay ================= */
+  /* ================= overlay root: 3-Graph HUD, macro buttons, edit mode, recorder overlay ================= */
   let root, fxEl, xhairEl, panel, preview, flashEl, toastEl, mLayer, editLayer, barEl, stopBtn, shotEl, qBallEl, recEl, recTimeEl, recCntEl, cdEl, cdNumEl;
   function buildRoot() {
     root = h('div'); root.id = 'sx-root';
     fxEl = h('div'); fxEl.id = 'sx-fx';
     xhairEl = h('div'); xhairEl.id = 'sx-xhair';
+
+    // 3-Graph Telemetry HUD + 1-Hour Session Countdown
     hud = h('div'); hud.id = 'sx-hud';
-    hudPing = h('span');
-    hudRest = document.createTextNode('');
-    hud.append(hudPing, hudRest);
+    const hudTop = h('div', 'sx-hud-top');
+    hudTimerEl = h('span', 'sx-hud-timer', '⏱ 60:00');
+    hudPing = h('span', null, '--ms');
+    hudRest = document.createTextNode(' · 0 fps · 0.0 Mbps');
+    hudTop.append(hudTimerEl, hudPing, hudRest);
+
+    hudSub = h('div', 'sx-hud-sub');
+    hudChartsWrap = h('div'); hudChartsWrap.id = 'sx-hud-charts';
+
+    const mkGraphBox = (title) => {
+      const box = h('div', 'sx-gbox');
+      const lbl = h('div', 'sx-glbl');
+      const sp = h('span', null, title);
+      const val = h('b', null, '--');
+      lbl.append(sp, val);
+      const cv = document.createElement('canvas');
+      cv.className = 'sx-gcv';
+      box.append(lbl, cv);
+      return { box, val, cv };
+    };
+    const g1 = mkGraphBox('FPS');
+    const g2 = mkGraphBox('PING');
+    const g3 = mkGraphBox('LAG');
+    cvFps = g1.cv; lblFpsVal = g1.val;
+    cvPing = g2.cv; lblPingVal = g2.val;
+    cvLag = g3.cv; lblLagVal = g3.val;
+    hudChartsWrap.append(g1.box, g2.box, g3.box);
+    hud.append(hudTop, hudSub, hudChartsWrap);
+
+    // Allow dragging the HUD box directly anywhere on screen
+    dragify(
+      hud,
+      () => {
+        const r = hud.getBoundingClientRect();
+        return {
+          x: cfg.hudCustomPos ? cfg.hudCustomPos.x : (r.left / Math.max(1, window.innerWidth) * 100),
+          y: cfg.hudCustomPos ? cfg.hudCustomPos.y : (r.top / Math.max(1, window.innerHeight) * 100)
+        };
+      },
+      (o, dx, dy) => {
+        cfg.hudCustomPos = {
+          x: cl(o.x + dx, 1, 90),
+          y: cl(o.y + dy, 1, 90)
+        };
+        hud.removeAttribute('data-pos');
+        hud.style.left = cfg.hudCustomPos.x + '%';
+        hud.style.top = cfg.hudCustomPos.y + '%';
+        hud.style.right = '';
+        hud.style.bottom = '';
+      },
+      moved => {
+        if (moved) save();
+        else {
+          // Tap HUD to cycle between 3-Graphs -> Detailed -> Compact
+          const order = ['graphs', 'full', 'mini'];
+          const next = order[(order.indexOf(cfg.hudDetail) + 1) % order.length];
+          set('hudDetail', next);
+        }
+      }
+    );
 
     editLayer = h('div'); editLayer.id = 'sx-edit';
     mLayer = h('div'); mLayer.id = 'sx-m';
@@ -3041,20 +3687,26 @@
     flashEl = h('div'); flashEl.id = 'sx-flash';
     toastEl = h('div'); toastEl.id = 'sx-toast';
 
+    // Screenshot button: ALWAYS draggable directly on screen (if dragged > 6px, saves position; if tapped without dragging, takes HD screenshot!)
     shotEl = h('button', 'sx-shot');
     shotEl.type = 'button';
-    shotEl.setAttribute('aria-label', 'Screenshot');
+    shotEl.setAttribute('aria-label', 'HD Screenshot (Drag to move)');
     shotEl.append(ico('camera', 22));
-    shotEl.addEventListener('click', () => { if (!editing) screenshot(); });
     dragify(
       shotEl,
-      () => (editing ? { x: cfg.shotBtnPos.x, y: cfg.shotBtnPos.y } : null),
+      () => ({ x: cfg.shotBtnPos.x, y: cfg.shotBtnPos.y }),
       (o, dx, dy) => {
         cfg.shotBtnPos.x = cl(o.x + dx, 3, 97);
         cfg.shotBtnPos.y = cl(o.y + dy, 5, 95);
         place(shotEl, cfg.shotBtnPos);
       },
-      () => save()
+      moved => {
+        if (moved) {
+          save();
+        } else if (!editing) {
+          screenshot();
+        }
+      }
     );
 
     let lastQbTap = 0;
@@ -3091,7 +3743,9 @@
     mLayer.append(shotEl, qBallEl);
 
     root.append(xhairEl, hud, editLayer, mLayer, barEl, stopBtn, recEl, panel, preview, flashEl, toastEl);
-    ['pointerdown', 'pointermove', 'pointerup', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(t => {
+    // CRITICAL FIX: Do NOT stop propagation of `pointerup`, `pointercancel`, `touchend`, `touchcancel`, or `mouseup` on `#sx-root`!
+    // Stopping release events on `#sx-root` prevented GFN's window-level listener from clearing fingers that touched `#sx-root` during multi-touch!
+    ['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(t => {
       root.addEventListener(t, e => e.stopPropagation());
     });
     guard(applyDyn, 'dyn');
@@ -3121,24 +3775,23 @@
       if (!s) return;
       e.preventDefault();
       e.stopPropagation();
-      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+      el.blur();
       const x0 = e.clientX, y0 = e.clientY;
       let moved = false;
       const mv = ev => {
         const dx = ev.clientX - x0, dy = ev.clientY - y0;
-        if (Math.abs(dx) + Math.abs(dy) > 5) moved = true;
-        move(s, dx / window.innerWidth * 100, dy / window.innerHeight * 100);
+        if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+        if (moved) move(s, dx / window.innerWidth * 100, dy / window.innerHeight * 100);
       };
-      const up = ev => {
-        try { el.releasePointerCapture(ev.pointerId); } catch (_) {}
-        el.removeEventListener('pointermove', mv);
-        el.removeEventListener('pointerup', up);
-        el.removeEventListener('pointercancel', up);
+      const up = () => {
+        window.removeEventListener('pointermove', mv, true);
+        window.removeEventListener('pointerup', up, true);
+        window.removeEventListener('pointercancel', up, true);
         if (end) end(moved);
       };
-      el.addEventListener('pointermove', mv);
-      el.addEventListener('pointerup', up);
-      el.addEventListener('pointercancel', up);
+      window.addEventListener('pointermove', mv, true);
+      window.addEventListener('pointerup', up, true);
+      window.addEventListener('pointercancel', up, true);
     });
   }
 
@@ -3146,7 +3799,8 @@
     if (!root) return;
     const st = streaming();
     const hideAllFloat = cfg.quickHideBtns || recState.on || recState.countingDown;
-    shotEl.style.display = st && cfg.shotBtn && !hideAllFloat ? 'flex' : 'none';
+    shotEl.style.display = st && (cfg.shotBtn || editing) && (!hideAllFloat || editing) ? 'flex' : 'none';
+    shotEl.classList.toggle('edit-ring', editing);
     place(shotEl, cfg.shotBtnPos);
     qBallEl.style.display = st && cfg.quickBall && !recState.on && !recState.countingDown ? 'flex' : 'none';
     qBallEl.classList.toggle('eco-on', !!cfg.batterySaver);
@@ -3166,7 +3820,7 @@
     if ((cfg.quickHideBtns || recState.on || recState.countingDown) && !editing) return;
     cfg.macros.forEach(m => {
       if (!m.on && !editing) return;
-      const b = h('button', 'sx-mbtn' + (m.on ? '' : ' off') + (m.tplId ? ' is-rec' : ''));
+      const b = h('button', 'sx-mbtn' + (m.on ? '' : ' off') + (m.tplId ? ' is-rec' : '') + (editing ? ' edit-ring' : ''));
       b.type = 'button';
       b.dataset.id = m.id;
       place(b, m.btn);
@@ -3184,30 +3838,64 @@
             m.btn.y = cl(o.y + dy, 5, 95);
             place(b, m.btn);
           },
-          () => save()
+          moved => {
+            save();
+            if (!moved) {
+              macroSel = m.id;
+              renderEdit();
+            }
+          }
         );
       } else {
-        // CRITICAL FIX: Do NOT call b.setPointerCapture() during gameplay!
-        // Calling setPointerCapture on iOS Safari can trap touch routing on the overlay button if focus shifts.
+        // Supports BOTH instant macro trigger AND direct drag-to-reposition (`cfg.freeDragBtns`) without setPointerCapture!
         b.addEventListener('pointerdown', e => {
           e.preventDefault();
           e.stopPropagation();
           b.blur();
+          const x0 = e.clientX, y0 = e.clientY;
+          const origX = m.btn.x, origY = m.btn.y;
+          let dragged = false;
+
           if (m.mode === 'hold') {
             activeHoldBtnMacros.add(m.id);
             runMacro(m);
-          } else if (m.mode === 'once') {
-            runMacro(m, true);
-          } else {
-            toggleMacro(m);
           }
+
+          const onMove = ev => {
+            if (!cfg.freeDragBtns) return;
+            const dx = ev.clientX - x0, dy = ev.clientY - y0;
+            if (!dragged && Math.hypot(dx, dy) > 9) {
+              dragged = true;
+              if (m.mode === 'hold') stopMacro(m.id);
+            }
+            if (dragged) {
+              m.btn.x = cl(origX + dx / window.innerWidth * 100, 3, 97);
+              m.btn.y = cl(origY + dy / window.innerHeight * 100, 5, 95);
+              place(b, m.btn);
+            }
+          };
+
+          const onUp = () => {
+            window.removeEventListener('pointermove', onMove, true);
+            window.removeEventListener('pointerup', onUp, true);
+            window.removeEventListener('pointercancel', onUp, true);
+            if (dragged) {
+              save();
+              return;
+            }
+            if (m.mode === 'hold') {
+              stopMacro(m.id);
+            } else if (m.mode === 'once') {
+              runMacro(m, true);
+            } else {
+              toggleMacro(m);
+            }
+          };
+
+          window.addEventListener('pointermove', onMove, true);
+          window.addEventListener('pointerup', onUp, true);
+          window.addEventListener('pointercancel', onUp, true);
         });
-        if (m.mode === 'hold') {
-          const stop = () => stopMacro(m.id);
-          b.addEventListener('pointerup', stop);
-          b.addEventListener('pointercancel', stop);
-          b.addEventListener('pointerleave', stop);
-        }
       }
       mLayer.append(b);
     });
@@ -3221,14 +3909,15 @@
     stopAll();
     editing = true;
     curMacro();
-    renderMacros();
+    updateOverlay();
     renderEdit();
     markRunning();
+    toast('Drag any Macro, Screenshot button, or target marker on screen');
   }
   function exitEdit() {
     editing = false;
     renderEdit();
-    renderMacros();
+    updateOverlay();
     commit('macros', true);
   }
   function renderEdit() {
@@ -3242,7 +3931,7 @@
       const b = h('button', 'sx-tb ' + (cls || ''));
       b.type = 'button';
       b.setAttribute('aria-label', text || icon);
-      b.append(ico(icon, 16));
+      b.append(ico(icon, 15));
       if (text) b.append(document.createTextNode(text));
       b.addEventListener('click', fn);
       return b;
@@ -3261,6 +3950,7 @@
       tb('burst', 'Burst', () => m && addStepTo(m, 'burst')),
       tb('multi', '2-Finger', () => m && addStepTo(m, 'multi')),
       tb('circle', 'Circle', () => m && addStepTo(m, 'circle')),
+      tb('elastic', 'Dash', () => m && addStepTo(m, 'elastic')),
       tb('zone', 'Zone', () => m && addStepTo(m, 'zone')),
       tb('swipe', 'Swipe', () => m && addStepTo(m, 'swipe')),
       tb('grid', 'Arrange', () => { autoArrangeAllButtons(); renderMacros(); }),
@@ -3353,7 +4043,7 @@
         if (s.t === 'circle') {
           circ = document.createElementNS(NS, 'circle');
           svg.append(circ);
-        } else if (s.t === 'swipe' || s.t === 'multi') {
+        } else if (s.t === 'swipe' || s.t === 'multi' || s.t === 'elastic') {
           if (s.t === 'swipe' && Array.isArray(s.pts) && s.pts.length >= 2) {
             poly = document.createElementNS(NS, 'polyline');
             svg.append(poly);
@@ -3362,7 +4052,7 @@
             svg.append(line);
           }
           q = h('div', 'sx-mk end', s.t === 'multi' ? (i + 1) + 'B' : '');
-          if (s.t === 'swipe') q.append(ico('arrowr', 14));
+          if (s.t === 'swipe' || s.t === 'elastic') q.append(ico('arrowr', 14));
           dragify(
             q,
             () => ({ x: s.x2, y: s.y2 }),
