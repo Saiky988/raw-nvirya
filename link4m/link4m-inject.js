@@ -1,6 +1,6 @@
-/* Nvirya Link4M Injector */
+/* Nvirya Link4M Remote Injector */
 if (typeof $response === 'undefined') {
-  if (typeof $request !== 'undefined' && $request.headers) {
+  if (typeof $request !== 'undefined' &&$request.headers) {
     let reqHeaders = $request.headers;
     delete reqHeaders['Accept-Encoding'];
     delete reqHeaders['accept-encoding'];
@@ -30,13 +30,8 @@ if (typeof $response === 'undefined') {
             window.unsafeWindow = window;
             const gmFetch = function(details) {
               const method = (details.method || 'GET').toUpperCase();
-              const opts = {
-                method: method,
-                headers: details.headers || {}
-              };
-              if (details.data && method !== 'GET' && method !== 'HEAD') {
-                opts.body = details.data;
-              }
+              const opts = { method: method, headers: details.headers || {} };
+              if (details.data && method !== 'GET' && method !== 'HEAD') opts.body = details.data;
               fetch(details.url, opts)
                 .then(async res => {
                   const text = await res.text();
@@ -58,7 +53,6 @@ if (typeof $response === 'undefined') {
             window.GM = window.GM || {};
             window.GM.xmlHttpRequest = gmFetch;
 
-            console.log('[Nvirya Link4M] Actived');
             const s = document.createElement('script');
             s.src = 'https://raw.nvirya.com/link4m/link4m.user.js?t=' + Date.now();
             s.crossOrigin = 'anonymous';
