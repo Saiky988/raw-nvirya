@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.2
+// @version      3.3
 // @author       Nvirya
-// @description  iOS PWA bypass, Zero-Freeze Hybrid Touch+Pointer Engine, 1h Session Countdown Timer, 3-Graph Telemetry HUD (FPS / Ping ms / Input Lag ms), True HD GPU Screenshot + Filter Baker, Direct Button Drag, Audio Booster, Gyro Aim, PiP & Pro Macro Suite.
+// @description  iOS PWA bypass, UI Scale (100%–250%) + GFN Native Scroll Fix, 24 Studio Game Filters, Ultra-Crisp 2K GPU Screenshot + Unsharp & Filter Baker, 1h Session Countdown, 3-Graph Telemetry HUD, Zero-Freeze Hybrid Input & Pro Macro Suite.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
 // @match        https://play.geforcenow.com/*
 // @run-at       document-start
@@ -11,30 +11,16 @@
 // ==/UserScript==
 
 /*
- * v3.2 Release Notes
- * 1. CRITICAL FIX: "pointer (Safe) không hoạt động" & "vẫn đơ thao tác (5–10s input freeze)":
- *    - Root Cause 1 (`pointer` mode broken in v3.1): v3.1 set `button: down ? 0 : -1` on PointerEvents (sending `button: -1` on `pointerup`, which violates the W3C PointerEvent spec where `pointerup` MUST have `button: 0` and `pointermove` must have `button: -1`) AND disabled `TouchEvent` dispatch by default, whereas GFN on iOS WebKit binds `touchstart`/`touchmove`/`touchend` for in-game virtual controls.
- *      • Fix: Restored Smart Hybrid `Touch + Pointer` (`'both'`) as the default (and auto-migrated v3.1 configs back to `'both'`), and fixed `PointerEvent` `button` to `phase === 'move' ? -1 : 0` so all 4 input modes (`both`, `touch`, `pointer`, `mouse`) work 100%.
- *    - Root Cause 2 (Why the 5–10s freeze happened when tapping Macro/Overlay buttons while playing):
- *      • In iOS WebKit, `TouchEvent.touches` is document-wide. When your finger tapped a floating button inside `#sx-root`:
- *        (a) `document.addEventListener('touchstart', ...)` captured `realTouches = Array.from(e.touches)` which INCLUDED your finger on `.sx-mbtn`, and `inject()` passed `realTouches` into synthetic `TouchEvent`s sent to GFN's stream!
- *        (b) When your finger lifted off `.sx-mbtn`, `#sx-root` called `e.stopPropagation()` on `touchend` and `pointerup`! Thus GFN NEVER saw your finger lift up, leaving a permanent "ghost finger" locked in GFN's multi-touch table for 5–10s until pulling down the iOS Notification Center forced a native `touchcancel`!
- *      • Fix:
- *        (1) `realTouches` now strictly filters out any touch targeting `#sx-root` (`!isOverlayNode(t.target)`).
- *        (2) `#sx-root` NO LONGER calls `stopPropagation()` on `touchend`, `touchcancel`, `pointerup`, `pointercancel`, or `mouseup`, so release events always reach `window`/`document`.
- *        (3) Enforced `touch-action: none` & `-webkit-touch-callout: none` on `#remote-video` during streaming so iOS WebKit gesture recognizers never stall touch delivery.
- *        (4) Upgraded `unstickStreamInput()` to dispatch a full native-equivalent `touchcancel` + `touchend (touches:[])` + `pointercancel` flush on GFN's stream receiver.
- * 2. 1-Hour Session Countdown Timer (`⏱ 60:00`):
- *    - Automatically starts counting down from 60:00 (configurable 30m / 60m / 120m / 360m) when the stream starts.
- *    - Shows live countdown in both the HUD and Panel Header with automatic warnings at 10m, 5m, and 1m remaining.
- * 3. 3-Graph Real-Time Telemetry HUD (`FPS`, `Ping ms`, `Input Lag ms` / Độ trễ thao tác):
- *    - Live Retina `<canvas>` sparkline/area charts for Stream FPS, Network Ping (ms), and Total Input/Action Latency (Touch Dispatch + Decode + Frame Pacing ms).
- * 4. True HD Super-Resolution Screenshot + Active Filter & CAS Sharpening Baker:
- *    - Renders screenshots via an offscreen WebGL HD pipeline (up to 1.5x / 2x Super-Resolution) that bakes in WebGL CAS Sharpening AND all active Picture Filters (Contrast, Saturation, Brightness, Hue, Sepia, Grayscale, Tint, Vignette) — bypassing iOS WebKit's lack of `ctx.filter` support!
- * 5. Direct Drag & Position Editor for Screenshot, Macro Buttons, Quick-Ball & HUD:
- *    - Drag the Screenshot button, Macro buttons, Quick-Ball, or HUD directly on screen at any time, or use 1-tap "Move Buttons on Screen" from any tab.
- * 6. Complete Native iOS 18 Grouped Inset Light Mode UI & High-IQ Extras:
- *    - WebAudio Volume Booster (up to 250%), 1-Tap Picture-in-Picture (PiP), Gyro Motion Aim (Tilt-to-Aim), and Elastic Dash Macro step.
+ * v3.3 Release Notes
+ * 1. UI Scale Engine (100% – 250%) & GFN Native Settings Scroll Unlocker:
+ *    - Added `uiScale` (80% – 250% slider + 1-tap `100% | 150% | 200%` quick cycle button right in the Panel Header and General tab) with automatic inverse-viewport compensation (`calc((100% - 16px) / var(--sx-ui-scale))`) so even if you zoom Safari/PWA down to 50%, you can scale the script UI to 150% or 200% without a single pixel clipping off screen!
+ *    - Also added `btnGlobalScale` (80% – 220%) to scale all floating Macro / Screenshot / Quick-Ball buttons together.
+ *    - Added `fixGfnScroll` (ON by default): unlocks vertical touch scrolling (`overflow-y: auto !important; -webkit-overflow-scrolling: touch !important`) on GFN's native Lobby Settings and In-Stream `⋮` dropdown menu so GFN settings are never cut off!
+ * 2. Remade & Expanded Studio Filter Library (24 Game & Cinema Presets + 14 Color Tints + Quick Visual Chip Gallery):
+ *    - Hand-tuned 24 presets for Genshin Impact, Wuthering Waves, Honkai: Star Rail, Black Myth: Wukong, Cyberpunk, FPS Spotter, OLED Pop, RTX Vibrance, Kodak Gold, Fujifilm Velvia, Studio Ghibli, etc., with a 1-tap scrollable Preset Chip Gallery in the Picture tab.
+ * 3. Ultra-Crisp 2K HD Screenshot Engine (Dual-Radius 9-Tap Unsharp Mask + Local Clarity + Filter Baker):
+ *    - Fixes blurry WebRTC video captures on iOS WebKit by staging `#remote-video` onto a 1:1 2D frame buffer first (eliminating WebKit MediaStream WebGL texture bugs), then running a high-precision WebGL 2.0x Super-Resolution shader with 8-neighbor Fine Edge Unsharp Mask + Medium-Radius Local Clarity (removes H.264 cloud compression haze) + full Picture Filter & Tint baking, plus a CPU convolution fallback.
+ *    - Added a dedicated "Photo Sharpness & Clarity Boost" slider (0% – 250%, default 145% Ultra-Crisp) in the Screenshot tab.
  */
 
 (function () {
@@ -143,7 +129,8 @@
     burst: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83',
     shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
     pip: 'M19 7h-8v6h8V7zm2-4H3C1.9 3 1 3.9 1 5v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z',
-    move: 'M12 2v20M2 12h20M12 2 9 5M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3'
+    move: 'M12 2v20M2 12h20M12 2 9 5M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3',
+    zoom: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7'
   };
   function ico(name, size) {
     const s = document.createElementNS(NS, 'svg');
@@ -171,19 +158,77 @@
     return b;
   }
 
-  /* ================= presets / templates ================= */
-  const TINTS = { warm: [255, 170, 90], cool: [90, 150, 255], rose: [255, 120, 170], mint: [90, 230, 190], violet: [160, 120, 255] };
+  /* ================= 24 STUDIO-GRADE FILTER PRESETS & 14 COLOR TINTS ================= */
+  const TINTS = {
+    warm: [255, 175, 95],
+    cool: [95, 160, 255],
+    rose: [255, 115, 165],
+    mint: [85, 235, 190],
+    violet: [165, 115, 255],
+    gold: [255, 200, 85],
+    amber: [255, 150, 60],
+    sakura: [255, 145, 195],
+    aqua: [70, 215, 255],
+    ice: [165, 225, 255],
+    cyber: [190, 90, 255],
+    emerald: [70, 205, 135],
+    teal: [55, 185, 205],
+    crimson: [245, 70, 85]
+  };
   const FX0 = { c: 1, s: 1, b: 1, hue: 0, sep: 0, gray: 0, tint: 'none', ta: 0.12, vig: 0 };
   const fxo = o => Object.assign({}, FX0, o);
   const PRESET_LIST = [
-    ['off', 'Off'], ['vivid', 'Vivid'], ['punchy', 'Punchy'], ['crisp', 'Crisp'],
-    ['soft', 'Soft'], ['pastel', 'Pastel'], ['bright', 'Bright'], ['night', 'Night boost'],
-    ['warm', 'Warm'], ['cool', 'Cool'], ['dream', 'Dream'], ['cinematic', 'Cinematic'],
-    ['retro', 'Retro'], ['noir', 'Noir']
+    ['off', 'Off (Original)'],
+    ['genshin_vivid', '✨ Anime Vivid Pro (Genshin/HSR)'],
+    ['wuwa_crisp', 'Wuthering Crisp HDR (WuWa)'],
+    ['rtx_hdr', 'NVIDIA RTX Vibrance HDR'],
+    ['oled_pop', 'OLED Super Pop (Deep Black)'],
+    ['golden_hour', 'Golden Hour Sunset'],
+    ['sakura_bloom', 'Inazuma Sakura Bloom'],
+    ['fontaine_aqua', 'Fontaine Crystal Aqua'],
+    ['cyber_edgerunner', 'Cyberpunk Neon (Teal/Pink)'],
+    ['wukong_myth', 'Dark Myth Cinema (Wukong)'],
+    ['fps_compet', 'FPS Spotter (Shadow Boost)'],
+    ['night_vision', 'Night Cave Explorer'],
+    ['kodak_gold', 'Kodak Gold 200 Film'],
+    ['fuji_velvia', 'Fujifilm Velvia 50 (Lush)'],
+    ['cinema_imax', 'IMAX Teal & Orange'],
+    ['ghibli_warm', 'Studio Ghibli Painterly'],
+    ['pastel_dream', 'Soft Pastel Dream'],
+    ['arctic_frost', 'Dragonspine Frost'],
+    ['blood_moon', 'Crimson Abyss'],
+    ['eye_comfort', 'Eye Comfort (Warm Night)'],
+    ['manga_ink', 'High-Contrast Manga Ink'],
+    ['noir_detective', 'Classic Silver Noir'],
+    ['retro_crt', '90s Retro Arcade'],
+    ['vivid', '⚡ Balanced Everyday Vivid']
   ];
   const PRESETS = {
     off: fxo({}),
-    vivid: fxo({ c: 1.08, s: 1.15, b: 1.02 }),
+    genshin_vivid: fxo({ c: 1.14, s: 1.38, b: 1.05, hue: -2, tint: 'amber', ta: 0.05, vig: 0.08 }),
+    wuwa_crisp: fxo({ c: 1.24, s: 1.26, b: 1.03, hue: -4, tint: 'ice', ta: 0.06, vig: 0.14 }),
+    rtx_hdr: fxo({ c: 1.20, s: 1.42, b: 1.04, tint: 'none', ta: 0, vig: 0.10 }),
+    oled_pop: fxo({ c: 1.28, s: 1.48, b: 0.99, tint: 'none', ta: 0, vig: 0.15 }),
+    golden_hour: fxo({ c: 1.10, s: 1.28, b: 1.04, hue: -5, tint: 'gold', ta: 0.14, vig: 0.15 }),
+    sakura_bloom: fxo({ c: 1.06, s: 1.24, b: 1.06, hue: 6, tint: 'sakura', ta: 0.13, vig: 0.12 }),
+    fontaine_aqua: fxo({ c: 1.12, s: 1.30, b: 1.05, hue: -6, tint: 'aqua', ta: 0.10, vig: 0.08 }),
+    cyber_edgerunner: fxo({ c: 1.25, s: 1.52, b: 1.02, hue: 8, tint: 'cyber', ta: 0.12, vig: 0.22 }),
+    wukong_myth: fxo({ c: 1.26, s: 0.92, b: 0.98, sep: 0.12, tint: 'emerald', ta: 0.08, vig: 0.28 }),
+    fps_compet: fxo({ c: 1.16, s: 1.36, b: 1.18, tint: 'none', ta: 0, vig: 0 }),
+    night_vision: fxo({ c: 0.94, s: 1.12, b: 1.28, tint: 'ice', ta: 0.06, vig: 0 }),
+    kodak_gold: fxo({ c: 1.08, s: 1.18, b: 1.03, sep: 0.14, tint: 'gold', ta: 0.10, vig: 0.18 }),
+    fuji_velvia: fxo({ c: 1.18, s: 1.50, b: 1.01, hue: -2, tint: 'none', ta: 0, vig: 0.12 }),
+    cinema_imax: fxo({ c: 1.22, s: 1.08, b: 1.00, hue: -4, tint: 'teal', ta: 0.10, vig: 0.26 }),
+    ghibli_warm: fxo({ c: 1.04, s: 1.32, b: 1.06, sep: 0.06, tint: 'warm', ta: 0.09, vig: 0.05 }),
+    pastel_dream: fxo({ c: 0.88, s: 0.94, b: 1.10, tint: 'sakura', ta: 0.10, vig: 0.06 }),
+    arctic_frost: fxo({ c: 1.16, s: 1.10, b: 1.06, hue: 4, tint: 'ice', ta: 0.12, vig: 0.10 }),
+    blood_moon: fxo({ c: 1.24, s: 1.20, b: 0.97, hue: -8, tint: 'crimson', ta: 0.14, vig: 0.30 }),
+    eye_comfort: fxo({ c: 0.96, s: 0.95, b: 0.98, sep: 0.12, tint: 'warm', ta: 0.14, vig: 0 }),
+    manga_ink: fxo({ c: 1.38, s: 0, b: 1.04, gray: 1, vig: 0.25 }),
+    noir_detective: fxo({ c: 1.22, s: 0, b: 0.98, sep: 0.08, gray: 1, vig: 0.35 }),
+    retro_crt: fxo({ c: 1.12, s: 1.15, b: 1.02, sep: 0.25, tint: 'violet', ta: 0.08, vig: 0.22 }),
+    vivid: fxo({ c: 1.12, s: 1.24, b: 1.03 }),
+    // Legacy compatibility aliases
     punchy: fxo({ c: 1.2, s: 1.3, b: 1.02 }),
     crisp: fxo({ c: 1.15, s: 1.08 }),
     soft: fxo({ c: 0.96, s: 1.05, b: 1.04 }),
@@ -466,6 +511,9 @@
   const CFG_KEY = 'sx_gfn_cfg_v2';
   const OLD_SILENT_KEY = 'gfn_silent_stream_enabled';
   const DEF = {
+    uiScale: 1,
+    btnGlobalScale: 1,
+    fixGfnScroll: true,
     silent: false,
     audioBoost: 1,
     batterySaver: false,
@@ -484,11 +532,11 @@
     fxPreset: 'off', fxContrast: 1, fxSaturate: 1, fxBrightness: 1, fxHue: 0, fxSepia: 0, fxGray: 0,
     fxTint: 'none', fxTintA: 0.12, fxVig: 0, sharpen: 0, sharpenEco: false,
     viewX: 0, viewY: 0, viewZoom: 1,
-    shotBtn: false, shotFormat: 'png', shotScale: '1.5', shotApplyFx: true, shotSharpen: true, shotShare: true,
+    shotBtn: false, shotFormat: 'png', shotScale: '2', shotSharpness: 1.45, shotApplyFx: true, shotSharpen: true, shotShare: true,
     macroEnabled: false, macroPauseMode: 'never', macroPauseRadius: 70, macroPauseMs: 350,
     macroMaxMin: 15, macroInput: 'both', macroSmartPace: true, macroRipple: true,
     recCountdown: true, recAutoBtn: true,
-    v32Migrated: true
+    v33Migrated: true
   };
   function loadCfg() {
     let o = {};
@@ -496,13 +544,15 @@
     delete o.vres; delete o.vresW; delete o.vresH;
     delete o.tcHide; delete o.tcOpacity; delete o.tcScale; delete o.tcIconScale; delete o.tcX; delete o.tcY;
     delete o.macroPause;
-    // Migrate v3.1 configs where `macroInput` was forced to `'pointer'` back to `'both'` (Smart Hybrid Touch+Pointer)
-    if (!o.v32Migrated) {
+    if (!o.v33Migrated) {
       if (o.macroInput === 'pointer') o.macroInput = 'both';
-      if (o.hudDetail === 'full' || o.hudDetail === 'mini') o.hudDetail = 'graphs';
-      o.v32Migrated = true;
+      if (o.shotScale === '1.5' || !o.shotScale) o.shotScale = '2';
+      o.v33Migrated = true;
     }
     const c = Object.assign({}, DEF, o);
+    c.uiScale = cl(nv(c.uiScale, 1), 0.8, 2.5);
+    c.btnGlobalScale = cl(nv(c.btnGlobalScale, 1), 0.7, 2.2);
+    c.shotSharpness = cl(nv(c.shotSharpness, 1.45), 0, 2.5);
     c.shotBtnPos = Object.assign({ x: 94, y: 8 }, o.shotBtnPos);
     c.quickBallPos = Object.assign({ x: 4, y: 50 }, o.quickBallPos);
     c.hudCustomPos = o.hudCustomPos || null;
@@ -807,7 +857,7 @@
     }
   }
 
-  /* ================= styles (Complete Native iOS 18 Grouped Inset Light Mode) ================= */
+  /* ================= styles (Complete Native iOS 18 Light Mode + UI Scale 100%-250%) ================= */
   const CSS = `
 :root{
   --sx-bg:rgba(242,242,247,0.95);
@@ -826,6 +876,8 @@
   --sx-ac:var(--sx-bl);
   --sx-acx:#ffffff;
   --sx-red:#ff3b30;
+  --sx-ui-scale:1;
+  --sx-btn-scale:1;
   --sx-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
 }
 #sx-root{position:fixed;inset:0;z-index:2147483000;pointer-events:none;font:400 13px/1.38 var(--sx-font);color:var(--sx-tx);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-font-smoothing:antialiased}
@@ -833,13 +885,13 @@
 #sx-fx{position:fixed;inset:0;z-index:2147482000;pointer-events:none;display:none}
 .sx-ic{display:block;flex:none}
 
-/* Native iOS Light Mode Telemetry HUD + 3 Real-Time Graphs */
-#sx-hud{position:absolute;display:none;flex-direction:column;gap:5px;padding:7px 11px;border-radius:14px;background:rgba(255,255,255,0.90);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(255,255,255,0.75);box-shadow:0 6px 22px rgba(0,0,0,0.14),0 0 0 0.5px rgba(0,0,0,0.08);font:600 11px/1.35 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-tx);pointer-events:auto;touch-action:none;cursor:grab}
+/* Native iOS Light Mode Telemetry HUD + 3 Real-Time Graphs (Supports UI Scale!) */
+#sx-hud{position:absolute;display:none;flex-direction:column;gap:5px;padding:7px 11px;border-radius:14px;background:rgba(255,255,255,0.90);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(255,255,255,0.75);box-shadow:0 6px 22px rgba(0,0,0,0.14),0 0 0 0.5px rgba(0,0,0,0.08);font:600 11px/1.35 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-tx);pointer-events:auto;touch-action:none;cursor:grab;transform:scale(var(--sx-ui-scale,1));transform-origin:top right}
 #sx-root.eco #sx-hud,#sx-root.eco #sx-panel,#sx-root.eco .sx-mbtn,#sx-root.eco .sx-shot,#sx-root.eco #sx-qball,#sx-root.eco #sx-rec-bar,#sx-root.eco #sx-cd,#sx-root.eco #sx-bar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
-#sx-hud[data-pos=tl]{top:max(8px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left))}
-#sx-hud[data-pos=tr]{top:max(8px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right))}
-#sx-hud[data-pos=bl]{bottom:max(8px,env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left))}
-#sx-hud[data-pos=br]{bottom:max(8px,env(safe-area-inset-bottom));right:max(10px,env(safe-area-inset-right))}
+#sx-hud[data-pos=tl]{top:max(8px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));transform-origin:top left}
+#sx-hud[data-pos=tr]{top:max(8px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));transform-origin:top right}
+#sx-hud[data-pos=bl]{bottom:max(8px,env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left));transform-origin:bottom left}
+#sx-hud[data-pos=br]{bottom:max(8px,env(safe-area-inset-bottom));right:max(10px,env(safe-area-inset-right));transform-origin:bottom right}
 .sx-hud-top{display:flex;align-items:center;gap:6px;white-space:nowrap}
 .sx-hud-sub{font:500 10px/1.25 var(--sx-font);color:var(--sx-mu);white-space:nowrap}
 .sx-hud-timer{display:inline-flex;align-items:center;gap:3px;padding:1.5px 6px;border-radius:6px;background:rgba(52,199,89,0.14);color:#1d7a32;font:700 10.5px/1.2 var(--sx-font)}
@@ -859,12 +911,12 @@
 #sx-rec{position:absolute;inset:0;z-index:5;display:none;border:2.5px solid var(--sx-red);pointer-events:none}
 #sx-rec.on{display:block}
 #sx-rec.prep{border-color:var(--sx-bl)}
-#sx-rec-bar{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:40px;padding:0 12px 0 14px;border-radius:20px;background:rgba(255,255,255,0.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,59,48,0.35);box-shadow:0 8px 24px rgba(0,0,0,0.18);pointer-events:auto;color:var(--sx-tx)}
+#sx-rec-bar{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:flex;align-items:center;gap:10px;height:40px;padding:0 12px 0 14px;border-radius:20px;background:rgba(255,255,255,0.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,59,48,0.35);box-shadow:0 8px 24px rgba(0,0,0,0.18);pointer-events:auto;color:var(--sx-tx)}
 .sx-rec-dot{width:8px;height:8px;border-radius:50%;background:var(--sx-red);animation:sxrec 1.1s ease-in-out infinite}
 @keyframes sxrec{0%,100%{opacity:1}50%{opacity:0.25}}
 .sx-rec-time{font:600 13px/1 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-tx);min-width:44px}
 .sx-rec-cnt{font:500 11.5px/1 var(--sx-font);color:var(--sx-mu);padding-right:4px}
-#sx-cd{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:128px;height:128px;border-radius:28px;background:rgba(255,255,255,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--sx-line2);box-shadow:0 16px 40px rgba(0,0,0,0.22);pointer-events:none}
+#sx-cd{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--sx-ui-scale,1));display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:128px;height:128px;border-radius:28px;background:rgba(255,255,255,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--sx-line2);box-shadow:0 16px 40px rgba(0,0,0,0.22);pointer-events:none}
 #sx-cd.on{display:flex}
 #sx-cd b{font:700 48px/1 var(--sx-font);color:var(--sx-bl);font-variant-numeric:tabular-nums}
 #sx-cd span{font:500 12px/1.2 var(--sx-font);color:var(--sx-mu)}
@@ -873,23 +925,25 @@
 .sx-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sx-lines line,.sx-lines polyline,.sx-lines circle{stroke:var(--sx-bl);stroke-width:2.2;stroke-dasharray:5 4;fill:none;vector-effect:non-scaling-stroke}
 
-#sx-bar{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 16px);padding:5px 7px;border-radius:16px;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid var(--sx-line2);box-shadow:0 10px 28px rgba(0,0,0,0.18);pointer-events:auto}
+#sx-bar{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:none;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc((100% - 16px) / var(--sx-ui-scale,1));padding:5px 7px;border-radius:16px;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid var(--sx-line2);box-shadow:0 10px 28px rgba(0,0,0,0.18);pointer-events:auto}
 #sx-bar.on{display:flex}
 #sx-bar .sx-sel{height:30px;padding-top:0;padding-bottom:0;margin-right:2px}
 .sx-tb{display:flex;align-items:center;gap:4px;height:30px;padding:0 8px;border:0;border-radius:9px;background:transparent;color:var(--sx-tx);font:500 11.5px var(--sx-font)}
 .sx-tb:active{background:var(--sx-s2)}
 .sx-tb.pri{background:var(--sx-bl);color:#ffffff;font-weight:600}
-#sx-stop{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;height:36px;padding:0 15px;border:0;border-radius:18px;background:var(--sx-red);color:#fff;font:600 12.5px var(--sx-font);box-shadow:0 6px 20px rgba(255,59,48,0.35);pointer-events:auto}
+#sx-stop{position:absolute;z-index:3;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:none;align-items:center;gap:8px;height:36px;padding:0 15px;border:0;border-radius:18px;background:var(--sx-red);color:#fff;font:600 12.5px var(--sx-font);box-shadow:0 6px 20px rgba(255,59,48,0.35);pointer-events:auto}
 #sx-stop.on{display:flex}
 
-/* Complete Native iOS 18 Sheet Panel */
-#sx-panel{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:min(426px,calc(100% - 16px));display:none;flex-direction:column;background:var(--sx-bg);backdrop-filter:saturate(180%) blur(26px);-webkit-backdrop-filter:saturate(180%) blur(26px);border:1px solid rgba(255,255,255,0.8);border-radius:22px;box-shadow:0 20px 55px rgba(0,0,0,0.22),0 0 0 0.5px rgba(0,0,0,0.1);overflow:hidden;pointer-events:auto;transition:opacity .15s;color:var(--sx-tx)}
+/* Complete Native iOS 18 Sheet Panel with Inverse Viewport Scale Compensation (Never Clips at 150%/200%!) */
+#sx-panel{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));height:calc((100% - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom))) / var(--sx-ui-scale,1));width:min(426px,calc((100% - 16px) / var(--sx-ui-scale,1)));transform:scale(var(--sx-ui-scale,1));transform-origin:top right;display:none;flex-direction:column;background:var(--sx-bg);backdrop-filter:saturate(180%) blur(26px);-webkit-backdrop-filter:saturate(180%) blur(26px);border:1px solid rgba(255,255,255,0.8);border-radius:22px;box-shadow:0 20px 55px rgba(0,0,0,0.22),0 0 0 0.5px rgba(0,0,0,0.1);overflow:hidden;pointer-events:auto;transition:opacity .15s;color:var(--sx-tx)}
 #sx-panel.open{display:flex}
 #sx-panel.peek{opacity:.14}
-.sx-ph{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 8px 16px;background:rgba(255,255,255,0.75);border-bottom:0.5px solid var(--sx-line)}
-.sx-pt-wrap{display:flex;align-items:center;gap:7px;min-width:0}
-.sx-pt{font-size:15.5px;font-weight:700;letter-spacing:-0.02em;color:var(--sx-tx);white-space:nowrap}
+.sx-ph{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:11px 12px 8px 15px;background:rgba(255,255,255,0.78);border-bottom:0.5px solid var(--sx-line)}
+.sx-pt-wrap{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.sx-pt{font-size:15px;font-weight:700;letter-spacing:-0.02em;color:var(--sx-tx);white-space:nowrap}
 .sx-pv{padding:2px 6px;border-radius:6px;background:rgba(0,122,255,0.12);color:var(--sx-bl);font-size:10.5px;font-weight:700}
+.sx-pscale{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:8px;background:rgba(88,86,214,0.13);color:var(--sx-in);font:700 10.5px/1 var(--sx-font);border:0;cursor:pointer}
+.sx-pscale:active{background:rgba(88,86,214,0.24)}
 .sx-ptimer{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:8px;background:rgba(52,199,89,0.14);color:#1d7a32;font:600 11px/1 var(--sx-font);font-variant-numeric:tabular-nums;border:0;cursor:pointer}
 .sx-ptimer.warn{background:rgba(255,149,0,0.16);color:#c96e00}
 .sx-ptimer.crit{background:rgba(255,59,48,0.16);color:#d70015}
@@ -903,10 +957,16 @@
 .sx-tab{flex:0 0 auto;position:relative;border:0;border-radius:9px;background:transparent;color:var(--sx-mu);padding:6px 11px;font:600 12px var(--sx-font);white-space:nowrap;transition:all .14s;cursor:pointer}
 .sx-tab.on{background:#ffffff;color:var(--sx-bl);box-shadow:0 2px 6px rgba(0,0,0,0.08),0 0 0 0.5px rgba(0,0,0,0.06)}
 
-.sx-pb{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;overscroll-behavior:contain;padding:8px 0 16px;scrollbar-width:thin;scrollbar-color:var(--sx-s3) transparent}
+.sx-pb{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;overscroll-behavior:contain;padding:8px 0 18px;scrollbar-width:thin;scrollbar-color:var(--sx-s3) transparent}
 .sx-pb::-webkit-scrollbar{width:4px}
 .sx-pb::-webkit-scrollbar-track{background:transparent}
 .sx-pb::-webkit-scrollbar-thumb{background:var(--sx-s3);border-radius:2px}
+
+/* Quick Filter Preset Chips Gallery */
+.sx-fchips{display:flex;gap:6px;overflow-x:auto;margin:2px 12px 8px;padding:4px 2px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.sx-fchips::-webkit-scrollbar{display:none}
+.sx-fchip{flex:0 0 auto;padding:6px 11px;border-radius:10px;border:1px solid var(--sx-line);background:var(--sx-s1);color:var(--sx-tx);font:600 11.5px/1.2 var(--sx-font);white-space:nowrap;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.sx-fchip.on{background:var(--sx-bl);color:#ffffff;border-color:transparent;box-shadow:0 3px 10px rgba(0,122,255,0.3)}
 
 /* Native iOS Grouped Inset Rows */
 .sx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 12px;padding:11px 14px;background:var(--sx-s1);border-bottom:0.5px solid var(--sx-line)}
@@ -932,8 +992,8 @@
 .sx-badge{display:inline-block;padding:1px 6px;margin-left:6px;border-radius:5px;background:rgba(0,122,255,0.12);color:var(--sx-bl);font:600 10px/1.4 var(--sx-font);flex:none}
 .sx-badge.rec{background:rgba(52,199,89,0.15);color:var(--sx-nv)}
 
-/* Frosted Glass Floating Macro Buttons, Screenshot & Quick Ball */
-.sx-mbtn,.sx-shot,#sx-qball{position:absolute;transform:translate(-50%,-50%) scale(var(--sz,1));width:46px;height:46px;padding:0;border-radius:15px;border:1px solid rgba(255,255,255,0.75);background:rgba(255,255,255,0.88);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);color:#1c1c1e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:auto;touch-action:none;opacity:var(--op,0.94);font:600 9.5px/1 var(--sx-font);box-shadow:0 4px 14px rgba(0,0,0,0.16),0 0 0 0.5px rgba(0,0,0,0.1);cursor:pointer}
+/* Frosted Glass Floating Macro Buttons, Screenshot & Quick Ball (Supports Global Button Scale!) */
+.sx-mbtn,.sx-shot,#sx-qball{position:absolute;transform:translate(-50%,-50%) scale(calc(var(--sz,1) * var(--sx-btn-scale,1)));width:46px;height:46px;padding:0;border-radius:15px;border:1px solid rgba(255,255,255,0.75);background:rgba(255,255,255,0.88);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);color:#1c1c1e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:auto;touch-action:none;opacity:var(--op,0.94);font:600 9.5px/1 var(--sx-font);box-shadow:0 4px 14px rgba(0,0,0,0.16),0 0 0 0.5px rgba(0,0,0,0.1);cursor:pointer}
 .sx-mbtn.is-rec{border-color:rgba(0,122,255,0.45);color:#0055b3}
 .sx-mbtn span{max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sx-mbtn.run{background:var(--sx-bl);color:#ffffff;border-color:rgba(255,255,255,0.4);box-shadow:0 4px 18px rgba(0,122,255,0.48)}
@@ -943,7 +1003,7 @@
 #sx-qball{display:none;width:38px;height:38px;border-radius:19px;border:1.5px solid rgba(0,122,255,0.38);color:var(--sx-bl)}
 #sx-qball.eco-on{border-color:rgba(52,199,89,0.55);color:var(--sx-nv)}
 
-.sx-mk{position:absolute;width:32px;height:32px;border-radius:50%;transform:translate(-50%,-50%);background:var(--sx-bl);color:#fff;font:600 12.5px var(--sx-font);display:flex;align-items:center;justify-content:center;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.25);touch-action:none;pointer-events:auto}
+.sx-mk{position:absolute;width:32px;height:32px;border-radius:50%;transform:translate(-50%,-50%) scale(var(--sx-btn-scale,1));background:var(--sx-bl);color:#fff;font:600 12.5px var(--sx-font);display:flex;align-items:center;justify-content:center;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.25);touch-action:none;pointer-events:auto}
 .sx-mk.end{width:26px;height:26px;background:#ffffff;color:var(--sx-bl);border:2px solid var(--sx-bl)}
 .sx-zn{position:absolute;border:1.5px dashed var(--sx-bl);background:rgba(0,122,255,0.14);border-radius:10px;touch-action:none;pointer-events:auto}
 .sx-zn b{position:absolute;left:8px;top:6px;font-size:11px;font-weight:600;color:#004085;background:rgba(255,255,255,0.88);padding:1px 5px;border-radius:4px}
@@ -954,11 +1014,12 @@
 #sx-flash{position:absolute;z-index:7;inset:0;background:#fff;opacity:0;pointer-events:none}
 #sx-flash.go{animation:sxf .22s ease-out}
 @keyframes sxf{from{opacity:.75}to{opacity:0}}
-#sx-toast{position:absolute;z-index:8;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:84%;padding:9px 16px;border-radius:14px;background:rgba(255,255,255,0.96);border:1px solid var(--sx-line2);color:var(--sx-tx);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .18s;pointer-events:none;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.18)}
+#sx-toast{position:absolute;z-index:8;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:bottom center;max-width:calc(84% / var(--sx-ui-scale,1));padding:9px 16px;border-radius:14px;background:rgba(255,255,255,0.96);border:1px solid var(--sx-line2);color:var(--sx-tx);font-size:12.5px;font-weight:600;opacity:0;transition:opacity .18s;pointer-events:none;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.18)}
 #sx-toast.on{opacity:1}
 #sx-preview{position:absolute;z-index:6;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:14px;background:rgba(242,242,247,0.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:var(--sx-tx);pointer-events:auto}
 #sx-preview.on{display:flex}
-#sx-preview img{max-width:100%;max-height:calc(100% - 105px);object-fit:contain;border-radius:12px;border:1px solid var(--sx-line2);box-shadow:0 10px 30px rgba(0,0,0,0.15);-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+#sx-preview img{max-width:100%;max-height:calc(100% - 115px);object-fit:contain;border-radius:12px;border:1px solid var(--sx-line2);box-shadow:0 10px 30px rgba(0,0,0,0.15);-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+.sx-prev-bar{display:flex;gap:8px;align-items:center;transform:scale(var(--sx-ui-scale,1));transform-origin:bottom center}
 
 /* Authentic iOS UISwitch & Controls */
 .sx-sw{width:46px;height:28px;border-radius:14px;border:0;background:#e5e5ea;position:relative;transition:background .18s cubic-bezier(.4,0,.2,1);flex:none;padding:0;cursor:pointer}
@@ -966,7 +1027,7 @@
 .sx-sw[aria-checked=true]{background:var(--sx-gn)}
 .sx-sw[aria-checked=true]::after{transform:translateX(18px)}
 
-.sx-sel{-webkit-appearance:none;appearance:none;background:var(--sx-s2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23007aff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center/13px;color:var(--sx-tx);border:1px solid var(--sx-line);border-radius:9px;padding:6px 28px 6px 10px;font:500 12.5px var(--sx-font);max-width:56vw}
+.sx-sel{-webkit-appearance:none;appearance:none;background:var(--sx-s2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23007aff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center/13px;color:var(--sx-tx);border:1px solid var(--sx-line);border-radius:9px;padding:6px 28px 6px 10px;font:500 12.5px var(--sx-font);max-width:52vw}
 .sx-rw{display:flex;align-items:center;gap:10px;width:100%}
 .sx-rw input{-webkit-appearance:none;appearance:none;flex:1;min-width:90px;height:24px;margin:0;background:transparent}
 .sx-rw input::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--sx-bl) var(--p,0%),#e0e2e9 var(--p,0%))}
@@ -1012,7 +1073,11 @@
   const dyn = mkSheet();
 
   function applyDyn() {
-    if (root) root.classList.toggle('eco', !!cfg.batterySaver);
+    if (root) {
+      root.classList.toggle('eco', !!cfg.batterySaver);
+      root.style.setProperty('--sx-ui-scale', cl(nv(cfg.uiScale, 1), 0.8, 2.5));
+      root.style.setProperty('--sx-btn-scale', cl(nv(cfg.btnGlobalScale, 1), 0.7, 2.2));
+    }
     const f = [];
     if (cfg.fxContrast !== 1) f.push('contrast(' + cfg.fxContrast + ')');
     if (cfg.fxSaturate !== 1) f.push('saturate(' + cfg.fxSaturate + ')');
@@ -1021,7 +1086,13 @@
     if (cfg.fxSepia > 0) f.push('sepia(' + cfg.fxSepia + ')');
     if (cfg.fxGray > 0) f.push('grayscale(' + cfg.fxGray + ')');
     let css = '';
-    // CRITICAL iOS Touch-Freeze Prevention: prevent WebKit gesture recognizers from hijacking multi-touch on the stream
+    // Unlock GFN Native Settings & In-Stream Dropdown Menu Scrolling so settings are never cut off on iOS PWA!
+    if (cfg.fixGfnScroll) {
+      css += `
+        nv-settings,.settings-container,.settings-content,.mat-drawer-content,.main-content{overflow-y:auto !important;-webkit-overflow-scrolling:touch !important;touch-action:pan-y !important}
+        .streamer-osc-drop-down-panel,.mat-mdc-menu-panel{max-height:84dvh !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch !important;touch-action:pan-y !important}
+      `;
+    }
     if (streaming()) {
       css += '#remote-video,[data-sx-host],.streamer-container{touch-action:none !important;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-user-drag:none !important;overscroll-behavior:none !important}';
     }
@@ -1258,7 +1329,7 @@
   }
 
   /* ================= 1-HOUR SESSION COUNTDOWN + 3-GRAPH TELEMETRY HUD ================= */
-  let hud, hudPing, hudRest, hudSub, hudTimerEl, panelTimerEl, hudChartsWrap;
+  let hud, hudPing, hudRest, hudSub, hudTimerEl, panelTimerEl, panelScaleBtn, hudChartsWrap;
   let cvFps, cvPing, cvLag, lblFpsVal, lblPingVal, lblLagVal;
   const histFps = [], histPing = [], histLag = [];
   const MAX_HIST = 36;
@@ -1307,13 +1378,13 @@
     if (streaming() && cfg.sessionTimer) {
       if (remMin <= 10 && remMin > 9.5 && !warned10) {
         warned10 = true;
-        toast('⏱ Còn 10 phút phiên chơi (' + cfg.sessionLimitMin + 'm) — Chuẩn bị lưu game!', 4000);
+        toast('Còn 10 phút phiên chơi (' + cfg.sessionLimitMin + 'm) — Chuẩn bị lưu game!', 4000);
       } else if (remMin <= 5 && remMin > 4.5 && !warned5) {
         warned5 = true;
-        toast('⚠️ Còn 5 phút phiên chơi! Hãy tới điểm dịch chuyển / lưu game.', 4500);
+        toast('Còn 5 phút phiên chơi! Hãy tới điểm dịch chuyển / lưu game.', 4500);
       } else if (remMin <= 1 && remMin > 0.2 && !warned1) {
         warned1 = true;
-        toast('🚨 Còn dưới 1 phút phiên chơi! Sắp hết giờ session!', 5500);
+        toast('Còn dưới 1 phút phiên chơi! Sắp hết giờ session!', 5500);
       }
     }
   }
@@ -1346,7 +1417,6 @@
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // Soft area fill under curve
     const lastX = (startIdx + arr.length - 1) * stepX;
     const firstX = startIdx * stepX;
     ctx.lineTo(lastX, H);
@@ -1372,7 +1442,6 @@
     updateSessionTimerUI();
 
     const now = Date.now();
-    // Automatic Input Watchdog: clean up any orphan macro pointers when no macro is running
     if (cfg.inputGuard && runners.size === 0 && (activeMacroPointers.size > 0 || activeMacroTouches.size > 0)) {
       unstickStreamInput(true);
     }
@@ -1443,8 +1512,6 @@
     curDecodeMs = dec;
     const rtt = pair && typeof pair.currentRoundTripTime === 'number' ? pair.currentRoundTripTime * 1000 : null;
     const jitMs = Math.round((vin.jitter || 0) * 1000);
-    // Calculate Total Input / Action Response Latency (ms):
-    // Local Touch Dispatch Delay + Frame Pacing Interval (1000/fps * 0.5) + Decode Time + 0.5 * Network RTT
     const frameIntervalMs = fps > 5 ? (1000 / fps) * 0.5 : 8.3;
     const totalInputLatency = Math.round(lastTouchDispMs + dec + frameIntervalMs + (rtt != null ? rtt * 0.5 : 10));
     curInputLagMs = totalInputLatency;
@@ -1481,26 +1548,101 @@
     }
   }
 
-  /* ================= TRUE HD GPU SCREENSHOT + FILTER & SHARPEN BAKER ================= */
+  /* ================= ULTRA-CRISP 2K HD SCREENSHOT + 9-TAP UNSHARP & FILTER BAKER ================= */
   function flash() { flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); }
 
-  // Renders the video at up to 2x Super-Resolution with WebGL CAS Sharpening + Active Picture Filters baked directly on the GPU!
+  // CPU Fallback for Unsharp + Color Filter Baking (if WebGL is ever blocked)
+  function applyCpuSharpenAndFilters(ctx, W, H, sharpBoost, applyFx) {
+    guard(() => {
+      const imgData = ctx.getImageData(0, 0, W, H);
+      const d = imgData.data;
+      const src = new Uint8ClampedArray(d);
+      const con = applyFx ? cfg.fxContrast : 1;
+      const sat = applyFx ? cfg.fxSaturate : 1;
+      const bri = applyFx ? cfg.fxBrightness : 1;
+      const sep = applyFx ? cfg.fxSepia : 0;
+      const gray = applyFx ? cfg.fxGray : 0;
+      const tintRgb = (applyFx && TINTS[cfg.fxTint]) ? TINTS[cfg.fxTint] : null;
+      const tintA = tintRgb ? cfg.fxTintA : 0;
+      const k = sharpBoost * 0.65;
+      const row = W * 4;
+
+      for (let y = 1; y < H - 1; y++) {
+        const yOff = y * row;
+        for (let x = 1; x < W - 1; x++) {
+          const i = yOff + x * 4;
+          for (let ch = 0; ch < 3; ch++) {
+            const c = src[i + ch];
+            let val = c;
+            if (k > 0.02) {
+              const avg = (src[i - row + ch] + src[i + row + ch] + src[i - 4 + ch] + src[i + 4 + ch]) * 0.25;
+              const diff = cl(c - avg, -48, 48);
+              val = c + diff * k * 1.6;
+            }
+            val = val * bri;
+            val = (val - 128) * con + 128;
+            d[i + ch] = cl(val, 0, 255);
+          }
+          if (sat !== 1 || sep > 0 || gray > 0 || tintA > 0) {
+            let r = d[i], g = d[i + 1], b = d[i + 2];
+            const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            r = luma + (r - luma) * sat;
+            g = luma + (g - luma) * sat;
+            b = luma + (b - luma) * sat;
+            if (sep > 0) {
+              const sr = r * 0.393 + g * 0.769 + b * 0.189;
+              const sg = r * 0.349 + g * 0.686 + b * 0.168;
+              const sb = r * 0.272 + g * 0.534 + b * 0.131;
+              r = r + (sr - r) * sep;
+              g = g + (sg - g) * sep;
+              b = b + (sb - b) * sep;
+            }
+            if (gray > 0) {
+              const gl2 = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+              r = r + (gl2 - r) * gray;
+              g = g + (gl2 - g) * gray;
+              b = b + (gl2 - b) * gray;
+            }
+            if (tintA > 0) {
+              r = r + (tintRgb[0] - r) * tintA;
+              g = g + (tintRgb[1] - g) * tintA;
+              b = b + (tintRgb[2] - b) * tintA;
+            }
+            d[i] = cl(r, 0, 255);
+            d[i + 1] = cl(g, 0, 255);
+            d[i + 2] = cl(b, 0, 255);
+          }
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }, 'cpuShotFallback');
+  }
+
+  // Stage 1: Capture exact 1:1 hardware video frame onto a 2D Staging Canvas (bypasses iOS WebKit MediaStream WebGL bug!)
+  // Stage 2: Run WebGL 2.0x Super-Resolution + 9-Tap Dual-Radius Unsharp Mask & Local Clarity + Full Color Filter Shader!
   function renderHDScreenshotCanvas(v) {
-    const scale = cl(parseFloat(cfg.shotScale) || 1.5, 1, 2);
-    // Cap max dimension at 2560px to stay within iOS WebKit canvas memory limits while delivering razor-sharp 1080p/1440p HD
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const stageCv = document.createElement('canvas');
+    stageCv.width = vw;
+    stageCv.height = vh;
+    const sCtx = stageCv.getContext('2d');
+    sCtx.imageSmoothingEnabled = false;
+    sCtx.drawImage(v, 0, 0, vw, vh);
+
+    const scale = cl(parseFloat(cfg.shotScale) || 2, 1, 2.25);
     const maxW = 2560;
-    const actualScale = (v.videoWidth * scale > maxW) ? (maxW / v.videoWidth) : scale;
-    const W = Math.round(v.videoWidth * actualScale);
-    const H = Math.round(v.videoHeight * actualScale);
+    const actualScale = (vw * scale > maxW) ? (maxW / vw) : scale;
+    const W = Math.round(vw * actualScale);
+    const H = Math.round(vh * actualScale);
 
     const outCv = document.createElement('canvas');
     outCv.width = W;
     outCv.height = H;
 
     const applyFx = !!cfg.shotApplyFx;
-    const sharpAmt = cfg.shotSharpen ? Math.max(cl(+cfg.sharpen || 0, 0, 1), 0.42) : (applyFx ? cl(+cfg.sharpen || 0, 0, 1) : 0);
+    const userSharpBoost = cl(nv(cfg.shotSharpness, 1.45), 0, 2.5);
+    const sharpAmt = cfg.shotSharpen ? Math.max(userSharpBoost, (+cfg.sharpen || 0) * 1.6) : (applyFx ? (+cfg.sharpen || 0) * 1.4 : 0);
 
-    // Attempt GPU WebGL Full-Pipeline Render (CAS Sharpening + Contrast/Saturate/Brightness/Hue/Sepia/Gray/Tint/Vignette)
     const renderedByWebGL = guard(() => {
       const glCv = document.createElement('canvas');
       glCv.width = W;
@@ -1509,6 +1651,7 @@
       if (!gl) return false;
 
       const vsSrc = 'attribute vec2 p;varying vec2 v;void main(){v=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}';
+      // 9-Tap Dual-Radius Unsharp Mask + Local Micro-Contrast (Clarity) + Full Color Grading Shader
       const fsSrc = `
         precision highp float;
         varying vec2 v;
@@ -1531,17 +1674,35 @@
         void main() {
           vec3 c = texture2D(t, v).rgb;
           if (uSharp > 0.01) {
-            vec3 n = texture2D(t, v + vec2(0.0, -px.y)).rgb;
-            vec3 s = texture2D(t, v + vec2(0.0, px.y)).rgb;
-            vec3 w = texture2D(t, v + vec2(-px.x, 0.0)).rgb;
-            vec3 e = texture2D(t, v + vec2(px.x, 0.0)).rgb;
+            // Fine 8-neighbor ring (radius 0.85 source texel) for razor-sharp edge reconstruction
+            vec2 r1 = px * 0.85;
+            vec3 n  = texture2D(t, v + vec2(0.0, -r1.y)).rgb;
+            vec3 s  = texture2D(t, v + vec2(0.0,  r1.y)).rgb;
+            vec3 w  = texture2D(t, v + vec2(-r1.x, 0.0)).rgb;
+            vec3 e  = texture2D(t, v + vec2( r1.x, 0.0)).rgb;
+            vec3 nw = texture2D(t, v + vec2(-r1.x, -r1.y)).rgb;
+            vec3 ne = texture2D(t, v + vec2( r1.x, -r1.y)).rgb;
+            vec3 sw = texture2D(t, v + vec2(-r1.x,  r1.y)).rgb;
+            vec3 se = texture2D(t, v + vec2( r1.x,  r1.y)).rgb;
+
+            vec3 blurFine = (n + s + e + w) * 0.15 + (nw + ne + sw + se) * 0.10;
+            vec3 detailFine = clamp(c - blurFine, -0.22, 0.22);
+
+            // Medium 4-neighbor ring (radius 1.85 source texel) for de-hazing H.264 stream compression blur
+            vec2 r2 = px * 1.85;
+            vec3 n2 = texture2D(t, v + vec2(0.0, -r2.y)).rgb;
+            vec3 s2 = texture2D(t, v + vec2(0.0,  r2.y)).rgb;
+            vec3 w2 = texture2D(t, v + vec2(-r2.x, 0.0)).rgb;
+            vec3 e2 = texture2D(t, v + vec2( r2.x, 0.0)).rgb;
+            vec3 blurMed = (n2 + s2 + w2 + e2) * 0.25;
+            vec3 detailMed = clamp(c - blurMed, -0.16, 0.16);
+
+            // CAS local contrast protection weight
             vec3 mn = min(min(min(n, s), min(w, e)), c);
             vec3 mx = max(max(max(n, s), max(w, e)), c);
-            vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / (mx + 0.0001), 0.0, 1.0));
-            float peak = -1.0 / mix(8.0, 5.0, uSharp);
-            vec3 wg = amp * peak;
-            vec3 cas = (wg * (n + s + w + e) + c) / (1.0 + 4.0 * wg);
-            c = clamp(mix(c, cas, clamp(uSharp * 1.6, 0.0, 1.0)), 0.0, 1.0);
+            vec3 casGuard = sqrt(clamp(min(mn, 1.0 - mx) / (mx + 0.001), 0.25, 1.0));
+
+            c = clamp(c + (detailFine * 1.65 + detailMed * 0.55) * uSharp * casGuard, 0.0, 1.0);
           }
           // Brightness & Contrast
           c = c * uBri;
@@ -1590,6 +1751,7 @@
       gl.attachShader(prog, mkSh(gl.VERTEX_SHADER, vsSrc));
       gl.attachShader(prog, mkSh(gl.FRAGMENT_SHADER, fsSrc));
       gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
       gl.useProgram(prog);
 
       const buf = gl.createBuffer();
@@ -1605,11 +1767,12 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
+      // Upload from `stageCv` (2D Canvas) so WebKit NEVER fails on MediaStream texture upload!
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stageCv);
 
       gl.viewport(0, 0, W, H);
       gl.uniform1i(gl.getUniformLocation(prog, 't'), 0);
-      gl.uniform2f(gl.getUniformLocation(prog, 'px'), 1 / v.videoWidth, 1 / v.videoHeight);
+      gl.uniform2f(gl.getUniformLocation(prog, 'px'), 1 / vw, 1 / vh);
       gl.uniform1f(gl.getUniformLocation(prog, 'uSharp'), sharpAmt);
       gl.uniform1f(gl.getUniformLocation(prog, 'uCon'), applyFx ? cfg.fxContrast : 1);
       gl.uniform1f(gl.getUniformLocation(prog, 'uSat'), applyFx ? cfg.fxSaturate : 1);
@@ -1623,6 +1786,7 @@
       gl.uniform3f(gl.getUniformLocation(prog, 'uTint'), tintRgb ? tintRgb[0] / 255 : 0, tintRgb ? tintRgb[1] / 255 : 0, tintRgb ? tintRgb[2] / 255 : 0);
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.finish();
       const ctx2d = outCv.getContext('2d');
       ctx2d.drawImage(glCv, 0, 0);
       gl.deleteTexture(tex);
@@ -1637,7 +1801,8 @@
       const ctx = outCv.getContext('2d');
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(v, 0, 0, W, H);
+      ctx.drawImage(stageCv, 0, 0, W, H);
+      applyCpuSharpenAndFilters(ctx, W, H, sharpAmt, applyFx);
     }
     return outCv;
   }
@@ -1649,11 +1814,11 @@
       const c = renderHDScreenshotCanvas(v);
       const jpeg = cfg.shotFormat === 'jpeg';
       const type = jpeg ? 'image/jpeg' : 'image/png';
-      const blob = await new Promise(res => c.toBlob(res, type, 0.96));
+      const blob = await new Promise(res => c.toBlob(res, type, 0.98));
       if (!blob) throw new Error('empty blob');
       flash();
       const d = new Date(), p = n => String(n).padStart(2, '0');
-      const name = 'GFN_HD_' + c.width + 'x' + c.height + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (jpeg ? '.jpg' : '.png');
+      const name = 'GFN_2K_' + c.width + 'x' + c.height + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (jpeg ? '.jpg' : '.png');
       if (cfg.shotShare && navigator.canShare && navigator.share) {
         try {
           const f = new File([blob], name, { type });
@@ -1671,9 +1836,9 @@
     const img = h('img');
     img.src = url;
     img.alt = name;
-    const row = h('div', 'sx-rc');
+    const row = h('div', 'sx-prev-bar');
     const a = h('a', 'sx-btn');
-    a.append(ico('download', 16), document.createTextNode('Download HD (' + (resText || '') + ')'));
+    a.append(ico('download', 16), document.createTextNode('Download Ultra HD (' + (resText || '') + ')'));
     a.href = url;
     a.download = name;
     const c = btn('Close', 'close', 'alt');
@@ -1683,16 +1848,16 @@
       URL.revokeObjectURL(url);
     };
     row.append(a, c);
-    preview.append(h('div', null, 'HD Capture (' + (resText || '') + ') · Long-press image → Save to Photos'), img, row);
+    preview.append(h('div', null, 'Ultra-Crisp HD (' + (resText || '') + ') · Long-press image → Save to Photos'), img, row);
     preview.classList.add('on');
   }
 
   /* ================= ZERO-FREEZE STREAM INPUT & MACRO ENGINE ================= */
   const runners = new Map();
-  const activeMacroPointers = new Map(); // pid -> { target, x, y, t }
-  const activeMacroTouches = new Map();  // pid -> Touch
-  const targetCache = new Map();         // pid -> Element
-  const realPointers = new Map();        // pointerId -> timestamp (tracks real human fingers on stream)
+  const activeMacroPointers = new Map();
+  const activeMacroTouches = new Map();
+  const targetCache = new Map();
+  const realPointers = new Map();
   const holdIds = new Map();
   const activeHoldBtnMacros = new Set();
   let primaryMacroPid = null;
@@ -1701,11 +1866,9 @@
 
   const isOverlayNode = el => !!(el && (el === root || (root && root.contains(el)) || el === fxEl || el.id === 'sx-gl'));
 
-  // True iOS Notification-Center Equivalent Stream Input Reset (`unstickStreamInput`)
   function unstickStreamInput(silent) {
     guard(() => {
       const streamTgt = pickTarget(window.innerWidth * 0.5, window.innerHeight * 0.5);
-      // 1. Release all tracked macro pointers & touches
       activeMacroPointers.forEach((info, pid) => {
         const tgt = (info.target && info.target.isConnected) ? info.target : streamTgt;
         try {
@@ -1717,7 +1880,7 @@
           }));
         } catch (_) {}
       });
-      activeMacroTouches.forEach((t, pid) => {
+      activeMacroTouches.forEach((t) => {
         const tgt = (t.target && t.target.isConnected) ? t.target : streamTgt;
         try {
           tgt.dispatchEvent(new TouchEvent('touchend', {
@@ -1728,7 +1891,6 @@
           }));
         } catch (_) {}
       });
-      // 2. If no real fingers are currently touching the screen, dispatch a clean touchcancel/touchend flush on streamTgt
       if (realTouches.length === 0 && streamTgt) {
         try {
           const dummyTouch = mkTouch(streamTgt, Math.round(window.innerWidth * 0.5), Math.round(window.innerHeight * 0.5), 99);
@@ -1808,9 +1970,6 @@
     return null;
   }
 
-  // Zero-Freeze Hybrid Touch + Pointer Injection Engine:
-  // 1. Correct W3C `button` state (`phase === 'move' ? -1 : 0`) so `pointerup` is NEVER ignored!
-  // 2. `realTouches` strictly excludes `#sx-root` touches so tapping a macro button NEVER injects a ghost finger into GFN!
   function inject(phase, x, y, pid, prevX, prevY) {
     const cx = cl(x, 1, Math.max(2, window.innerWidth - 1));
     const cy = cl(y, 1, Math.max(2, window.innerHeight - 1));
@@ -1934,7 +2093,6 @@
     }
   }
 
-  // Simultaneous 2-Finger Multi-Touch Step (`multi`)
   async function multiTapAt(a, st, speed = 1) {
     const [bx1, by1] = px(a.x, a.y);
     const [bx2, by2] = px(a.x2, a.y2);
@@ -1954,7 +2112,6 @@
     }
   }
 
-  // Continuous Circular / Spiral Drag Step (`circle`)
   async function circleAt(a, st, speed = 1) {
     const [cx, cy] = px(a.x, a.y);
     const radPx = (cl(nv(a.rad, 8), 1, 40) / 100) * Math.min(window.innerWidth, window.innerHeight);
@@ -1982,7 +2139,6 @@
     }
   }
 
-  // Rapid Burst Tap Step (`burst`)
   async function burstAt(a, st, speed = 1) {
     const cnt = cl(Math.round(nv(a.cnt, 5)), 2, 40);
     const spreadPct = cl(nv(a.spread, 1.5), 0, 20);
@@ -1996,7 +2152,6 @@
     }
   }
 
-  // Elastic Dodge / Joystick Flick & Snap-Back Step (`elastic`)
   async function elasticAt(a, st, speed = 1) {
     const [bx1, by1] = px(a.x, a.y);
     const [bx2, by2] = px(a.x2, a.y2);
@@ -2233,7 +2388,6 @@
       const maxLoops = (once || m.mode === 'once') ? 1 : (m.loops | 0);
       let n = 0;
       while (!st.stop) {
-        // Smart Adaptive Pacing: slightly relax speed if WebRTC decode latency spikes > 18ms so input queue never overflows
         const paceFactor = (cfg.macroSmartPace && curDecodeMs > 18) ? 0.85 : 1.0;
         const speed = baseSpeed * paceFactor;
         if (hasRawEv) {
@@ -2303,7 +2457,6 @@
     return false;
   }
 
-  // Track real human fingers & measure real-time Touch Dispatch Latency (ms)
   document.addEventListener('pointerdown', e => {
     if (!e.isTrusted) return;
     lastUserAct = Date.now();
@@ -2332,7 +2485,6 @@
     }, { capture: true, passive: true });
   });
 
-  // CRITICAL FIX: Only store real stream touches (never overlay button touches!) in `realTouches`
   ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(t => {
     document.addEventListener(t, e => {
       if (!e.isTrusted) return;
@@ -2779,8 +2931,8 @@
 
   async function exportTemplates(singleTpl) {
     const payload = singleTpl
-      ? { sxTpl: 3.2, templates: [singleTpl] }
-      : { sxTpl: 3.2, templates: cfg.customTemplates };
+      ? { sxTpl: 3.3, templates: [singleTpl] }
+      : { sxTpl: 3.3, templates: cfg.customTemplates };
     const txt = JSON.stringify(payload);
     try {
       await navigator.clipboard.writeText(txt);
@@ -2862,7 +3014,7 @@
     }
   }
   async function exportMacros() {
-    const txt = JSON.stringify({ sx: 3.2, macros: cfg.macros });
+    const txt = JSON.stringify({ sx: 3.3, macros: cfg.macros });
     try { await navigator.clipboard.writeText(txt); toast('Macros copied to clipboard'); }
     catch (_) { prompt('Copy your macros', txt); }
   }
@@ -3220,6 +3372,7 @@
     const v = presetVals(id);
     if (v) fxApply(v);
     commit('fx', true);
+    peek();
   }
   function savePreset() {
     const n = prompt('Preset name');
@@ -3237,8 +3390,22 @@
     cfg.userPresets = cfg.userPresets.filter(p => 'u:' + p.name !== id);
     setPreset('off');
   }
-  const presetOpts = () => PRESET_LIST.concat(cfg.userPresets.map(p => ['u:' + p.name, p.name + ' (mine)']), [['custom', 'Custom']]);
+  const presetOpts = () => PRESET_LIST.concat(cfg.userPresets.map(p => ['u:' + p.name, '⭐ ' + p.name + ' (Mine)']), [['custom', '🎨 Custom']]);
   function resetView() { cfg.viewX = 0; cfg.viewY = 0; cfg.viewZoom = 1; commit('view'); }
+
+  function setUiScaleQuick(s) {
+    cfg.uiScale = cl(s, 0.8, 2.5);
+    cfg.btnGlobalScale = cl(s >= 1.5 ? Math.min(1.8, s * 0.9) : 1, 0.7, 2.2);
+    commit('uiScale', true);
+    toast('UI Scale set to ' + Math.round(cfg.uiScale * 100) + '%');
+  }
+
+  function cycleUiScale() {
+    const steps = [1, 1.25, 1.5, 1.75, 2];
+    let idx = steps.findIndex(x => Math.abs(x - cfg.uiScale) < 0.08);
+    const next = steps[(idx + 1) % steps.length];
+    setUiScaleQuick(next);
+  }
 
   function macroItems() {
     const items = [
@@ -3323,8 +3490,29 @@
   }
 
   function schema() {
+    const tintOpts = [
+      ['none', 'None'],
+      ['amber', '☀️ Warm Amber'],
+      ['gold', '🌅 Golden Hour'],
+      ['sakura', '🌸 Sakura Rose'],
+      ['aqua', '🌊 Crystal Aqua'],
+      ['ice', '❄️ Arctic Ice'],
+      ['cyber', '⚡ Cyber Neon Violet'],
+      ['emerald', '🐉 Mythic Emerald'],
+      ['teal', '🎬 Cinema Teal'],
+      ['crimson', '🩸 Crimson Abyss'],
+      ['warm', 'Warm Classic'],
+      ['cool', 'Cool Blue'],
+      ['rose', 'Soft Rose'],
+      ['mint', 'Fresh Mint'],
+      ['violet', 'Deep Violet']
+    ];
     return [
       { id: 'gen', title: 'General', items: [
+        { type: 'buttons', label: 'Quick UI Scale (For 50% PWA Zoom)', desc: 'Instantly scale Panel, HUD & Toolbars to 100%, 150%, or 200% if you lowered Safari/PWA zoom.', btns: [['100%', () => setUiScaleQuick(1), 'alt', 'zoom'], ['150%', () => setUiScaleQuick(1.5), 'blue', 'zoom'], ['200%', () => setUiScaleQuick(2), 'blue', 'zoom']] },
+        { k: 'uiScale', type: 'range', label: 'Panel & HUD Scale (80% – 250%)', desc: 'Scales the menu, HUD, and toolbars while keeping the panel 100% inside the screen bounds.', min: 0.8, max: 2.5, step: 0.05, fmt: pct },
+        { k: 'btnGlobalScale', type: 'range', label: 'Floating Buttons Scale (70% – 220%)', desc: 'Scales all floating Macro, Screenshot, and Quick-Ball buttons together.', min: 0.7, max: 2.2, step: 0.05, fmt: pct },
+        { k: 'fixGfnScroll', type: 'switch', label: 'Fix GFN Settings & Menu Scroll', desc: 'Unlocks touch scrolling on GFN Lobby Settings & In-Stream ⋮ menu so they never get cut off at 100% scale.' },
         { k: 'sessionTimer', type: 'switch', label: '1-Hour Session Countdown Timer (⏱)', desc: 'Tracks your GFN session limit from stream start and warns you at 10m, 5m, and 1m left.' },
         { k: 'sessionLimitMin', type: 'select', label: 'Session tier duration', opts: [['30', '30 minutes'], ['60', '1 Hour (Free Tier 60m)'], ['120', '2 Hours (120m)'], ['360', '6 Hours (Priority 360m)']], get: () => String(cfg.sessionLimitMin), set: v => { cfg.sessionLimitMin = +v; commit('sessionTimer'); }, show: () => cfg.sessionTimer },
         { type: 'buttons', label: 'Session & Stream Tools', desc: 'Reset the 1h countdown timer, pop stream into Picture-in-Picture (PiP), or move buttons.', btns: [['Reset 1h Timer', () => resetSessionTimer(true), 'alt', 'reset'], ['Float PiP', togglePiP, 'alt', 'pip'], ['Move Buttons', enterEdit, 'blue', 'move']] },
@@ -3350,20 +3538,21 @@
         { k: 'crosshairY', type: 'range', label: 'Crosshair Y (%)', min: 30, max: 70, step: 0.5, fmt: v => v + '%', show: () => cfg.crosshair !== 'off' }
       ] },
       { id: 'pic', title: 'Picture', items: [
-        { k: 'fxPreset', type: 'select', label: 'Filter template', desc: 'Templates populate the sliders below. Save your own custom presets.', opts: presetOpts, set: setPreset },
-        { k: 'fxContrast', type: 'range', label: 'Contrast', min: 0.7, max: 1.4, step: 0.01, fmt: v => v.toFixed(2), set: v => fxSet('fxContrast', v) },
-        { k: 'fxSaturate', type: 'range', label: 'Saturation', min: 0, max: 1.8, step: 0.01, fmt: v => v.toFixed(2), set: v => fxSet('fxSaturate', v) },
-        { k: 'fxBrightness', type: 'range', label: 'Brightness', min: 0.7, max: 1.4, step: 0.01, fmt: v => v.toFixed(2), set: v => fxSet('fxBrightness', v) },
+        { type: 'filterChips', only: 'game' },
+        { k: 'fxPreset', type: 'select', label: 'Studio Filter Preset (24 Styles)', desc: 'Hand-tuned presets for Genshin, WuWa, HSR, Wukong, Cyberpunk, OLED & Cinema.', opts: presetOpts, set: setPreset },
+        { k: 'sharpen', type: 'range', label: 'Live Stream Sharpening (WebGL CAS)', desc: 'Real-time GPU Contrast Adaptive Sharpening to make the live game stream crystal clear.', min: 0, max: 1, step: 0.05, fmt: v => (v ? pct(v) : 'Off') },
+        { k: 'sharpenEco', type: 'switch', label: 'Sharpen Eco Mode (Cooler iPhone)', desc: 'Caps sharpen pass resolution & frame rate to save battery and prevent iOS thermal dimming.', show: () => cfg.sharpen > 0 },
+        { k: 'fxContrast', type: 'range', label: 'Contrast', min: 0.7, max: 1.5, step: 0.01, fmt: v => v.toFixed(2), set: v => fxSet('fxContrast', v) },
+        { k: 'fxSaturate', type: 'range', label: 'Saturation / Vibrance', min: 0, max: 1.9, step: 0.01, fmt: v => v.toFixed(2), set: v => fxSet('fxSaturate', v) },
+        { k: 'fxBrightness', type: 'range', label: 'Brightness / Gamma Lift', min: 0.7, max: 1.4, step: 0.01, fmt: v => v.toFixed(2), set: v => fxSet('fxBrightness', v) },
         { k: 'fxHue', type: 'range', label: 'Hue shift', min: -180, max: 180, step: 1, fmt: v => v + '°', set: v => fxSet('fxHue', v) },
-        { k: 'fxSepia', type: 'range', label: 'Sepia', min: 0, max: 1, step: 0.05, fmt: pct, set: v => fxSet('fxSepia', v) },
-        { k: 'fxGray', type: 'range', label: 'Grayscale', min: 0, max: 1, step: 0.05, fmt: pct, set: v => fxSet('fxGray', v) },
-        { k: 'fxTint', type: 'select', label: 'Tint', opts: [['none', 'None'], ['warm', 'Warm'], ['cool', 'Cool'], ['rose', 'Rose'], ['mint', 'Mint'], ['violet', 'Violet']], set: v => fxSet('fxTint', v, true) },
+        { k: 'fxTint', type: 'select', label: 'Color Grading Tint (14 Tones)', opts: tintOpts, set: v => fxSet('fxTint', v, true) },
         { k: 'fxTintA', type: 'range', label: 'Tint strength', min: 0.02, max: 0.4, step: 0.01, fmt: v => Math.round(v * 100) + '%', set: v => fxSet('fxTintA', v), show: () => cfg.fxTint !== 'none' },
-        { k: 'fxVig', type: 'range', label: 'Vignette', min: 0, max: 0.8, step: 0.05, fmt: v => (v ? pct(v) : 'Off'), set: v => fxSet('fxVig', v) },
-        { type: 'buttons', label: 'Presets', btns: [['Save as preset', savePreset, 'alt', 'save'], ['Reset', () => setPreset('off'), 'alt', 'reset']] },
-        { type: 'button', label: 'Delete this preset', btn: 'Delete', icon: 'trash', cls: 'danger', run: deletePreset, show: () => String(cfg.fxPreset).startsWith('u:') },
-        { k: 'sharpen', type: 'range', label: 'Sharpening (WebGL CAS)', desc: 'Zero-stall texture binding with base video hidden to prevent overdraw.', min: 0, max: 1, step: 0.05, fmt: v => (v ? pct(v) : 'Off') },
-        { k: 'sharpenEco', type: 'switch', label: 'Sharpen Eco Mode (Cooler iPhone)', desc: 'Caps sharpen pass resolution & frame rate to save battery and prevent iOS thermal dimming.', show: () => cfg.sharpen > 0 }
+        { k: 'fxVig', type: 'range', label: 'Cinema Vignette', min: 0, max: 0.8, step: 0.05, fmt: v => (v ? pct(v) : 'Off'), set: v => fxSet('fxVig', v) },
+        { k: 'fxSepia', type: 'range', label: 'Vintage Warmth (Sepia)', min: 0, max: 1, step: 0.05, fmt: pct, set: v => fxSet('fxSepia', v) },
+        { k: 'fxGray', type: 'range', label: 'Monochrome (Grayscale)', min: 0, max: 1, step: 0.05, fmt: pct, set: v => fxSet('fxGray', v) },
+        { type: 'buttons', label: 'Custom Presets', btns: [['Save Current', savePreset, 'alt', 'save'], ['Reset Off', () => setPreset('off'), 'alt', 'reset']] },
+        { type: 'button', label: 'Delete this custom preset', btn: 'Delete', icon: 'trash', cls: 'danger', run: deletePreset, show: () => String(cfg.fxPreset).startsWith('u:') }
       ] },
       { id: 'scr', title: 'Screen', items: [
         { k: 'viewZoom', type: 'range', label: 'Stream zoom', desc: 'Native WebKit resolution is preserved for handshake stability.', min: 1, max: 2, step: 0.01, fmt: v => v.toFixed(2) + '×' },
@@ -3373,12 +3562,13 @@
       ] },
       { id: 'shot', title: 'Screenshot', items: [
         { k: 'shotBtn', type: 'switch', label: 'Floating screenshot button', desc: 'Drag the camera button directly anywhere on screen, or tap it to capture.' },
-        { k: 'shotScale', type: 'select', label: 'HD Super-Resolution Scale', desc: 'Upscales 720p/1080p stream frames on the GPU for razor-sharp Retina photos.', opts: [['1', '1.0× (Native Stream)'], ['1.5', '1.5× (True HD+ Recommended)'], ['2', '2.0× (Super HD 2K)']] },
-        { k: 'shotApplyFx', type: 'switch', label: 'Bake active Picture Filters', desc: 'Bakes Contrast, Saturation, Brightness, Hue, Sepia, Gray, Tint & Vignette into the saved photo.' },
-        { k: 'shotSharpen', type: 'switch', label: 'Bake GPU CAS Sharpening', desc: 'Applies WebGL Contrast Adaptive Sharpening to eliminate stream compression blur in photos.' },
-        { k: 'shotFormat', type: 'select', label: 'Format', opts: [['png', 'PNG (Lossless HD)'], ['jpeg', 'JPEG (96% Quality)']] },
+        { k: 'shotScale', type: 'select', label: 'Super-Resolution Upscale (2K)', desc: 'Upscales 720p/1080p stream frames on the GPU up to 2560×1440 2K.', opts: [['1', '1.0× (Native Stream)'], ['1.5', '1.5× (HD+ 1080p/1440p)'], ['2', '2.0× (Ultra-Crisp 2K QHD)']] },
+        { k: 'shotSharpness', type: 'range', label: 'Photo Sharpness & Clarity Boost', desc: 'Controls the 9-Tap Dual-Radius Unsharp Mask & H.264 de-blurring strength on captured photos.', min: 0, max: 2.5, step: 0.05, fmt: pct },
+        { k: 'shotApplyFx', type: 'switch', label: 'Bake active Picture Filters & Tints', desc: 'Bakes all 24 Studio Filters (Contrast, Saturation, Brightness, Hue, Tint, Vignette) into the photo.' },
+        { k: 'shotSharpen', type: 'switch', label: 'Enable 9-Tap GPU Photo Clarifier', desc: 'Reconstructs fine hair, foliage, and UI edges so screenshots never look blurry.' },
+        { k: 'shotFormat', type: 'select', label: 'Format', opts: [['png', 'PNG (Lossless Ultra HD)'], ['jpeg', 'JPEG (98% Studio Quality)']] },
         { k: 'shotShare', type: 'switch', label: 'Use iOS share sheet', desc: 'Opens native iOS Share Sheet to Save Image directly to Photos.' },
-        { type: 'buttons', only: 'game', label: 'Capture & Button Position', btns: [['Capture HD Now', () => setTimeout(screenshot, 150), 'blue', 'camera'], ['Move Button', enterEdit, 'alt', 'move']] }
+        { type: 'buttons', only: 'game', label: 'Capture & Button Position', btns: [['Capture 2K HD Now', () => setTimeout(screenshot, 150), 'blue', 'camera'], ['Move Button', enterEdit, 'alt', 'move']] }
       ] },
       { id: 'mac', title: 'Macros', items: macroItems() },
       { id: 'rec', title: 'Recorder', items: recorderItems() }
@@ -3436,14 +3626,14 @@
     const sec = h('div');
     sec.id = 'sx-section';
     schema().forEach(g => {
-      const items = g.items.filter(i => i.only !== 'game' && i.type !== 'step' && i.type !== 'tplCard' && (!i.show || i.show()));
+      const items = g.items.filter(i => i.only !== 'game' && i.type !== 'step' && i.type !== 'tplCard' && i.type !== 'filterChips' && (!i.show || i.show()));
       if (!items.length) return;
       if (divider) sec.append(divider.cloneNode(true));
       const ng = h('div');
       ng.className = grid.className;
       Array.from(grid.attributes).forEach(a => ng.setAttribute(a.name, a.value));
       ng.removeAttribute('id');
-      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.2)' : g.title));
+      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.3)' : g.title));
       items.forEach(i => ng.append(nativeRow(ref, i)));
       sec.append(ng);
     });
@@ -3471,13 +3661,13 @@
     if (!tpl) return;
     const quit = btns.find(b => /quit/i.test(b.textContent));
     [
-      ['Nvirya GeForce NOW', 'sliders', () => openPanel()],
+      ['Nvirya GFN (' + Math.round(cfg.uiScale * 100) + '%)', 'sliders', () => openPanel()],
+      ['UI Scale: ' + Math.round(cfg.uiScale * 100) + '% (Tap to 150%/200%)', 'zoom', () => cycleUiScale()],
       ['Move / Drag Buttons', 'move', () => enterEdit()],
       ['Macro Recorder', 'rec', () => openPanel('rec')],
       ['Unstick Stream Input', 'shield', () => unstickStreamInput(false)],
-      ['HD Screenshot', 'camera', () => screenshot()],
-      [cfg.hudOn ? '3-Graph Stats HUD: ON' : '3-Graph Stats HUD: OFF', 'gauge', () => set('hudOn', !cfg.hudOn)],
-      [cfg.batterySaver ? 'Battery Saver: ON' : 'Battery Saver: OFF', 'leaf', () => set('batterySaver', !cfg.batterySaver)]
+      ['Ultra-Crisp 2K Screenshot', 'camera', () => screenshot()],
+      [cfg.hudOn ? '3-Graph Stats HUD: ON' : '3-Graph Stats HUD: OFF', 'gauge', () => set('hudOn', !cfg.hudOn)]
     ].forEach(([label, icon, fn]) => {
       const b = tpl.cloneNode(true);
       b.dataset.sxMenu = '1';
@@ -3512,6 +3702,17 @@
   }
   function closePanel() { if (panel) panel.classList.remove('open', 'peek'); }
 
+  function mkFilterChipsGallery() {
+    const wrap = h('div', 'sx-fchips');
+    PRESET_LIST.forEach(([id, label]) => {
+      const chip = h('button', 'sx-fchip' + (cfg.fxPreset === id ? ' on' : ''), label);
+      chip.type = 'button';
+      chip.onclick = () => setPreset(id);
+      wrap.append(chip);
+    });
+    return wrap;
+  }
+
   function renderPanel(resetScroll, scrollActiveIntoView) {
     const S = schema().map(g => Object.assign({}, g, { items: g.items.filter(i => !i.show || i.show()) })).filter(g => g.items.length);
     if (!S.find(g => g.id === panelTab)) panelTab = S[0].id;
@@ -3523,7 +3724,15 @@
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
     const tWrap = h('div', 'sx-pt-wrap');
-    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.2'));
+    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.3'));
+
+    // 1-Tap UI Scale Cycle Badge right in the Panel Header (100% -> 125% -> 150% -> 175% -> 200%)
+    panelScaleBtn = h('button', 'sx-pscale', '🔍 ' + Math.round(cfg.uiScale * 100) + '%');
+    panelScaleBtn.type = 'button';
+    panelScaleBtn.title = 'Tap to cycle UI Scale (100% / 125% / 150% / 175% / 200%)';
+    panelScaleBtn.onclick = cycleUiScale;
+    tWrap.append(panelScaleBtn);
+
     panelTimerEl = h('button', 'sx-ptimer', '⏱ 60:00');
     panelTimerEl.type = 'button';
     panelTimerEl.title = 'Tap to reset 1-hour session countdown';
@@ -3556,6 +3765,7 @@
 
     const body = h('div', 'sx-pb');
     S.find(g => g.id === panelTab).items.forEach(it => {
+      if (it.type === 'filterChips') { body.append(mkFilterChipsGallery()); return; }
       if (it.type === 'step') { body.append(mkStep(it.m, it.i)); return; }
       if (it.type === 'tplCard') { body.append(mkTplCard(it.tpl)); return; }
       const row = h('div', 'sx-row' + (it.type === 'range' ? ' rng' : ''));
@@ -3573,12 +3783,13 @@
     tabs.scrollLeft = savedTabScrollLeft;
     if (scrollActiveIntoView && activeTabEl) {
       requestAnimationFrame(() => {
+        const s = cl(nv(cfg.uiScale, 1), 0.8, 2.5);
         const tRect = tabs.getBoundingClientRect();
         const bRect = activeTabEl.getBoundingClientRect();
         if (bRect.right > tRect.right) {
-          tabs.scrollLeft += (bRect.right - tRect.right) + 12;
+          tabs.scrollLeft += (bRect.right - tRect.right) / s + 12;
         } else if (bRect.left < tRect.left) {
-          tabs.scrollLeft -= (tRect.left - bRect.left) + 12;
+          tabs.scrollLeft -= (tRect.left - bRect.left) / s + 12;
         }
         savedTabScrollLeft = tabs.scrollLeft;
       });
@@ -3592,7 +3803,6 @@
     fxEl = h('div'); fxEl.id = 'sx-fx';
     xhairEl = h('div'); xhairEl.id = 'sx-xhair';
 
-    // 3-Graph Telemetry HUD + 1-Hour Session Countdown
     hud = h('div'); hud.id = 'sx-hud';
     const hudTop = h('div', 'sx-hud-top');
     hudTimerEl = h('span', 'sx-hud-timer', '⏱ 60:00');
@@ -3623,7 +3833,6 @@
     hudChartsWrap.append(g1.box, g2.box, g3.box);
     hud.append(hudTop, hudSub, hudChartsWrap);
 
-    // Allow dragging the HUD box directly anywhere on screen
     dragify(
       hud,
       () => {
@@ -3647,7 +3856,6 @@
       moved => {
         if (moved) save();
         else {
-          // Tap HUD to cycle between 3-Graphs -> Detailed -> Compact
           const order = ['graphs', 'full', 'mini'];
           const next = order[(order.indexOf(cfg.hudDetail) + 1) % order.length];
           set('hudDetail', next);
@@ -3687,7 +3895,6 @@
     flashEl = h('div'); flashEl.id = 'sx-flash';
     toastEl = h('div'); toastEl.id = 'sx-toast';
 
-    // Screenshot button: ALWAYS draggable directly on screen (if dragged > 6px, saves position; if tapped without dragging, takes HD screenshot!)
     shotEl = h('button', 'sx-shot');
     shotEl.type = 'button';
     shotEl.setAttribute('aria-label', 'HD Screenshot (Drag to move)');
@@ -3743,8 +3950,6 @@
     mLayer.append(shotEl, qBallEl);
 
     root.append(xhairEl, hud, editLayer, mLayer, barEl, stopBtn, recEl, panel, preview, flashEl, toastEl);
-    // CRITICAL FIX: Do NOT stop propagation of `pointerup`, `pointercancel`, `touchend`, `touchcancel`, or `mouseup` on `#sx-root`!
-    // Stopping release events on `#sx-root` prevented GFN's window-level listener from clearing fingers that touched `#sx-root` during multi-touch!
     ['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(t => {
       root.addEventListener(t, e => e.stopPropagation());
     });
@@ -3847,7 +4052,6 @@
           }
         );
       } else {
-        // Supports BOTH instant macro trigger AND direct drag-to-reposition (`cfg.freeDragBtns`) without setPointerCapture!
         b.addEventListener('pointerdown', e => {
           e.preventDefault();
           e.stopPropagation();
