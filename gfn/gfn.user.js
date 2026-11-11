@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.3
+// @version      3.4
 // @author       Nvirya
 // @description  iOS PWA bypass, UI Scale (100%–250%) + GFN Native Scroll Fix, 24 Studio Game Filters, Ultra-Crisp 2K GPU Screenshot + Unsharp & Filter Baker, 1h Session Countdown, 3-Graph Telemetry HUD, Zero-Freeze Hybrid Input & Pro Macro Suite.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
@@ -11,7 +11,7 @@
 // ==/UserScript==
 
 /*
- * v3.3 Release Notes
+ * v3.4 Release Notes
  * 1. UI Scale Engine (100% – 250%) & GFN Native Settings Scroll Unlocker:
  *    - Added `uiScale` (80% – 250% slider + 1-tap `100% | 150% | 200%` quick cycle button right in the Panel Header and General tab) with automatic inverse-viewport compensation (`calc((100% - 16px) / var(--sx-ui-scale))`) so even if you zoom Safari/PWA down to 50%, you can scale the script UI to 150% or 200% without a single pixel clipping off screen!
  *    - Also added `btnGlobalScale` (80% – 220%) to scale all floating Macro / Screenshot / Quick-Ball buttons together.
@@ -130,7 +130,10 @@
     shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
     pip: 'M19 7h-8v6h8V7zm2-4H3C1.9 3 1 3.9 1 5v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z',
     move: 'M12 2v20M2 12h20M12 2 9 5M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3',
-    zoom: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7'
+    zoom: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7',
+    bar: 'M4 6h16M4 12h16M4 18h16',
+    random: 'M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
+    volume: 'M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14',
   };
   function ico(name, size) {
     const s = document.createElementNS(NS, 'svg');
@@ -179,7 +182,7 @@
   const fxo = o => Object.assign({}, FX0, o);
   const PRESET_LIST = [
     ['off', 'Off (Original)'],
-    ['genshin_vivid', '✨ Anime Vivid Pro (Genshin/HSR)'],
+    ['genshin_vivid', 'Anime Vivid Pro (Genshin/HSR)'],
     ['wuwa_crisp', 'Wuthering Crisp HDR (WuWa)'],
     ['rtx_hdr', 'NVIDIA RTX Vibrance HDR'],
     ['oled_pop', 'OLED Super Pop (Deep Black)'],
@@ -201,7 +204,7 @@
     ['manga_ink', 'High-Contrast Manga Ink'],
     ['noir_detective', 'Classic Silver Noir'],
     ['retro_crt', '90s Retro Arcade'],
-    ['vivid', '⚡ Balanced Everyday Vivid']
+    ['vivid', 'Balanced Everyday Vivid']
   ];
   const PRESETS = {
     off: fxo({}),
@@ -278,7 +281,7 @@
 
   function normStep(s) {
     s = s || {};
-    const validTypes = ['tap', 'zone', 'swipe', 'wait', 'multi', 'circle', 'burst', 'elastic'];
+    const validTypes = ['tap', 'zone', 'swipe', 'wait', 'multi', 'circle', 'burst', 'elastic', 'bar'];
     const t = validTypes.includes(s.t) ? s.t : 'tap';
     const o = { t };
     if (s.rec) o.rec = true;
@@ -307,6 +310,12 @@
       o.y2 = cl(nv(s.y2, 44), 0, 100);
       o.dur = cl(nv(s.dur, 95), 15, 10000);
       o.hold = cl(nv(s.hold, 35), 0, 5000);
+    }
+    if (t === 'bar') {
+      o.h = cl(nv(s.h, 24), 4, 100);
+      o.opts = cl(Math.round(nv(s.opts, 3)), 2, 8);
+      o.pick = ['rand', 'seq', 'all'].includes(s.pick) ? s.pick : 'rand';
+      o.hold = cl(nv(s.hold, 18), 10, 30000);
     }
     if (t === 'swipe') {
       o.x2 = cl(nv(s.x2, 70), 0, 100);
@@ -526,7 +535,7 @@
     freeDragBtns: true,
     oledDim: 0,
     gyroAim: false,
-    gyroSens: 1.2,
+    gyroSens: 1.2, gyroDeadzone: 0.15, gyroSmoothing: 0.72, gyroInvert: false,
     crosshair: 'off', crosshairColor: '#007aff', crosshairSize: 14, crosshairX: 50, crosshairY: 50,
     hudOn: false, hudDetail: 'graphs', hudPos: 'tr', hudOpacity: 0.94,
     fxPreset: 'off', fxContrast: 1, fxSaturate: 1, fxBrightness: 1, fxHue: 0, fxSepia: 0, fxGray: 0,
@@ -783,8 +792,39 @@
     }
   }
 
-  /* ---- Gyro Motion Aim Assistant (Tilt-to-Aim) ---- */
-  let gyroActive = false, gyroPid = 248, gyroX = 0, gyroY = 0, lastBeta = null, lastGamma = null, gyroReleaseT = 0;
+  /* ---- Butter-Smooth Ultra-Responsive Gyro Motion Aim Engine ---- */
+  let gyroActive = false, gyroPid = 248, gyroAnchorX = 0, gyroAnchorY = 0, gyroCurX = 0, gyroCurY = 0;
+  let filtDx = 0, filtDy = 0, lastBeta = null, lastGamma = null, gyroReleaseT = 0, gyroLoopRaf = 0;
+
+  function runGyroFrame() {
+    if (!gyroActive || !cfg.gyroAim || !streaming()) return;
+    const speed = Math.hypot(filtDx, filtDy);
+    if (speed > 0.05) {
+      const prevX = gyroCurX, prevY = gyroCurY;
+      const nx = gyroCurX + filtDx;
+      const ny = gyroCurY + filtDy;
+      const minX = window.innerWidth * 0.40, maxX = window.innerWidth * 0.96;
+      const minY = window.innerHeight * 0.12, maxY = window.innerHeight * 0.88;
+
+      // Soft re-centering: when approaching screen boundary, seamlessly re-anchor without causing camera snap
+      if (nx < minX || nx > maxX || ny < minY || ny > maxY) {
+        inject('up', gyroCurX, gyroCurY, gyroPid, prevX, prevY);
+        gyroAnchorX = Math.round(window.innerWidth * 0.72);
+        gyroAnchorY = Math.round(window.innerHeight * 0.50);
+        gyroCurX = gyroAnchorX;
+        gyroCurY = gyroAnchorY;
+        inject('down', gyroCurX, gyroCurY, gyroPid);
+      } else {
+        gyroCurX = nx;
+        gyroCurY = ny;
+        inject('move', gyroCurX, gyroCurY, gyroPid, prevX, prevY);
+      }
+      filtDx *= 0.70;
+      filtDy *= 0.70;
+    }
+    gyroLoopRaf = requestAnimationFrame(runGyroFrame);
+  }
+
   function onDeviceOrientation(e) {
     if (!cfg.gyroAim || !streaming() || editing || recState.on || (panel && panel.classList.contains('open'))) return;
     if (e.beta == null || e.gamma == null) return;
@@ -793,35 +833,48 @@
       lastGamma = e.gamma;
       return;
     }
-    const dBeta = cl(e.beta - lastBeta, -12, 12);
-    const dGamma = cl(e.gamma - lastGamma, -12, 12);
+    let dBeta = e.beta - lastBeta;
+    let dGamma = e.gamma - lastGamma;
     lastBeta = e.beta;
     lastGamma = e.gamma;
-    if (Math.hypot(dBeta, dGamma) < 0.18) return;
 
-    const sens = cl(nv(cfg.gyroSens, 1.2), 0.3, 4.0) * 3.2;
+    // Handle gimbal wrap
+    if (dBeta > 180) dBeta -= 360; else if (dBeta < -180) dBeta += 360;
+    if (dGamma > 180) dGamma -= 360; else if (dGamma < -180) dGamma += 360;
+
+    const deadzone = nv(cfg.gyroDeadzone, 0.15);
+    const mag = Math.hypot(dBeta, dGamma);
+    if (mag < deadzone) return;
+
+    const sens = cl(nv(cfg.gyroSens, 1.2), 0.3, 5.0) * 4.2;
+    const invert = cfg.gyroInvert ? -1 : 1;
     const isLandscapeRight = window.orientation === -90;
-    const dx = (isLandscapeRight ? -dBeta : dBeta) * sens;
-    const dy = (isLandscapeRight ? dGamma : -dGamma) * sens;
+    const rawDx = (isLandscapeRight ? -dBeta : dBeta) * sens;
+    const rawDy = (isLandscapeRight ? dGamma : -dGamma) * sens * invert;
 
-    if (!gyroActive || Math.abs(gyroX - window.innerWidth * 0.72) > window.innerWidth * 0.22 || Math.abs(gyroY - window.innerHeight * 0.5) > window.innerHeight * 0.32) {
-      if (gyroActive) inject('up', gyroX, gyroY, gyroPid, gyroX, gyroY);
-      gyroX = Math.round(window.innerWidth * 0.72);
-      gyroY = Math.round(window.innerHeight * 0.5);
-      inject('down', gyroX, gyroY, gyroPid);
+    const alpha = cl(1 - nv(cfg.gyroSmoothing, 0.72), 0.15, 0.95);
+    filtDx = filtDx * (1 - alpha) + rawDx * alpha;
+    filtDy = filtDy * (1 - alpha) + rawDy * alpha;
+
+    if (!gyroActive) {
+      gyroAnchorX = Math.round(window.innerWidth * 0.72);
+      gyroAnchorY = Math.round(window.innerHeight * 0.50);
+      gyroCurX = gyroAnchorX;
+      gyroCurY = gyroAnchorY;
+      inject('down', gyroCurX, gyroCurY, gyroPid);
       gyroActive = true;
+      cancelAnimationFrame(gyroLoopRaf);
+      gyroLoopRaf = requestAnimationFrame(runGyroFrame);
     }
-    const nx = cl(gyroX + dx, window.innerWidth * 0.45, window.innerWidth * 0.95);
-    const ny = cl(gyroY + dy, window.innerHeight * 0.15, window.innerHeight * 0.85);
-    inject('move', nx, ny, gyroPid, gyroX, gyroY);
-    gyroX = nx;
-    gyroY = ny;
 
     clearTimeout(gyroReleaseT);
     gyroReleaseT = setTimeout(() => {
       if (gyroActive) {
-        inject('up', gyroX, gyroY, gyroPid, gyroX, gyroY);
+        cancelAnimationFrame(gyroLoopRaf);
+        inject('up', gyroCurX, gyroCurY, gyroPid, gyroCurX, gyroCurY);
         gyroActive = false;
+        filtDx = 0;
+        filtDy = 0;
         lastBeta = null;
         lastGamma = null;
       }
@@ -833,6 +886,7 @@
       window.removeEventListener('deviceorientation', onDeviceOrientation);
       if (gyroActive) {
         inject('up', gyroX, gyroY, gyroPid, gyroX, gyroY);
+        cancelAnimationFrame(gyroLoopRaf);
         gyroActive = false;
       }
       lastBeta = null;
@@ -1361,7 +1415,7 @@
     const elapsed = Date.now() - sessionStartAt;
     const remMs = Math.max(0, limitMs - elapsed);
     const remMin = remMs / 60000;
-    const txt = '⏱ ' + fmtCountdown(remMs);
+    const txt = '' + fmtCountdown(remMs);
     const cls = remMin <= 3 ? 'crit' : remMin <= 10 ? 'warn' : '';
 
     if (hudTimerEl) {
@@ -1381,10 +1435,10 @@
         toast('Còn 10 phút phiên chơi (' + cfg.sessionLimitMin + 'm) — Chuẩn bị lưu game!', 4000);
       } else if (remMin <= 5 && remMin > 4.5 && !warned5) {
         warned5 = true;
-        toast('Còn 5 phút phiên chơi! Hãy tới điểm dịch chuyển / lưu game.', 4500);
+        toast('Cảnh báo: Còn 5 phút phiên chơi! Hãy tới điểm dịch chuyển / lưu game.', 4500);
       } else if (remMin <= 1 && remMin > 0.2 && !warned1) {
         warned1 = true;
-        toast('Còn dưới 1 phút phiên chơi! Sắp hết giờ session!', 5500);
+        toast('Khẩn cấp: Còn dưới 1 phút phiên chơi! Sắp hết giờ session!', 5500);
       }
     }
   }
@@ -1925,6 +1979,7 @@
         else if (s.t === 'circle') out.push({ k: 'circle', x: s.x, y: s.y, rad: s.rad, dur: s.dur, wait: s.wait });
         else if (s.t === 'burst') out.push({ k: 'burst', x: s.x, y: s.y, cnt: s.cnt, hold: s.hold, spread: s.spread, wait: s.wait });
         else if (s.t === 'elastic') out.push({ k: 'elastic', x: s.x, y: s.y, x2: s.x2, y2: s.y2, dur: s.dur, hold: s.hold, wait: s.wait });
+        else if (s.t === 'bar') out.push({ k: 'bar', x: s.x, y: s.y, h: s.h, opts: s.opts, pick: s.pick, hold: s.hold, wait: s.wait });
         else if (s.t === 'swipe') out.push({ k: 'swipe', x: s.x, y: s.y, x2: s.x2, y2: s.y2, dur: s.dur, wait: s.wait, pts: s.pts || null, rec: !!s.rec });
         else {
           const rows = s.rows || 1, cols = s.cols || 1;
@@ -2355,6 +2410,35 @@
     return holdIds.size > 0 || now < pauseUntil;
   }
 
+  let barSeqCounters = new Map();
+  async function barTapAt(a, st, speed = 1) {
+    const opts = cl(Math.round(nv(a.opts, 3)), 2, 8);
+    const totalH = cl(nv(a.h, 24), 4, 100);
+    const stepH = totalH / opts;
+    const startY = a.y - (totalH * 0.5) + (stepH * 0.5);
+
+    let chosenIndices = [];
+    if (a.pick === 'all') {
+      for (let i = 0; i < opts; i++) chosenIndices.push(i);
+    } else if (a.pick === 'seq') {
+      const cnt = barSeqCounters.get(st.pid) || 0;
+      chosenIndices.push(cnt % opts);
+      barSeqCounters.set(st.pid, cnt + 1);
+    } else {
+      chosenIndices.push(Math.floor(Math.random() * opts));
+    }
+
+    for (const idx of chosenIndices) {
+      if (st.stop) break;
+      const targetY = cl(startY + idx * stepH, 0, 100);
+      const targetX = a.x;
+      await tapAt({ x: targetX, y: targetY, hold: a.hold || 18, rec: false }, st, speed);
+      if (chosenIndices.length > 1 && !st.stop) {
+        await waitExact(Math.max(4, jitterTime(10, false) / speed), st);
+      }
+    }
+  }
+
   async function perform(a, st, speed = 1) {
     if (a.k === 'wait') {
       await waitExact(jitterTime(a.ms, a.rec) / speed, st);
@@ -2365,6 +2449,7 @@
     else if (a.k === 'circle') await circleAt(a, st, speed);
     else if (a.k === 'burst') await burstAt(a, st, speed);
     else if (a.k === 'elastic') await elasticAt(a, st, speed);
+    else if (a.k === 'bar') await barTapAt(a, st, speed);
     else await swipeAt(a, st, speed);
     if (!st.stop && a.wait > 0) {
       await waitExact(jitterTime(a.wait, a.rec) / speed, st);
@@ -3150,6 +3235,7 @@
       multi: 'Multi-Touch (2 Fingers)',
       circle: 'Circle Spin 360°',
       elastic: 'Elastic Dodge / Flick Back',
+      bar: 'Dialogue / Option Bar',
       zone: 'Zone Grid',
       swipe: s.pts ? 'Swipe (1:1 Curve)' : 'Swipe',
       wait: 'Wait'
@@ -3183,15 +3269,24 @@
       inp.min = min;
       inp.max = max;
       inp.value = s[key];
-      inp.addEventListener('change', () => {
+      const commitVal = () => {
+        if (inp.value === '' || inp.value === '-') return;
         let v = parseFloat(inp.value);
         if (!isFinite(v)) v = s[key];
         v = cl(v, min, max);
         s[key] = v;
-        inp.value = v;
         delete m.ev;
         save();
         if (editing) renderEdit();
+      };
+      inp.addEventListener('input', commitVal);
+      inp.addEventListener('change', () => {
+        commitVal();
+        inp.value = s[key];
+      });
+      inp.addEventListener('blur', () => {
+        commitVal();
+        inp.value = s[key];
       });
       w.append(inp);
       grid.append(w);
@@ -3212,6 +3307,22 @@
       } else if (s.t === 'multi') {
         F('2nd X (%)', 'x2', 0, 100);
         F('2nd Y (%)', 'y2', 0, 100);
+        F('Hold (ms)', 'hold', 10, 30000);
+      } else if (s.t === 'bar') {
+        F('Height (%)', 'h', 4, 100);
+        F('Options', 'opts', 2, 8);
+        const pw = h('label', 'sx-nf');
+        pw.append(h('span', null, 'Pick Mode'));
+        const ps = h('select');
+        [['rand', 'Random'], ['seq', 'Sequential'], ['all', 'All Rapid']].forEach(([v, txt]) => {
+          const o = h('option', null, txt);
+          o.value = v;
+          ps.append(o);
+        });
+        ps.value = s.pick || 'rand';
+        ps.onchange = () => { s.pick = ps.value; delete m.ev; save(); };
+        pw.append(ps);
+        grid.append(pw);
         F('Hold (ms)', 'hold', 10, 30000);
       } else if (s.t === 'circle') {
         F('Radius (%)', 'rad', 1, 40);
@@ -3321,13 +3432,22 @@
       inp.min = min;
       inp.max = max;
       inp.value = tpl[key] != null ? tpl[key] : (isFloat ? 1 : 0);
-      inp.addEventListener('change', () => {
+      const commitTpl = () => {
+        if (inp.value === '' || inp.value === '-') return;
         let v = isFloat ? parseFloat(inp.value) : parseInt(inp.value, 10);
         if (!isFinite(v)) v = tpl[key];
         v = cl(v, min, max);
         tpl[key] = v;
-        inp.value = v;
         syncLinked();
+      };
+      inp.addEventListener('input', commitTpl);
+      inp.addEventListener('change', () => {
+        commitTpl();
+        inp.value = tpl[key];
+      });
+      inp.addEventListener('blur', () => {
+        commitTpl();
+        inp.value = tpl[key];
       });
       w.append(inp);
       grid.append(w);
@@ -3390,7 +3510,7 @@
     cfg.userPresets = cfg.userPresets.filter(p => 'u:' + p.name !== id);
     setPreset('off');
   }
-  const presetOpts = () => PRESET_LIST.concat(cfg.userPresets.map(p => ['u:' + p.name, '⭐ ' + p.name + ' (Mine)']), [['custom', '🎨 Custom']]);
+  const presetOpts = () => PRESET_LIST.concat(cfg.userPresets.map(p => ['u:' + p.name, '' + p.name + ' (Mine)']), [['custom', 'Custom']]);
   function resetView() { cfg.viewX = 0; cfg.viewY = 0; cfg.viewZoom = 1; commit('view'); }
 
   function setUiScaleQuick(s) {
@@ -3439,7 +3559,7 @@
         { type: 'buttons', label: 'Manage', btns: [['Rename', () => renameMacro(m), 'alt', 'edit'], ['Duplicate', () => dupMacro(m), 'alt', 'copy'], ['Delete', () => delMacro(m.id), 'danger', 'trash']] },
         { type: 'buttons', only: 'game', label: 'Layout & Test', desc: 'Drag taps, zones, swipes, circles, screenshot & macro buttons on screen.', btns: [['Edit on screen', enterEdit, 'blue', 'move'], ['Test once', () => runMacro(m, true), 'alt', 'play']] },
         { type: 'buttons', only: 'game', label: 'Add Basic Steps', desc: 'Tap/Hold, Rapid Burst, Swipe, or Wait.', btns: [['Tap/Hold', () => addStepTo(m, 'tap'), 'alt', 'plus'], ['Burst', () => addStepTo(m, 'burst'), 'alt', 'burst'], ['Swipe', () => addStepTo(m, 'swipe'), 'alt', 'swipe'], ['Wait', () => addStepTo(m, 'wait'), 'alt', 'wait']] },
-        { type: 'buttons', only: 'game', label: 'Add Pro Steps', desc: 'Multi-Touch (2 fingers), 360° Circle, Elastic Dash Flick, or Grid Zone.', btns: [['2-Finger', () => addStepTo(m, 'multi'), 'alt', 'multi'], ['360° Circle', () => addStepTo(m, 'circle'), 'alt', 'circle'], ['Elastic Dash', () => addStepTo(m, 'elastic'), 'alt', 'elastic'], ['Grid Zone', () => addStepTo(m, 'zone'), 'alt', 'zone']] }
+        { type: 'buttons', only: 'game', label: 'Add Pro Steps', desc: 'Multi-Touch (2 fingers), 360° Circle, Elastic Dash Flick, or Grid Zone.', btns: [['2-Finger', () => addStepTo(m, 'multi'), 'alt', 'multi'], ['360° Circle', () => addStepTo(m, 'circle'), 'alt', 'circle'], ['Elastic Dash', () => addStepTo(m, 'elastic'), 'alt', 'elastic'], ['Dialog Bar', () => addStepTo(m, 'bar'), 'alt', 'bar'], ['Grid Zone', () => addStepTo(m, 'zone'), 'alt', 'zone']] }
       );
       m.steps.forEach((s, i) => items.push({ type: 'step', only: 'game', m, i }));
     }
@@ -3492,15 +3612,15 @@
   function schema() {
     const tintOpts = [
       ['none', 'None'],
-      ['amber', '☀️ Warm Amber'],
-      ['gold', '🌅 Golden Hour'],
-      ['sakura', '🌸 Sakura Rose'],
-      ['aqua', '🌊 Crystal Aqua'],
-      ['ice', '❄️ Arctic Ice'],
-      ['cyber', '⚡ Cyber Neon Violet'],
-      ['emerald', '🐉 Mythic Emerald'],
-      ['teal', '🎬 Cinema Teal'],
-      ['crimson', '🩸 Crimson Abyss'],
+      ['amber', 'Warm Amber'],
+      ['gold', 'Golden Hour'],
+      ['sakura', 'Sakura Rose'],
+      ['aqua', 'Crystal Aqua'],
+      ['ice', 'Arctic Ice'],
+      ['cyber', 'Cyber Neon Violet'],
+      ['emerald', 'Mythic Emerald'],
+      ['teal', 'Cinema Teal'],
+      ['crimson', 'Crimson Abyss'],
       ['warm', 'Warm Classic'],
       ['cool', 'Cool Blue'],
       ['rose', 'Soft Rose'],
@@ -3513,7 +3633,7 @@
         { k: 'uiScale', type: 'range', label: 'Panel & HUD Scale (80% – 250%)', desc: 'Scales the menu, HUD, and toolbars while keeping the panel 100% inside the screen bounds.', min: 0.8, max: 2.5, step: 0.05, fmt: pct },
         { k: 'btnGlobalScale', type: 'range', label: 'Floating Buttons Scale (70% – 220%)', desc: 'Scales all floating Macro, Screenshot, and Quick-Ball buttons together.', min: 0.7, max: 2.2, step: 0.05, fmt: pct },
         { k: 'fixGfnScroll', type: 'switch', label: 'Fix GFN Settings & Menu Scroll', desc: 'Unlocks touch scrolling on GFN Lobby Settings & In-Stream ⋮ menu so they never get cut off at 100% scale.' },
-        { k: 'sessionTimer', type: 'switch', label: '1-Hour Session Countdown Timer (⏱)', desc: 'Tracks your GFN session limit from stream start and warns you at 10m, 5m, and 1m left.' },
+        { k: 'sessionTimer', type: 'switch', label: '1-Hour Session Countdown Timer', desc: 'Tracks your GFN session limit from stream start and warns you at 10m, 5m, and 1m left.' },
         { k: 'sessionLimitMin', type: 'select', label: 'Session tier duration', opts: [['30', '30 minutes'], ['60', '1 Hour (Free Tier 60m)'], ['120', '2 Hours (120m)'], ['360', '6 Hours (Priority 360m)']], get: () => String(cfg.sessionLimitMin), set: v => { cfg.sessionLimitMin = +v; commit('sessionTimer'); }, show: () => cfg.sessionTimer },
         { type: 'buttons', label: 'Session & Stream Tools', desc: 'Reset the 1h countdown timer, pop stream into Picture-in-Picture (PiP), or move buttons.', btns: [['Reset 1h Timer', () => resetSessionTimer(true), 'alt', 'reset'], ['Float PiP', togglePiP, 'alt', 'pip'], ['Move Buttons', enterEdit, 'blue', 'move']] },
         { k: 'batterySaver', type: 'switch', label: 'Battery Saver Mode (Eco & Cool)', desc: 'Reduces iOS heat & battery drain: removes GPU blur effects, caps WebGL shader resolution/FPS, and skips DOM ripples.' },
@@ -3530,7 +3650,10 @@
         { k: 'hudPos', type: 'select', label: 'Corner Snap Position', opts: [['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']], set: v => { cfg.hudCustomPos = null; set('hudPos', v); } },
         { k: 'hudOpacity', type: 'range', label: 'HUD opacity', min: 0.3, max: 1, step: 0.05, fmt: pct },
         { k: 'gyroAim', type: 'switch', label: 'Gyro Motion Aim (Tilt-to-Aim)', desc: 'Uses iPhone/iPad gyroscope to turn subtle device tilting into smooth camera aiming on the right side of the screen.' },
-        { k: 'gyroSens', type: 'range', label: 'Gyro Aim sensitivity', min: 0.4, max: 3.5, step: 0.1, fmt: v => v.toFixed(1) + '×', show: () => cfg.gyroAim },
+        { k: 'gyroSens', type: 'range', label: 'Gyro Aim sensitivity', min: 0.4, max: 5.0, step: 0.1, fmt: v => v.toFixed(1) + 'x', show: () => cfg.gyroAim },
+        { k: 'gyroSmoothing', type: 'range', label: 'Gyro Aim Smoothing Filter', desc: 'Higher values remove hand micro-jitter and frame stutter for silky smooth aiming.', min: 0.2, max: 0.95, step: 0.05, fmt: pct, show: () => cfg.gyroAim },
+        { k: 'gyroDeadzone', type: 'range', label: 'Gyro Aim Deadzone', desc: 'Ignores tiny involuntary hand tremors.', min: 0.05, max: 0.50, step: 0.05, fmt: v => v.toFixed(2) + ' deg', show: () => cfg.gyroAim },
+        { k: 'gyroInvert', type: 'switch', label: 'Invert Vertical Pitch (Y-Axis)', show: () => cfg.gyroAim },
         { k: 'crosshair', type: 'select', label: 'Custom Crosshair (Aim)', desc: 'Lightweight SVG reticle for bow/shooter aiming.', opts: [['off', 'Off'], ['dot', 'Center Dot'], ['cross', 'Precision Cross'], ['circle', 'Circle + Dot'], ['tcross', 'Tactical T-Cross']] },
         { k: 'crosshairSize', type: 'range', label: 'Crosshair size', min: 8, max: 32, step: 1, fmt: v => v + ' px', show: () => cfg.crosshair !== 'off' },
         { k: 'crosshairColor', type: 'select', label: 'Crosshair color', opts: [['#007aff', 'iOS Blue'], ['#34c759', 'Vibrant Green'], ['#ff3b30', 'Crimson Red'], ['#ffcc00', 'Amber Gold'], ['#ffffff', 'Pure White']], show: () => cfg.crosshair !== 'off' },
@@ -3633,7 +3756,7 @@
       ng.className = grid.className;
       Array.from(grid.attributes).forEach(a => ng.setAttribute(a.name, a.value));
       ng.removeAttribute('id');
-      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.3)' : g.title));
+      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.4)' : g.title));
       items.forEach(i => ng.append(nativeRow(ref, i)));
       sec.append(ng);
     });
@@ -3724,16 +3847,16 @@
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
     const tWrap = h('div', 'sx-pt-wrap');
-    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.3'));
+    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.4'));
 
     // 1-Tap UI Scale Cycle Badge right in the Panel Header (100% -> 125% -> 150% -> 175% -> 200%)
-    panelScaleBtn = h('button', 'sx-pscale', '🔍 ' + Math.round(cfg.uiScale * 100) + '%');
+    panelScaleBtn = h('button', 'sx-pscale', 'Scale: ' + Math.round(cfg.uiScale * 100) + '%');
     panelScaleBtn.type = 'button';
     panelScaleBtn.title = 'Tap to cycle UI Scale (100% / 125% / 150% / 175% / 200%)';
     panelScaleBtn.onclick = cycleUiScale;
     tWrap.append(panelScaleBtn);
 
-    panelTimerEl = h('button', 'sx-ptimer', '⏱ 60:00');
+    panelTimerEl = h('button', 'sx-ptimer', '60:00');
     panelTimerEl.type = 'button';
     panelTimerEl.title = 'Tap to reset 1-hour session countdown';
     panelTimerEl.onclick = () => resetSessionTimer(true);
@@ -3805,7 +3928,7 @@
 
     hud = h('div'); hud.id = 'sx-hud';
     const hudTop = h('div', 'sx-hud-top');
-    hudTimerEl = h('span', 'sx-hud-timer', '⏱ 60:00');
+    hudTimerEl = h('span', 'sx-hud-timer', '60:00');
     hudPing = h('span', null, '--ms');
     hudRest = document.createTextNode(' · 0 fps · 0.0 Mbps');
     hudTop.append(hudTimerEl, hudPing, hudRest);
@@ -4155,6 +4278,7 @@
       tb('multi', '2-Finger', () => m && addStepTo(m, 'multi')),
       tb('circle', 'Circle', () => m && addStepTo(m, 'circle')),
       tb('elastic', 'Dash', () => m && addStepTo(m, 'elastic')),
+      tb('bar', 'Dialog Bar', () => m && addStepTo(m, 'bar')),
       tb('zone', 'Zone', () => m && addStepTo(m, 'zone')),
       tb('swipe', 'Swipe', () => m && addStepTo(m, 'swipe')),
       tb('grid', 'Arrange', () => { autoArrangeAllButtons(); renderMacros(); }),
@@ -4229,10 +4353,18 @@
           if (poly && Array.isArray(s.pts) && s.pts.length >= 2) {
             poly.setAttribute('points', s.pts.map(pt => pt[0] + ',' + pt[1]).join(' '));
           } else if (line) {
-            line.setAttribute('x1', s.x);
-            line.setAttribute('y1', s.y);
-            line.setAttribute('x2', s.x2);
-            line.setAttribute('y2', s.y2);
+            if (s.t === 'bar') {
+              const hHalf = (s.h || 24) * 0.5;
+              line.setAttribute('x1', s.x);
+              line.setAttribute('y1', s.y - hHalf);
+              line.setAttribute('x2', s.x);
+              line.setAttribute('y2', s.y + hHalf);
+            } else {
+              line.setAttribute('x1', s.x);
+              line.setAttribute('y1', s.y);
+              line.setAttribute('x2', s.x2);
+              line.setAttribute('y2', s.y2);
+            }
           }
           if (circ) {
             circ.setAttribute('cx', s.x);
@@ -4244,7 +4376,12 @@
             q.style.top = s.y2 + '%';
           }
         };
-        if (s.t === 'circle') {
+        if (s.t === 'bar') {
+          line = document.createElementNS(NS, 'line');
+          line.setAttribute('stroke-width', '4');
+          line.setAttribute('stroke-dasharray', '3 3');
+          svg.append(line);
+        } else if (s.t === 'circle') {
           circ = document.createElementNS(NS, 'circle');
           svg.append(circ);
         } else if (s.t === 'swipe' || s.t === 'multi' || s.t === 'elastic') {
