@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.5
+// @version      3.6
 // @author       Nvirya
-// @description  iOS PWA bypass, UI Scale (100%–250%) + GFN Native Scroll Fix, 24 Studio Game Filters, Ultra-Crisp 2K GPU Screenshot + Unsharp & Filter Baker, 1h Session Countdown, 3-Graph Telemetry HUD, Zero-Freeze Hybrid Input & Pro Macro Suite.
+// @description  iOS PWA bypass, 21-Dot Lyre Auto-Player (Nightly v4 & Sky Studio + Live Test-Tap), Compact Pro UI & Draggable Mini Player Bar, UI Scale (80%–250%), 24 Studio Game Filters, 2K HD Screenshot, 3-Graph Telemetry HUD & Zero-Freeze Hybrid Input.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
 // @match        https://play.geforcenow.com/*
 // @run-at       document-start
@@ -954,7 +954,7 @@
 
 /* Native iOS Light Mode Telemetry HUD + 3 Real-Time Graphs (Supports UI Scale!) */
 #sx-hud{position:absolute;display:none;flex-direction:column;gap:5px;padding:7px 11px;border-radius:14px;background:rgba(255,255,255,0.90);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(255,255,255,0.75);box-shadow:0 6px 22px rgba(0,0,0,0.14),0 0 0 0.5px rgba(0,0,0,0.08);font:600 11px/1.35 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-tx);pointer-events:auto;touch-action:none;cursor:grab;transform:scale(var(--sx-ui-scale,1));transform-origin:top right}
-#sx-root.eco #sx-hud,#sx-root.eco #sx-panel,#sx-root.eco .sx-mbtn,#sx-root.eco .sx-shot,#sx-root.eco #sx-qball,#sx-root.eco #sx-rec-bar,#sx-root.eco #sx-cd,#sx-root.eco #sx-bar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+#sx-root.eco #sx-hud,#sx-root.eco #sx-panel,#sx-root.eco .sx-mbtn,#sx-root.eco .sx-shot,#sx-root.eco #sx-qball,#sx-root.eco #sx-rec-bar,#sx-root.eco #sx-cd,#sx-root.eco #sx-bar,#sx-root.eco #sx-lyre-bar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
 #sx-hud[data-pos=tl]{top:max(8px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));transform-origin:top left}
 #sx-hud[data-pos=tr]{top:max(8px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));transform-origin:top right}
 #sx-hud[data-pos=bl]{bottom:max(8px,env(safe-area-inset-bottom));left:max(10px,env(safe-area-inset-left));transform-origin:bottom left}
@@ -972,27 +972,35 @@
 .sx-gcv{width:78px;height:28px;border-radius:5px;background:rgba(118,118,128,0.08);display:block}
 
 
-/* Lyre 21-Key Grid Calibration & Mini Music Player Bar */
-#sx-lyre-cal{position:absolute;inset:0;z-index:3;display:none;background:rgba(18,19,22,0.28);pointer-events:auto;touch-action:none}
+/* Lyre 21-Dot Center Calibration Grid (See-Through + Precision Target Dots) & Draggable Mini Music Player Bar */
+#sx-lyre-cal{position:absolute;inset:0;z-index:3;display:none;background:rgba(12,14,18,0.12);pointer-events:auto;touch-action:none}
 #sx-lyre-cal.on{display:block}
-.sx-lgrid{position:absolute;border:1.5px solid rgba(255,255,255,0.75);box-shadow:0 0 0 1px rgba(0,122,255,0.6),0 8px 28px rgba(0,0,0,0.35);background:rgba(18,19,22,0.38);border-radius:14px;touch-action:none;pointer-events:auto;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(3,1fr);padding:4px}
-.sx-lkey{display:flex;flex-direction:column;align-items:center;justify-content:center;margin:3px;border-radius:50%;border:1px solid rgba(255,255,255,0.45);background:rgba(24,26,31,0.72);color:#ededf0;font:600 10px/1.1 var(--sx-font);pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.25)}
-.sx-lkey small{font:500 8.5px/1 var(--sx-font);color:#9297a0;margin-top:1px}
-.sx-lgrid-hd{position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:10px 0 12px 0;background:var(--sx-bl);border:2px solid #fff;touch-action:none;cursor:nwse-resize}
-.sx-lgrid-tag{position:absolute;left:10px;top:-24px;padding:3px 9px;border-radius:7px;background:rgba(24,26,31,0.92);color:#ededf0;font:600 11px/1.2 var(--sx-font);white-space:nowrap;border:1px solid rgba(255,255,255,0.15)}
+.sx-lgrid{position:absolute;border:1.5px dashed rgba(255,255,255,0.68);box-shadow:0 0 0 1px rgba(0,122,255,0.55),0 6px 24px rgba(0,0,0,0.22);background:rgba(18,20,26,0.08);border-radius:14px;touch-action:none;pointer-events:auto;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(3,1fr);padding:0}
+.sx-lcell{position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.sx-lcell::before{content:"";position:absolute;width:16px;height:1px;background:rgba(255,255,255,0.32)}
+.sx-lcell::after{content:"";position:absolute;width:1px;height:16px;background:rgba(255,255,255,0.32)}
+.sx-ldot{position:relative;z-index:1;width:24px;height:24px;border-radius:50%;background:rgba(18,20,26,0.88);border:1.5px solid #ffffff;box-shadow:0 0 0 2px rgba(0,122,255,0.75),0 2px 6px rgba(0,0,0,0.45);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ffffff;font:700 8.5px/1 var(--sx-font);pointer-events:auto;cursor:pointer;transition:transform .1s,background .1s}
+.sx-ldot:active,.sx-ldot.hit{transform:scale(1.28);background:var(--sx-bl)}
+.sx-ldot small{font:600 6.5px/1 var(--sx-font);color:#9ecaff;margin-top:0.5px}
+.sx-lgrid-hd{position:absolute;right:-4px;bottom:-4px;width:26px;height:26px;border-radius:50%;background:var(--sx-bl);border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);touch-action:none;cursor:nwse-resize;z-index:2}
+.sx-lgrid-tag{position:absolute;left:8px;top:-24px;padding:3px 9px;border-radius:7px;background:rgba(18,20,26,0.88);color:#f2f2f7;font:600 10.5px/1.2 var(--sx-font);white-space:nowrap;border:1px solid rgba(255,255,255,0.18);pointer-events:none}
 
-#sx-lyre-bar{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:none;align-items:center;gap:8px;height:40px;padding:0 10px 0 13px;border-radius:20px;background:rgba(255,255,255,0.94);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid var(--sx-line2);box-shadow:0 8px 26px rgba(0,0,0,0.18);pointer-events:auto;color:var(--sx-tx);max-width:calc((100% - 16px) / var(--sx-ui-scale,1))}
+#sx-lyre-bar{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:none;align-items:center;gap:6px;height:38px;padding:0 8px 0 10px;border-radius:19px;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid var(--sx-line2);box-shadow:0 8px 24px rgba(0,0,0,0.16);pointer-events:auto;touch-action:none;color:var(--sx-tx);max-width:calc((100% - 14px) / var(--sx-ui-scale,1));cursor:grab}
 #sx-lyre-bar.on{display:flex}
-#sx-lyre-bar.stealth{padding:0;width:32px;height:32px;border-radius:16px;justify-content:center;opacity:0.22;background:rgba(255,255,255,0.7)}
-#sx-lyre-bar.stealth>*:not(.sx-lbar-unhide){display:none !important}
-.sx-lbar-unhide{display:none}
-#sx-lyre-bar.stealth .sx-lbar-unhide{display:grid}
-.sx-lbar-title{font:600 12px/1.2 var(--sx-font);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sx-tx)}
-.sx-lbar-time{font:600 11px/1 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-mu);white-space:nowrap}
-.sx-lbar-prog{width:84px;height:5px;border-radius:3px;background:var(--sx-s3);overflow:hidden;cursor:pointer;position:relative;flex:none}
+#sx-lyre-bar.stealth{padding:0;width:32px;height:32px;border-radius:16px;justify-content:center;opacity:0.26;background:rgba(255,255,255,0.78)}
+#sx-lyre-bar.stealth>*:not(.sx-lbar-icon){display:none !important}
+.sx-lbar-icon{width:26px;height:26px;border-radius:13px;border:0;background:rgba(0,122,255,0.12);color:var(--sx-bl);display:grid;place-items:center;padding:0;flex:none;cursor:pointer}
+.sx-lbar-icon:active{background:rgba(0,122,255,0.24)}
+.sx-lbar-sel{-webkit-appearance:none;appearance:none;border:0;background:transparent;color:var(--sx-tx);font:600 12px/1.2 var(--sx-font);max-width:118px;padding:2px 4px;border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.sx-lbar-sel:active{background:var(--sx-s2)}
+.sx-lbar-spd{border:0;border-radius:7px;padding:3px 6px;background:rgba(88,86,214,0.12);color:var(--sx-in);font:700 10.5px/1 var(--sx-font);cursor:pointer;flex:none}
+.sx-lbar-spd:active{background:rgba(88,86,214,0.24)}
+.sx-lbar-time{font:600 10.5px/1 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-mu);white-space:nowrap}
+.sx-lbar-prog{width:76px;height:6px;border-radius:3px;background:var(--sx-s3);overflow:hidden;cursor:pointer;position:relative;flex:none}
 .sx-lbar-fill{height:100%;width:0%;background:var(--sx-bl);border-radius:3px;pointer-events:none}
-.sx-scard{margin:8px 12px 0;padding:11px 13px;border:0.5px solid var(--sx-line2);border-radius:14px;background:var(--sx-s1);box-shadow:0 2px 8px rgba(0,0,0,0.04)}
-.sx-scard.playing{border-color:var(--sx-bl);box-shadow:0 0 0 1.5px rgba(0,122,255,0.25)}
+.sx-ib.on- pill,.sx-ib.active-pill{background:rgba(0,122,255,0.15);color:var(--sx-bl)}
+.sx-scard{margin:6px 10px 0;padding:9px 11px;border:0.5px solid var(--sx-line2);border-radius:13px;background:var(--sx-s1);box-shadow:0 1px 5px rgba(0,0,0,0.03)}
+.sx-scard.playing{border-color:var(--sx-bl);box-shadow:0 0 0 1.5px rgba(0,122,255,0.24)}
 
 #sx-xhair{position:absolute;z-index:1;display:none;transform:translate(-50%,-50%);pointer-events:none}
 
@@ -1058,24 +1066,30 @@
 .sx-fchip{flex:0 0 auto;padding:6px 11px;border-radius:10px;border:1px solid var(--sx-line);background:var(--sx-s1);color:var(--sx-tx);font:600 11.5px/1.2 var(--sx-font);white-space:nowrap;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
 .sx-fchip.on{background:var(--sx-bl);color:#ffffff;border-color:transparent;box-shadow:0 3px 10px rgba(0,122,255,0.3)}
 
-/* Native iOS Grouped Inset Rows */
-.sx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 12px;padding:11px 14px;background:var(--sx-s1);border-bottom:0.5px solid var(--sx-line)}
-.sx-pb>.sx-row:first-of-type{border-top-left-radius:13px;border-top-right-radius:13px}
-.sx-pb>.sx-row:last-of-type{border-bottom-left-radius:13px;border-bottom-right-radius:13px;border-bottom:0}
-.sx-rl{flex:1 1 145px;min-width:0}
-.sx-rt{font-size:13.5px;font-weight:500;letter-spacing:-0.01em;color:var(--sx-tx)}
-.sx-rd{color:var(--sx-mu);font-size:11.5px;line-height:1.38;margin-top:2px}
-.sx-rc{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
-.sx-row.rng .sx-rc{flex:1 1 100%;margin-top:3px}
+/* Quick Action Strip inside Panel Header */
+.sx-qstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:6px 10px;background:rgba(255,255,255,0.52);border-bottom:0.5px solid var(--sx-line)}
+.sx-qbtn{display:flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 6px;border:0.5px solid var(--sx-line2);border-radius:8px;background:#ffffff;color:var(--sx-tx);font:600 11px/1 var(--sx-font);white-space:nowrap;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
+.sx-qbtn:active{background:var(--sx-s2)}
+.sx-qbtn.pri{background:rgba(0,122,255,0.12);color:var(--sx-bl);border-color:rgba(0,122,255,0.25)}
 
-.sx-step,.sx-tcard{margin:8px 12px 0;padding:11px 13px;border:0.5px solid var(--sx-line2);border-radius:14px;background:var(--sx-s1);box-shadow:0 2px 8px rgba(0,0,0,0.04)}
-.sx-sh{display:flex;align-items:center;gap:4px;margin-bottom:8px}
-.sx-sn{flex:1;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--sx-tx);min-width:0}
+/* Compact Native iOS Grouped Inset Rows */
+.sx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 10px;margin:0 10px;padding:8px 12px;background:var(--sx-s1);border-bottom:0.5px solid var(--sx-line)}
+.sx-pb>.sx-row:first-of-type{border-top-left-radius:12px;border-top-right-radius:12px}
+.sx-pb>.sx-row:last-of-type{border-bottom-left-radius:12px;border-bottom-right-radius:12px;border-bottom:0}
+.sx-rl{flex:1 1 135px;min-width:0}
+.sx-rt{font-size:13px;font-weight:500;letter-spacing:-0.01em;color:var(--sx-tx)}
+.sx-rd{color:var(--sx-mu);font-size:11px;line-height:1.32;margin-top:1.5px}
+.sx-rc{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:flex-end}
+.sx-row.rng .sx-rc{flex:1 1 100%;margin-top:2px}
+
+.sx-step,.sx-tcard{margin:6px 10px 0;padding:8px 10px;border:0.5px solid var(--sx-line2);border-radius:12px;background:var(--sx-s1);box-shadow:0 1px 5px rgba(0,0,0,0.03)}
+.sx-sh{display:flex;align-items:center;gap:3px;margin-bottom:6px}
+.sx-sn{flex:1;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--sx-tx);min-width:0}
 .sx-sn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sx-sn svg{color:var(--sx-bl)}
-.sx-sg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.sx-nf{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--sx-mu);min-width:0}
-.sx-nf input,.sx-nf select{width:100%;min-width:0;-webkit-appearance:none;appearance:none;background:var(--sx-s2);border:1px solid var(--sx-line);border-radius:8px;color:var(--sx-tx);padding:6px 8px;font:500 12.5px var(--sx-font);-webkit-user-select:text;user-select:text}
+.sx-sg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sx-nf{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:var(--sx-mu);min-width:0}
+.sx-nf input,.sx-nf select{width:100%;min-width:0;-webkit-appearance:none;appearance:none;background:var(--sx-s2);border:1px solid var(--sx-line);border-radius:7px;color:var(--sx-tx);padding:4.5px 6px;font:500 12px var(--sx-font);-webkit-user-select:text;user-select:text}
 .sx-nf input:focus,.sx-nf select:focus{outline:none;border-color:var(--sx-bl);background:#fff}
 .sx-tmeta{color:var(--sx-mu);font-size:11.5px;margin-bottom:8px;font-variant-numeric:tabular-nums}
 .sx-tacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -1184,7 +1198,7 @@
       `;
     }
     if (streaming()) {
-      css += '#remote-video,[data-sx-host],.streamer-container{touch-action:none !important;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-user-drag:none !important;overscroll-behavior:none !important}';
+      css += '#remote-video,[data-sx-host],.streamer-container,.streamer-container *,#remote-video:focus,*:focus,*:focus-visible{touch-action:none !important;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-user-drag:none !important;overscroll-behavior:none !important;outline:none !important;-webkit-tap-highlight-color:transparent !important}';
     }
     const tr = ((cfg.viewX || cfg.viewY) ? 'translate:' + cfg.viewX + '% ' + cfg.viewY + '%;' : '') + (cfg.viewZoom !== 1 ? 'scale:' + cfg.viewZoom + ';' : '');
     if (tr) css += '#remote-video,#sx-gl{' + tr + '}';
@@ -2037,9 +2051,19 @@
     return out;
   }
 
+  let cachedStreamTarget = null, cachedStreamTargetAt = 0;
   function pickTarget(x, y) {
+    const now = performance.now();
+    if (cachedStreamTarget && cachedStreamTarget.isConnected && (now - cachedStreamTargetAt) < 1500 && ! isOverlayNode(cachedStreamTarget)) {
+      return cachedStreamTarget;
+    }
     const list = document.elementsFromPoint(x, y);
-    return list.find(el => !isOverlayNode(el)) || vid() || document.body;
+    const found = list.find(el => !isOverlayNode(el)) || vid() || document.body;
+    if (found && found !== document.body) {
+      cachedStreamTarget = found;
+      cachedStreamTargetAt = now;
+    }
+    return found;
   }
   function mkTouch(target, x, y, id) {
     try {
@@ -2140,13 +2164,22 @@
     }
   }
 
+  const ripplePool = [];
+  let rippleIdx = 0;
   function ripple(x, y) {
     if (!root || cfg.batterySaver || !cfg.macroRipple) return;
-    const r = h('div', 'sx-rip');
+    let r = ripplePool[rippleIdx];
+    rippleIdx = (rippleIdx + 1) % 12;
+    if (!r || !r.isConnected) {
+      r = h('div', 'sx-rip');
+      ripplePool[rippleIdx] = r;
+      root.append(r);
+    }
+    r.style.animation = 'none';
     r.style.left = x + 'px';
     r.style.top = y + 'px';
-    root.append(r);
-    setTimeout(() => r.remove(), 380);
+    void r.offsetWidth;
+    r.style.animation = '';
   }
 
   const px = (xp, yp) => [xp / 100 * window.innerWidth, yp / 100 * window.innerHeight];
@@ -2890,13 +2923,30 @@
     return m + ':' + s;
   }
 
+  function syncLyreBarSongSelect() {
+    if (!lyreBarTitleEl || lyreBarTitleEl.tagName !== 'SELECT') return;
+    const curIds = Array.from(lyreBarTitleEl.options).map(o => o.value).join('|');
+    const newIds = lyreSongs.map(s => s.id + ':' + s.name).join('|');
+    if (curIds !== newIds) {
+      lyreBarTitleEl.replaceChildren();
+      lyreSongs.forEach(s => {
+        const opt = h('option', null, s.name);
+        opt.value = s.id;
+        lyreBarTitleEl.append(opt);
+      });
+    }
+    if (lyreState.songId) lyreBarTitleEl.value = lyreState.songId;
+  }
+
   function updateLyreBarUI(curSongElapsed) {
     if (!lyreBarEl) return;
     const show = lyreState.playing || lyreState.paused || lyreState.countingDown;
     lyreBarEl.classList.toggle('on', show);
     lyreBarEl.classList.toggle('stealth', show && lyreState.stealth);
     if (!show) return;
-    if (lyreBarTitleEl) lyreBarTitleEl.textContent = lyreState.songName || 'Lyre';
+    syncLyreBarSongSelect();
+    if (lyreBarSpeedBtn) lyreBarSpeedBtn.textContent = cl(nv(cfg.lyreSpeed, 1), 0.5, 1.5).toFixed(2).replace(/\.00$/, '.0').replace(/(\.\d)0$/, '$1') + 'x';
+    if (lyreBarLoopBtn) lyreBarLoopBtn.classList.toggle('active-pill', !!cfg.lyreLoop);
     const dur = Math.max(1, lyreState.totalDur);
     const el = cl(curSongElapsed || 0, 0, dur);
     if (lyreBarTimeEl) lyreBarTimeEl.textContent = fmtSongTime(el) + ' / ' + fmtSongTime(dur);
@@ -2918,9 +2968,14 @@
     const evs = lyreState.events;
     const n = evs.length;
 
+    let firedThisTick = 0;
     while (lyreState.idx < n && evs[lyreState.idx].t <= songElapsed + 1.5) {
       const ev = evs[lyreState.idx++];
-      strikeLyreKey(ev.keyIdx, ev.hold, speed);
+      // Skip stale notes if browser tab hitch exceeded 120ms so chords never slam all at once
+      if (songElapsed - ev.t <= 120 && firedThisTick < 7) {
+        strikeLyreKey(ev.keyIdx, ev.hold, speed);
+        firedThisTick++;
+      }
     }
 
     updateLyreBarUI(songElapsed);
@@ -3184,13 +3239,22 @@
     };
     setRect();
 
-    const tag = h('div', 'sx-lgrid-tag', '21-Key Lyre Grid (3 Rows x 7 Columns) — Drag to Move, Corner to Resize');
+    const tag = h('div', 'sx-lgrid-tag', '21-Dot Lyre Grid (3x7) — Align Dots to Key Centers · Tap Any Dot to Test');
     box.append(tag);
 
     for (let i = 0; i < 21; i++) {
       const [keyChar, noteLbl] = LYRE_KEY_LABELS[i];
-      const cell = h('div', 'sx-lkey');
-      cell.append(h('span', null, (i + 1) + ' · ' + keyChar), h('small', null, noteLbl));
+      const cell = h('div', 'sx-lcell');
+      const dot = h('div', 'sx-ldot');
+      dot.title = 'Tap to test key ' + (i + 1) + ' (' + keyChar + ' / ' + noteLbl + ')';
+      dot.append(h('span', null, String(i + 1)), h('small', null, keyChar));
+      dot.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        dot.classList.add('hit');
+        setTimeout(() => dot.classList.remove('hit'), 160);
+        strikeLyreKey(i, 45, 1.0);
+      });
+      cell.append(dot);
       box.append(cell);
     }
 
@@ -4635,7 +4699,7 @@
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
     const tWrap = h('div', 'sx-pt-wrap');
-    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.5'));
+    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.6'));
 
     // 1-Tap UI Scale Cycle Badge right in the Panel Header (100% -> 125% -> 150% -> 175% -> 200%)
     panelScaleBtn = h('button', 'sx-pscale', 'Scale: ' + Math.round(cfg.uiScale * 100) + '%');
@@ -4690,7 +4754,21 @@
       body.append(row);
     });
 
-    panel.append(head, tabs, body);
+    const qstrip = h('div', 'sx-qstrip');
+    const mkQBtn = (label, icon, fn, cls) => {
+      const b = h('button', 'sx-qbtn ' + (cls || ''));
+      b.type = 'button';
+      b.append(ico(icon, 13), h('span', null, label));
+      b.onclick = fn;
+      return b;
+    };
+    qstrip.append(
+      mkQBtn('Move UI', 'move', () => enterEdit(), ''),
+      mkQBtn('Lyre Grid', 'grid', () => enterLyreCalibration(), 'pri'),
+      mkQBtn('Unstick', 'shield', () => unstickStreamInput(false), ''),
+      mkQBtn('2K Shot', 'camera', () => { closePanel(); setTimeout(screenshot, 120); }, '')
+    );
+    panel.append(head, qstrip, tabs, body);
     body.scrollTop = top;
     tabs.scrollLeft = savedTabScrollLeft;
     if (scrollActiveIntoView && activeTabEl) {
@@ -4709,7 +4787,7 @@
   }
 
   /* ================= overlay root: 3-Graph HUD, macro buttons, edit mode, recorder overlay ================= */
-  let root, fxEl, xhairEl, panel, preview, flashEl, toastEl, mLayer, editLayer, lyreCalEl, lyreBarEl, lyreBarTitleEl, lyreBarTimeEl, lyreBarFillEl, lyreBarPlayBtn, lyreFileInput, barEl, stopBtn, shotEl, qBallEl, recEl, recTimeEl, recCntEl, cdEl, cdNumEl;
+  let root, fxEl, xhairEl, panel, preview, flashEl, toastEl, mLayer, editLayer, lyreCalEl, lyreBarEl, lyreBarTitleEl, lyreBarSpeedBtn, lyreBarLoopBtn, lyreBarTimeEl, lyreBarFillEl, lyreBarPlayBtn, lyreFileInput, barEl, stopBtn, shotEl, qBallEl, recEl, recTimeEl, recCntEl, cdEl, cdNumEl;
   function buildRoot() {
     root = h('div'); root.id = 'sx-root';
     fxEl = h('div'); fxEl.id = 'sx-fx';
@@ -4778,15 +4856,31 @@
     editLayer = h('div'); editLayer.id = 'sx-edit';
     lyreCalEl = h('div'); lyreCalEl.id = 'sx-lyre-cal';
 
-    // Mini Music Player Bar for Lyre Playback
+    // Compact & Complete Draggable Mini Music Player Bar for Lyre Playback (Zero Duplicate Icons!)
     lyreBarEl = h('div'); lyreBarEl.id = 'sx-lyre-bar';
-    const lUnhideBtn = h('button', 'sx-ib sx-lbar-unhide');
-    lUnhideBtn.type = 'button';
-    lUnhideBtn.title = 'Show Lyre Player Bar';
-    lUnhideBtn.append(ico('music', 16));
-    lUnhideBtn.onclick = e => { e.stopPropagation(); lyreState.stealth = false; updateLyreBarUI(lyreState.pauseElapsed); };
+    const lMusicBtn = h('button', 'sx-lbar-icon');
+    lMusicBtn.type = 'button';
+    lMusicBtn.title = 'Tap to restore or open Lyre tab';
+    lMusicBtn.append(ico('music', 15));
+    lMusicBtn.onclick = e => {
+      e.stopPropagation();
+      if (lyreState.stealth) {
+        lyreState.stealth = false;
+        updateLyreBarUI(lyreState.pauseElapsed);
+      } else {
+        openPanel('lyre');
+      }
+    };
 
-    lyreBarTitleEl = h('span', 'sx-lbar-title', 'Lyre');
+    lyreBarTitleEl = h('select', 'sx-lbar-sel');
+    lyreBarTitleEl.title = 'Switch song';
+    lyreBarTitleEl.addEventListener('pointerdown', e => e.stopPropagation());
+    lyreBarTitleEl.addEventListener('change', e => {
+      e.stopPropagation();
+      const chosen = lyreSongs.find(s => s.id === lyreBarTitleEl.value);
+      if (chosen) startLyreSong(chosen, false);
+    });
+
     const progWrap = h('div', 'sx-lbar-prog');
     lyreBarFillEl = h('div', 'sx-lbar-fill');
     progWrap.append(lyreBarFillEl);
@@ -4798,11 +4892,43 @@
     });
     lyreBarTimeEl = h('span', 'sx-lbar-time', '00:00 / 00:00');
 
+    lyreBarSpeedBtn = h('button', 'sx-lbar-spd', '1.0x');
+    lyreBarSpeedBtn.type = 'button';
+    lyreBarSpeedBtn.title = 'Tap to cycle playback speed';
+    lyreBarSpeedBtn.onclick = e => {
+      e.stopPropagation();
+      const spds = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5];
+      const cur = cl(nv(cfg.lyreSpeed, 1), 0.5, 1.5);
+      const idx = spds.findIndex(v => Math.abs(v - cur) < 0.04);
+      cfg.lyreSpeed = spds[(idx + 1) % spds.length];
+      refreshLiveLyreEvents();
+      save();
+      updateLyreBarUI(lyreState.pauseElapsed);
+    };
+
     lyreBarPlayBtn = h('button', 'sx-ib');
     lyreBarPlayBtn.type = 'button';
     lyreBarPlayBtn.title = 'Play / Pause';
     lyreBarPlayBtn.append(ico('pause', 15));
     lyreBarPlayBtn.onclick = e => { e.stopPropagation(); pauseOrResumeLyre(); };
+
+    lyreBarLoopBtn = h('button', 'sx-ib' + (cfg.lyreLoop ? ' active-pill' : ''));
+    lyreBarLoopBtn.type = 'button';
+    lyreBarLoopBtn.title = 'Toggle Loop';
+    lyreBarLoopBtn.append(ico('reset', 14));
+    lyreBarLoopBtn.onclick = e => {
+      e.stopPropagation();
+      cfg.lyreLoop = !cfg.lyreLoop;
+      save();
+      updateLyreBarUI(lyreState.pauseElapsed);
+      toast(cfg.lyreLoop ? 'Loop song: ON' : 'Loop song: OFF');
+    };
+
+    const lCalBtn = h('button', 'sx-ib');
+    lCalBtn.type = 'button';
+    lCalBtn.title = 'Calibrate 21-Dot Lyre Grid';
+    lCalBtn.append(ico('grid', 14));
+    lCalBtn.onclick = e => { e.stopPropagation(); enterLyreCalibration(); };
 
     const lStopBtn = h('button', 'sx-ib danger');
     lStopBtn.type = 'button';
@@ -4812,16 +4938,16 @@
 
     const lHideBtn = h('button', 'sx-ib');
     lHideBtn.type = 'button';
-    lHideBtn.title = 'Hide UI for clean screen recording';
+    lHideBtn.title = 'Stealth Mode (Hide bar for video recording)';
     lHideBtn.append(ico('eye', 15));
     lHideBtn.onclick = e => {
       e.stopPropagation();
       lyreState.stealth = true;
       updateLyreBarUI(lyreState.pauseElapsed);
-      toast('Mini Player hidden (tap small music icon at top to restore)');
+      toast('Mini Player minimized (tap music icon to restore)');
     };
 
-    lyreBarEl.append(lUnhideBtn, ico('music', 15), lyreBarTitleEl, progWrap, lyreBarTimeEl, lyreBarPlayBtn, lStopBtn, lHideBtn);
+    lyreBarEl.append(lMusicBtn, lyreBarTitleEl, progWrap, lyreBarTimeEl, lyreBarSpeedBtn, lyreBarPlayBtn, lyreBarLoopBtn, lCalBtn, lStopBtn, lHideBtn);
     mLayer = h('div'); mLayer.id = 'sx-m';
     barEl = h('div'); barEl.id = 'sx-bar';
 
