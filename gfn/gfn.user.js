@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.6
+// @version      3.7
 // @author       Nvirya
-// @description  iOS PWA bypass, 21-Dot Lyre Auto-Player (Nightly v4 & Sky Studio + Live Test-Tap), Compact Pro UI & Draggable Mini Player Bar, UI Scale (80%–250%), 24 Studio Game Filters, 2K HD Screenshot, 3-Graph Telemetry HUD & Zero-Freeze Hybrid Input.
+// @description  iOS PWA bypass, Pro Lyre Studio (Floating Playlist Drawer, Smooth Drag Scrubber, ±10s Seek, Prev/Next, A-B Section Loop, 21-Key Live Visualizer & Bard Arpeggio), Compact UI Scale (80%–250%), 24 Studio Filters, 2K HD Screenshot & Zero-Freeze Hybrid Input.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
 // @match        https://play.geforcenow.com/*
 // @run-at       document-start
@@ -136,6 +136,12 @@
     bar: 'M4 6h16M4 12h16M4 18h16',
     random: 'M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
     volume: 'M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14',
+    prev: 'M19 20 9 12l10-8v16zM5 19V5',
+    next: 'M5 4l10 8-10 8V4zM19 5v14',
+    rw: 'm11 17-5-5 5-5m7 10-5-5 5-5',
+    ff: 'm13 17 5-5-5-5M6 17l5-5-5-5',
+    list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+    star: 'm12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   };
   function ico(name, size) {
     const s = document.createElementNS(NS, 'svg');
@@ -554,6 +560,10 @@
     lyreSharpMode: 'nearest',
     lyreCountdown: true,
     lyreLoop: false,
+    lyreQueueMode: 'loopAll',
+    lyreChordSpread: 4,
+    lyreHumanize: false,
+    lyreBarPos: { x: 50, y: 3 },
     lyreGrid: { x: 16, y: 50, w: 68, h: 36 },
     v33Migrated: true
   };
@@ -985,20 +995,52 @@
 .sx-lgrid-hd{position:absolute;right:-4px;bottom:-4px;width:26px;height:26px;border-radius:50%;background:var(--sx-bl);border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);touch-action:none;cursor:nwse-resize;z-index:2}
 .sx-lgrid-tag{position:absolute;left:8px;top:-24px;padding:3px 9px;border-radius:7px;background:rgba(18,20,26,0.88);color:#f2f2f7;font:600 10.5px/1.2 var(--sx-font);white-space:nowrap;border:1px solid rgba(255,255,255,0.18);pointer-events:none}
 
-#sx-lyre-bar{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:none;align-items:center;gap:6px;height:38px;padding:0 8px 0 10px;border-radius:19px;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid var(--sx-line2);box-shadow:0 8px 24px rgba(0,0,0,0.16);pointer-events:auto;touch-action:none;color:var(--sx-tx);max-width:calc((100% - 14px) / var(--sx-ui-scale,1));cursor:grab}
+#sx-lyre-bar{position:absolute;z-index:4;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) scale(var(--sx-ui-scale,1));transform-origin:top center;display:none;flex-direction:column;align-items:stretch;gap:0;padding:5px 8px;border-radius:18px;background:rgba(255,255,255,0.95);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border:1px solid var(--sx-line2);box-shadow:0 10px 30px rgba(0,0,0,0.18);pointer-events:auto;touch-action:none;color:var(--sx-tx);max-width:calc((100% - 12px) / var(--sx-ui-scale,1))}
 #sx-lyre-bar.on{display:flex}
-#sx-lyre-bar.stealth{padding:0;width:32px;height:32px;border-radius:16px;justify-content:center;opacity:0.26;background:rgba(255,255,255,0.78)}
-#sx-lyre-bar.stealth>*:not(.sx-lbar-icon){display:none !important}
-.sx-lbar-icon{width:26px;height:26px;border-radius:13px;border:0;background:rgba(0,122,255,0.12);color:var(--sx-bl);display:grid;place-items:center;padding:0;flex:none;cursor:pointer}
+#sx-lyre-bar.stealth{padding:0;width:32px;height:32px;border-radius:16px;align-items:center;justify-content:center;opacity:0.26;background:rgba(255,255,255,0.78)}
+#sx-lyre-bar.stealth>*:not(.sx-lbar-top){display:none !important}
+#sx-lyre-bar.stealth .sx-lbar-top>*:not(.sx-lbar-icon){display:none !important}
+.sx-lbar-top{display:flex;align-items:center;gap:4px;min-height:28px}
+.sx-lbar-icon{width:26px;height:26px;border-radius:13px;border:0;background:rgba(0,122,255,0.12);color:var(--sx-bl);display:grid;place-items:center;padding:0;flex:none;cursor:grab}
 .sx-lbar-icon:active{background:rgba(0,122,255,0.24)}
-.sx-lbar-sel{-webkit-appearance:none;appearance:none;border:0;background:transparent;color:var(--sx-tx);font:600 12px/1.2 var(--sx-font);max-width:118px;padding:2px 4px;border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
-.sx-lbar-sel:active{background:var(--sx-s2)}
-.sx-lbar-spd{border:0;border-radius:7px;padding:3px 6px;background:rgba(88,86,214,0.12);color:var(--sx-in);font:700 10.5px/1 var(--sx-font);cursor:pointer;flex:none}
+.sx-lbar-songbtn{display:flex;align-items:center;gap:4px;border:0;border-radius:8px;background:rgba(118,118,128,0.10);color:var(--sx-tx);padding:4px 8px;font:600 11.5px/1.1 var(--sx-font);max-width:130px;cursor:pointer;flex:0 1 auto;min-width:64px}
+.sx-lbar-songbtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-lbar-songbtn svg{flex:none;color:var(--sx-bl)}
+.sx-lbar-songbtn:active,.sx-lbar-songbtn.open{background:rgba(0,122,255,0.14);color:var(--sx-bl)}
+.sx-lbar-spd{border:0;border-radius:7px;padding:3.5px 6px;background:rgba(88,86,214,0.12);color:var(--sx-in);font:700 10px/1 var(--sx-font);cursor:pointer;flex:none}
 .sx-lbar-spd:active{background:rgba(88,86,214,0.24)}
-.sx-lbar-time{font:600 10.5px/1 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-mu);white-space:nowrap}
-.sx-lbar-prog{width:76px;height:6px;border-radius:3px;background:var(--sx-s3);overflow:hidden;cursor:pointer;position:relative;flex:none}
-.sx-lbar-fill{height:100%;width:0%;background:var(--sx-bl);border-radius:3px;pointer-events:none}
-.sx-ib.on- pill,.sx-ib.active-pill{background:rgba(0,122,255,0.15);color:var(--sx-bl)}
+.sx-lbar-time{font:600 10px/1 var(--sx-font);font-variant-numeric:tabular-nums;color:var(--sx-mu);white-space:nowrap;min-width:64px;text-align:center}
+.sx-lbar-prog{width:92px;height:14px;display:flex;align-items:center;cursor:pointer;position:relative;flex:none;touch-action:none}
+.sx-lbar-track{width:100%;height:5px;border-radius:3px;background:var(--sx-s3);position:relative;overflow:visible}
+.sx-lbar-ab{position:absolute;top:0;bottom:0;background:rgba(255,149,0,0.38);border-radius:3px;pointer-events:none;display:none}
+.sx-lbar-fill{height:100%;width:0%;background:var(--sx-bl);border-radius:3px;pointer-events:none;position:relative}
+.sx-lbar-thumb{position:absolute;top:50%;right:-5px;width:11px;height:11px;border-radius:50%;background:#ffffff;border:2px solid var(--sx-bl);transform:translateY(-50%);box-shadow:0 1px 4px rgba(0,0,0,0.28);pointer-events:none}
+.sx-ib.sm{width:25px;height:25px;border-radius:12.5px}
+.sx-ib.active-pill{background:rgba(0,122,255,0.16);color:var(--sx-bl)}
+
+/* Floating Song List & Studio Controls Drawer inside #sx-lyre-bar */
+.sx-lplist{display:none;flex-direction:column;gap:6px;margin-top:6px;padding-top:6px;border-top:0.5px solid var(--sx-line);width:min(360px,calc((100vw - 24px) / var(--sx-ui-scale,1)));max-height:min(280px,calc(62dvh / var(--sx-ui-scale,1)))}
+.sx-lplist.open{display:flex}
+.sx-lplist-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px}
+.sx-lpill{border:0.5px solid var(--sx-line2);border-radius:7px;background:var(--sx-s1);color:var(--sx-tx);padding:3.5px 7px;font:600 10.5px/1 var(--sx-font);cursor:pointer;display:inline-flex;align-items:center;gap:3px}
+.sx-lpill:active{background:var(--sx-s2)}
+.sx-lpill.on{background:rgba(0,122,255,0.14);color:var(--sx-bl);border-color:rgba(0,122,255,0.3)}
+.sx-lpill.ab{background:rgba(255,149,0,0.15);color:#c96e00;border-color:rgba(255,149,0,0.35)}
+.sx-lviz{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:4px 6px;border-radius:9px;background:rgba(118,118,128,0.08)}
+.sx-lviz-dot{height:13px;border-radius:4px;background:rgba(255,255,255,0.85);border:0.5px solid var(--sx-line2);display:flex;align-items:center;justify-content:center;font:700 8px/1 var(--sx-font);color:var(--sx-mu);cursor:pointer;transition:background .08s,transform .08s}
+.sx-lviz-dot.lit{background:var(--sx-bl);color:#fff;transform:scale(1.1);border-color:transparent}
+.sx-lplist-search{display:flex;gap:4px;align-items:center}
+.sx-lplist-search input{flex:1;min-width:0;-webkit-appearance:none;appearance:none;border:0.5px solid var(--sx-line2);border-radius:8px;background:var(--sx-s1);padding:5px 8px;font:500 11.5px var(--sx-font);color:var(--sx-tx);-webkit-user-select:text;user-select:text}
+.sx-lplist-search input:focus{outline:none;border-color:var(--sx-bl)}
+.sx-lplist-list{overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:4px;max-height:145px;padding-right:2px}
+.sx-litem{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:9px;background:var(--sx-s1);border:0.5px solid var(--sx-line);cursor:pointer}
+.sx-litem:active{background:var(--sx-s2)}
+.sx-litem.cur{border-color:var(--sx-bl);background:rgba(0,122,255,0.07)}
+.sx-litem-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.sx-litem-name{font:600 11.5px/1.2 var(--sx-font);color:var(--sx-tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-litem-sub{font:500 9.5px/1.1 var(--sx-font);color:var(--sx-mu);font-variant-numeric:tabular-nums}
+.sx-litem-acts{display:flex;align-items:center;gap:3px;flex:none}
+.sx-ib.fav{color:#ff9500}
 .sx-scard{margin:6px 10px 0;padding:9px 11px;border:0.5px solid var(--sx-line2);border-radius:13px;background:var(--sx-s1);box-shadow:0 1px 5px rgba(0,0,0,0.03)}
 .sx-scard.playing{border-color:var(--sx-bl);box-shadow:0 0 0 1.5px rgba(0,122,255,0.24)}
 
@@ -2677,6 +2719,9 @@
   const nextLyrePid = () => 260 + (lyrePidSeq++ % 80);
 
   const lyreState = {
+    barOpen: false,
+    plistOpen: false,
+    scrubbing: false,
     playing: false,
     paused: false,
     stealth: false,
@@ -2684,6 +2729,9 @@
     cdTimer: 0,
     songId: null,
     songName: '',
+    searchQuery: '',
+    loopA: null,     // ms or null
+    loopB: null,     // ms or null
     events: [],      // normalized { t, keyIdx, hold }
     rawSong: null,
     idx: 0,
@@ -2811,13 +2859,14 @@
     }
     raw.sort((a, b) => a.t - b.t || a.keyIdx - b.keyIdx);
 
-    // Apply 4ms micro-stagger for chord notes sharing the exact same timestamp to prevent iOS WebRTC DataChannel packet drop
+    // Apply configurable micro-stagger / bard arpeggio roll (default 4ms) for chord notes sharing the same timestamp
+    const spreadMs = cl(nv(cfg.lyreChordSpread, 4), 2, 18);
+    const humanizeOn = !!cfg.lyreHumanize;
     let prevBaseT = -999, chordIdx = 0;
     const out = [];
     for (let i = 0; i < raw.length; i++) {
       const ev = raw[i];
       if (Math.abs(ev.t - prevBaseT) <= 2) {
-        // Deduplicate identical key struck within 2ms in the same chord
         if (out.length > 0 && out[out.length - 1].keyIdx === ev.keyIdx && Math.abs(out[out.length - 1].baseT - ev.t) <= 2) {
           continue;
         }
@@ -2826,13 +2875,15 @@
         prevBaseT = ev.t;
         chordIdx = 0;
       }
+      const hum = humanizeOn ? randRange(-1.8, 1.8) : 0;
       out.push({
         baseT: ev.t,
-        t: ev.t + chordIdx * 4,
+        t: Math.max(0, ev.t + chordIdx * spreadMs + hum),
         keyIdx: ev.keyIdx,
         hold: ev.hold
       });
     }
+    out.sort((a, b) => a.t - b.t);
     return out;
   }
 
@@ -2892,8 +2943,16 @@
     activeLyrePids.clear();
   }
 
+  const vizTimers = new Array(21).fill(0);
+  function flashLyreVizDot(keyIdx, holdMs) {
+    if (!lyreVizDots || !lyreVizDots[keyIdx] || !lyreState.plistOpen) return;
+    const d = lyreVizDots[keyIdx];
+    d.classList.add('lit');
+    clearTimeout(vizTimers[keyIdx]);
+    vizTimers[keyIdx] = setTimeout(() => d.classList.remove('lit'), cl(holdMs || 90, 75, 450));
+  }
+
   function strikeLyreKey(keyIdx, rawHoldMs, speed) {
-    // If this key is still held from a previous sustain note, release it cleanly before striking again
     if (activeLyrePids.has(keyIdx)) {
       releaseLyreKey(keyIdx);
     }
@@ -2905,6 +2964,7 @@
       : Math.round(randRange(26, 38));
 
     ripple(x, y);
+    flashLyreVizDot(keyIdx, holdMs);
     inject('down', x, y, pid);
     const timer = setTimeout(() => {
       const cur = activeLyrePids.get(keyIdx);
@@ -2923,75 +2983,289 @@
     return m + ':' + s;
   }
 
-  function syncLyreBarSongSelect() {
-    if (!lyreBarTitleEl || lyreBarTitleEl.tagName !== 'SELECT') return;
-    const curIds = Array.from(lyreBarTitleEl.options).map(o => o.value).join('|');
-    const newIds = lyreSongs.map(s => s.id + ':' + s.name).join('|');
-    if (curIds !== newIds) {
-      lyreBarTitleEl.replaceChildren();
-      lyreSongs.forEach(s => {
-        const opt = h('option', null, s.name);
-        opt.value = s.id;
-        lyreBarTitleEl.append(opt);
-      });
+  function ensureActiveSongLoaded() {
+    if (!lyreSongs.length) loadLyreSongs();
+    let s = lyreSongs.find(x => x.id === lyreState.songId) || lyreSongs[0];
+    if (!s) return null;
+    if (lyreState.rawSong !== s || !lyreState.events.length) {
+      lyreState.songId = s.id;
+      lyreState.songName = s.name;
+      lyreState.rawSong = s;
+      lyreState.events = buildLyrePlaybackEvents(s);
+      lyreState.totalDur = s.durMs || (lyreState.events.length ? lyreState.events[lyreState.events.length - 1].t + 200 : 1000);
     }
-    if (lyreState.songId) lyreBarTitleEl.value = lyreState.songId;
+    return s;
+  }
+
+  function getCurLyreElapsed() {
+    if (lyreState.playing && !lyreState.paused) {
+      const speed = cl(nv(cfg.lyreSpeed, 1.0), 0.5, 1.5);
+      return cl((performance.now() - lyreState.startPerf) * speed, 0, Math.max(1, lyreState.totalDur));
+    }
+    return cl(lyreState.pauseElapsed || 0, 0, Math.max(1, lyreState.totalDur));
+  }
+
+  function renderLyrePlaylistDrawer() {
+    if (!lyrePlistEl) return;
+    lyrePlistEl.classList.toggle('open', !!lyreState.plistOpen);
+    if (lyreBarTitleEl) lyreBarTitleEl.classList.toggle('open', !!lyreState.plistOpen);
+    if (lyreBarListBtn) lyreBarListBtn.classList.toggle('active-pill', !!lyreState.plistOpen);
+    if (!lyreState.plistOpen) return;
+
+    // Update top quick studio controls inside drawer
+    if (lyreQueueBtn) {
+      const qLabels = {
+        loopAll: 'Queue: Loop All',
+        loopOne: 'Queue: Loop 1',
+        shuffle: 'Queue: Shuffle',
+        single: 'Queue: Single'
+      };
+      lyreQueueBtn.textContent = qLabels[cfg.lyreQueueMode] || 'Queue: Loop All';
+    }
+    if (lyreTransLbl) {
+      const st = cl(Math.round(nv(cfg.lyreTranspose, 0)), -12, 12);
+      lyreTransLbl.textContent = 'Pitch: ' + (st > 0 ? '+' + st : st) + ' st';
+    }
+    if (lyreChordBtn) {
+      lyreChordBtn.textContent = 'Chord Roll: ' + cl(nv(cfg.lyreChordSpread, 4), 2, 18) + 'ms';
+    }
+    if (lyreAbBtn) {
+      if (lyreState.loopA == null) {
+        lyreAbBtn.textContent = 'A-B Loop: Set A';
+        lyreAbBtn.classList.remove('ab');
+      } else if (lyreState.loopB == null) {
+        lyreAbBtn.textContent = 'A: ' + fmtSongTime(lyreState.loopA) + ' → Set B';
+        lyreAbBtn.classList.add('ab');
+      } else {
+        lyreAbBtn.textContent = fmtSongTime(lyreState.loopA) + '–' + fmtSongTime(lyreState.loopB) + ' (×)';
+        lyreAbBtn.classList.add('ab');
+      }
+    }
+
+    if (!lyrePlistListEl) return;
+    lyrePlistListEl.replaceChildren();
+    const q = (lyreState.searchQuery || '').trim().toLowerCase();
+    const sorted = lyreSongs.slice().sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
+    const filtered = q ? sorted.filter(s => s.name.toLowerCase().includes(q)) : sorted;
+
+    if (!filtered.length) {
+      const empty = h('div', 'sx-litem-sub', 'No matching songs found. Tap +JSON to import.');
+      empty.style.padding = '8px';
+      lyrePlistListEl.append(empty);
+      return;
+    }
+
+    filtered.forEach((s, idx) => {
+      const isCur = s.id === lyreState.songId;
+      const row = h('div', 'sx-litem' + (isCur ? ' cur' : ''));
+      const main = h('div', 'sx-litem-main');
+      const nm = h('div', 'sx-litem-name', (idx + 1) + '. ' + s.name);
+      const sub = h('div', 'sx-litem-sub', 'BPM ' + (s.bpm || 120) + ' · ' + fmtSongTime(s.durMs || 0) + ' · ' + (s.noteCount || (s.notes && s.notes.length) || 0) + ' notes');
+      main.append(nm, sub);
+      row.onclick = e => {
+        e.stopPropagation();
+        startLyreSong(s, false);
+        renderLyrePlaylistDrawer();
+      };
+
+      const acts = h('div', 'sx-litem-acts');
+      const favBtn = h('button', 'sx-ib sm' + (s.fav ? ' fav' : ''));
+      favBtn.type = 'button';
+      favBtn.title = 'Pin favorite song to top';
+      favBtn.append(ico('star', 13));
+      favBtn.onclick = e => {
+        e.stopPropagation();
+        s.fav = !s.fav;
+        saveLyreSongs();
+        renderLyrePlaylistDrawer();
+      };
+
+      const playBtn = h('button', 'sx-ib sm' + (isCur && lyreState.playing && !lyreState.paused ? ' active-pill' : ''));
+      playBtn.type = 'button';
+      playBtn.title = isCur && lyreState.playing ? 'Pause / Resume' : 'Play this song';
+      playBtn.append(ico(isCur && lyreState.playing && !lyreState.paused ? 'pause' : 'play', 13));
+      playBtn.onclick = e => {
+        e.stopPropagation();
+        if (isCur && (lyreState.playing || lyreState.paused)) {
+          pauseOrResumeLyre();
+        } else {
+          startLyreSong(s, false);
+        }
+        renderLyrePlaylistDrawer();
+      };
+
+      const delBtn = h('button', 'sx-ib sm danger');
+      delBtn.type = 'button';
+      delBtn.title = 'Delete song';
+      delBtn.append(ico('trash', 13));
+      delBtn.onclick = e => {
+        e.stopPropagation();
+        if (lyreSongs.length <= 1) {
+          toast('Keep at least 1 song in library');
+          return;
+        }
+        if (isCur) stopLyre(true);
+        lyreSongs = lyreSongs.filter(x => x.id !== s.id);
+        if (lyreState.songId === s.id && lyreSongs[0]) {
+          lyreState.songId = lyreSongs[0].id;
+          lyreState.rawSong = null;
+          ensureActiveSongLoaded();
+        }
+        saveLyreSongs();
+        renderLyrePlaylistDrawer();
+        updateLyreBarUI(getCurLyreElapsed());
+      };
+
+      acts.append(favBtn, playBtn, delBtn);
+      row.append(main, acts);
+      lyrePlistListEl.append(row);
+    });
   }
 
   function updateLyreBarUI(curSongElapsed) {
     if (!lyreBarEl) return;
-    const show = lyreState.playing || lyreState.paused || lyreState.countingDown;
+    ensureActiveSongLoaded();
+    const show = streaming() && (lyreState.barOpen || lyreState.playing || lyreState.paused || lyreState.countingDown);
     lyreBarEl.classList.toggle('on', show);
     lyreBarEl.classList.toggle('stealth', show && lyreState.stealth);
     if (!show) return;
-    syncLyreBarSongSelect();
-    if (lyreBarSpeedBtn) lyreBarSpeedBtn.textContent = cl(nv(cfg.lyreSpeed, 1), 0.5, 1.5).toFixed(2).replace(/\.00$/, '.0').replace(/(\.\d)0$/, '$1') + 'x';
-    if (lyreBarLoopBtn) lyreBarLoopBtn.classList.toggle('active-pill', !!cfg.lyreLoop);
-    const dur = Math.max(1, lyreState.totalDur);
-    const el = cl(curSongElapsed || 0, 0, dur);
+
+    if (lyreBarTitleSpan) {
+      lyreBarTitleSpan.textContent = lyreState.songName || 'Select Song';
+    }
+    if (lyreBarSpeedBtn) {
+      lyreBarSpeedBtn.textContent = cl(nv(cfg.lyreSpeed, 1), 0.5, 1.5).toFixed(2).replace(/\.00$/, '.0').replace(/(\.\d)0$/, '$1') + 'x';
+    }
+    const dur = Math.max(1, lyreState.totalDur || 1);
+    const el = cl(curSongElapsed != null ? curSongElapsed : getCurLyreElapsed(), 0, dur);
     if (lyreBarTimeEl) lyreBarTimeEl.textContent = fmtSongTime(el) + ' / ' + fmtSongTime(dur);
     if (lyreBarFillEl) lyreBarFillEl.style.width = cl((el / dur) * 100, 0, 100).toFixed(1) + '%';
-    if (lyreBarPlayBtn) {
-      lyreBarPlayBtn.replaceChildren(ico(lyreState.paused ? 'play' : 'pause', 15));
+    if (lyreBarAbEl) {
+      if (lyreState.loopA != null && lyreState.loopB != null && lyreState.loopB > lyreState.loopA) {
+        const leftPct = cl((lyreState.loopA / dur) * 100, 0, 100);
+        const widthPct = cl(((lyreState.loopB - lyreState.loopA) / dur) * 100, 1, 100 - leftPct);
+        lyreBarAbEl.style.display = 'block';
+        lyreBarAbEl.style.left = leftPct.toFixed(1) + '%';
+        lyreBarAbEl.style.width = widthPct.toFixed(1) + '%';
+      } else {
+        lyreBarAbEl.style.display = 'none';
+      }
     }
+    if (lyreBarPlayBtn) {
+      const isActivelyPlaying = lyreState.playing && !lyreState.paused;
+      lyreBarPlayBtn.replaceChildren(ico(isActivelyPlaying ? 'pause' : 'play', 14));
+      lyreBarPlayBtn.classList.toggle('active-pill', isActivelyPlaying);
+    }
+  }
+
+  function advanceLyreSong(dir) {
+    if (!lyreSongs.length) return;
+    const sorted = lyreSongs.slice().sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
+    const curIdx = Math.max(0, sorted.findIndex(s => s.id === lyreState.songId));
+    let nextSong = sorted[0];
+    if (cfg.lyreQueueMode === 'shuffle' && sorted.length > 1) {
+      let r = curIdx;
+      while (r === curIdx) r = Math.floor(Math.random() * sorted.length);
+      nextSong = sorted[r];
+    } else {
+      const nextIdx = (curIdx + dir + sorted.length) % sorted.length;
+      nextSong = sorted[nextIdx];
+    }
+    if (nextSong) {
+      startLyreSong(nextSong, false);
+      if (lyreState.plistOpen) renderLyrePlaylistDrawer();
+    }
+  }
+
+  function seekLyreByMs(deltaMs) {
+    ensureActiveSongLoaded();
+    const cur = getCurLyreElapsed();
+    const dur = Math.max(1, lyreState.totalDur || 1);
+    const target = cl(cur + deltaMs, 0, dur * 0.995);
+    seekLyreToRatio(target / dur);
+  }
+
+  function toggleLyreAbPoint() {
+    ensureActiveSongLoaded();
+    const cur = getCurLyreElapsed();
+    if (lyreState.loopA == null) {
+      lyreState.loopA = cur;
+      lyreState.loopB = null;
+      toast('Loop Point A set at ' + fmtSongTime(cur));
+    } else if (lyreState.loopB == null) {
+      if (cur <= lyreState.loopA + 500) {
+        lyreState.loopB = Math.min(lyreState.totalDur, lyreState.loopA + 5000);
+      } else {
+        lyreState.loopB = cur;
+      }
+      toast('A-B Section Loop active (' + fmtSongTime(lyreState.loopA) + ' – ' + fmtSongTime(lyreState.loopB) + ')');
+    } else {
+      lyreState.loopA = null;
+      lyreState.loopB = null;
+      toast('A-B Section Loop cleared');
+    }
+    updateLyreBarUI(cur);
+    renderLyrePlaylistDrawer();
   }
 
   function lyreSchedulerTick() {
     if (!lyreState.playing || lyreState.paused) return;
     if (!streaming()) {
-      stopLyre();
+      stopLyre(false);
       return;
     }
     const speed = cl(nv(cfg.lyreSpeed, 1.0), 0.5, 1.5);
     const now = performance.now();
     const songElapsed = (now - lyreState.startPerf) * speed;
+
+    // Check A-B Section Loop boundary
+    if (lyreState.loopA != null && lyreState.loopB != null && songElapsed >= lyreState.loopB) {
+      seekLyreToRatio(lyreState.loopA / Math.max(1, lyreState.totalDur));
+      lyreState.rafId = requestAnimationFrame(lyreSchedulerTick);
+      return;
+    }
+
     const evs = lyreState.events;
     const n = evs.length;
 
     let firedThisTick = 0;
     while (lyreState.idx < n && evs[lyreState.idx].t <= songElapsed + 1.5) {
       const ev = evs[lyreState.idx++];
-      // Skip stale notes if browser tab hitch exceeded 120ms so chords never slam all at once
       if (songElapsed - ev.t <= 120 && firedThisTick < 7) {
         strikeLyreKey(ev.keyIdx, ev.hold, speed);
         firedThisTick++;
       }
     }
 
-    updateLyreBarUI(songElapsed);
+    if (!lyreState.scrubbing) updateLyreBarUI(songElapsed);
 
     if (lyreState.idx >= n && songElapsed >= lyreState.totalDur + 80) {
-      if (cfg.lyreLoop) {
-        lyreState.idx = 0;
-        lyreState.startPerf = performance.now();
+      const qMode = cfg.lyreLoop ? 'loopOne' : (cfg.lyreQueueMode || 'loopAll');
+      if (qMode === 'loopOne') {
+        seekLyreToRatio(0);
         lyreState.rafId = requestAnimationFrame(lyreSchedulerTick);
+      } else if ((qMode === 'loopAll' || qMode === 'shuffle') && lyreSongs.length > 0) {
+        advanceLyreSong(1);
       } else {
-        stopLyre();
+        stopLyre(true);
         toast('Finished playing "' + lyreState.songName + '"');
       }
       return;
     }
     lyreState.rafId = requestAnimationFrame(lyreSchedulerTick);
+  }
+
+  function openLyreMiniBar() {
+    ensureRoot();
+    if (!streaming()) {
+      toast('Start Genshin Impact stream first');
+      return;
+    }
+    ensureActiveSongLoaded();
+    lyreState.barOpen = true;
+    lyreState.stealth = false;
+    updateLyreBarUI(getCurLyreElapsed());
+    renderLyrePlaylistDrawer();
   }
 
   function startLyreSong(song, fromPanel) {
@@ -3000,19 +3274,22 @@
       toast('Start Genshin Impact stream first to play Lyre');
       return;
     }
-    if (!song) song = lyreSongs.find(s => s.id === lyreState.songId) || lyreSongs[0];
+    if (!song) song = ensureActiveSongLoaded();
     if (!song) {
       toast('Import a JSON song first');
       return;
     }
-    stopLyre();
+    stopLyre(true);
     if (calibratingLyre) exitLyreCalibration();
     if (editing) exitEdit();
     if (fromPanel) closePanel();
 
+    lyreState.barOpen = true;
     lyreState.songId = song.id;
     lyreState.songName = song.name;
     lyreState.rawSong = song;
+    lyreState.loopA = null;
+    lyreState.loopB = null;
     lyreState.events = buildLyrePlaybackEvents(song);
     if (!lyreState.events.length) {
       toast('No valid playable notes in this song');
@@ -3020,6 +3297,7 @@
     }
     lyreState.totalDur = song.durMs || (lyreState.events[lyreState.events.length - 1].t + 200);
     lyreState.idx = 0;
+    lyreState.pauseElapsed = 0;
     lyreState.paused = false;
     lyreState.stealth = false;
 
@@ -3029,6 +3307,7 @@
       lyreState.playing = true;
       lyreState.startPerf = performance.now();
       updateLyreBarUI(0);
+      renderLyrePlaylistDrawer();
       if (panel && panel.classList.contains('open')) renderPanel();
       cancelAnimationFrame(lyreState.rafId);
       lyreState.rafId = requestAnimationFrame(lyreSchedulerTick);
@@ -3058,7 +3337,24 @@
   }
 
   function pauseOrResumeLyre() {
-    if (!lyreState.playing) return;
+    ensureActiveSongLoaded();
+    if (!lyreState.playing) {
+      // Currently stopped at pauseElapsed (or 00:00) -> start playing from current position!
+      const speed = cl(nv(cfg.lyreSpeed, 1.0), 0.5, 1.5);
+      const startMs = (lyreState.pauseElapsed >= lyreState.totalDur - 50) ? 0 : (lyreState.pauseElapsed || 0);
+      let newIdx = 0;
+      while (newIdx < lyreState.events.length && lyreState.events[newIdx].t < startMs) newIdx++;
+      lyreState.idx = newIdx;
+      lyreState.playing = true;
+      lyreState.paused = false;
+      lyreState.barOpen = true;
+      lyreState.startPerf = performance.now() - (startMs / speed);
+      updateLyreBarUI(startMs);
+      renderLyrePlaylistDrawer();
+      cancelAnimationFrame(lyreState.rafId);
+      lyreState.rafId = requestAnimationFrame(lyreSchedulerTick);
+      return;
+    }
     const speed = cl(nv(cfg.lyreSpeed, 1.0), 0.5, 1.5);
     if (!lyreState.paused) {
       lyreState.paused = true;
@@ -3066,19 +3362,21 @@
       cancelAnimationFrame(lyreState.rafId);
       releaseAllLyreKeys();
       updateLyreBarUI(lyreState.pauseElapsed);
+      renderLyrePlaylistDrawer();
     } else {
       lyreState.paused = false;
       lyreState.startPerf = performance.now() - (lyreState.pauseElapsed / speed);
       updateLyreBarUI(lyreState.pauseElapsed);
+      renderLyrePlaylistDrawer();
       cancelAnimationFrame(lyreState.rafId);
       lyreState.rafId = requestAnimationFrame(lyreSchedulerTick);
     }
   }
 
   function seekLyreToRatio(ratio) {
-    if (!lyreState.playing && !lyreState.paused) return;
+    ensureActiveSongLoaded();
     const r = cl(ratio, 0, 0.995);
-    const targetSongMs = r * lyreState.totalDur;
+    const targetSongMs = r * Math.max(1, lyreState.totalDur);
     const speed = cl(nv(cfg.lyreSpeed, 1.0), 0.5, 1.5);
     releaseAllLyreKeys();
     let newIdx = 0;
@@ -3090,16 +3388,23 @@
     updateLyreBarUI(targetSongMs);
   }
 
-  function stopLyre() {
+  function stopLyre(keepBarVisible = true) {
     clearInterval(lyreState.cdTimer);
     cancelAnimationFrame(lyreState.rafId);
     lyreState.countingDown = false;
     lyreState.playing = false;
     lyreState.paused = false;
-    lyreState.stealth = false;
+    lyreState.idx = 0;
+    lyreState.pauseElapsed = 0;
+    if (!keepBarVisible) {
+      lyreState.barOpen = false;
+      lyreState.plistOpen = false;
+      lyreState.stealth = false;
+    }
     if (cdEl && !recState.countingDown) cdEl.classList.remove('on');
     releaseAllLyreKeys();
     updateLyreBarUI(0);
+    renderLyrePlaylistDrawer();
     if (panel && panel.classList.contains('open') && panelTab === 'lyre') renderPanel();
   }
 
@@ -3131,8 +3436,12 @@
         lyreSongs.unshift(s);
       });
       lyreState.songId = songs[0].id;
+      lyreState.rawSong = null;
+      ensureActiveSongLoaded();
       saveLyreSongs();
       rebuildUI();
+      updateLyreBarUI(0);
+      renderLyrePlaylistDrawer();
       toast('Imported ' + songs.length + ' song(s): ' + songs[0].name + ' (' + songs[0].noteCount + ' notes)');
     } catch (e) {
       console.warn('[GFN-X] Lyre import error', e);
@@ -4342,12 +4651,44 @@
       {
         type: 'buttons',
         only: 'game',
-        label: '21-Key Grid Calibration (3x7)',
-        desc: 'Drag and resize a single 3x7 frame to match the 21 Lyre keys in Genshin Impact.',
+        label: 'Lyre Mini Player & 21-Dot Grid',
+        desc: 'Open floating Music Popup Bar (with Playlist, Scrubber & A-B Loop) or calibrate the 21-dot grid.',
         btns: [
-          ['Calibrate 21-Key Grid', enterLyreCalibration, 'blue', 'grid'],
-          ['Stop Music', stopLyre, 'alt', 'stop']
+          ['Show Music Popup', () => { closePanel(); openLyreMiniBar(); lyreState.plistOpen = true; renderLyrePlaylistDrawer(); }, 'blue', 'music'],
+          ['Calibrate 21-Dot Grid', enterLyreCalibration, 'alt', 'grid'],
+          ['Reset / Stop', () => stopLyre(true), 'alt', 'stop']
         ]
+      },
+      {
+        k: 'lyreQueueMode',
+        type: 'select',
+        label: 'Playlist Queue Mode',
+        desc: 'Choose whether to auto-advance to the next song, loop 1 song, shuffle, or stop after 1 song.',
+        opts: [
+          ['loopAll', 'Loop All Songs (Auto-Next)'],
+          ['loopOne', 'Loop Current Song (Repeat 1)'],
+          ['shuffle', 'Shuffle Songs Randomly'],
+          ['single', 'Play Single Song & Stop']
+        ],
+        set: v => { cfg.lyreQueueMode = v; cfg.lyreLoop = (v === 'loopOne'); commit('lyreQueueMode'); renderLyrePlaylistDrawer(); }
+      },
+      {
+        k: 'lyreChordSpread',
+        type: 'range',
+        label: 'Chord Arpeggio Spread (2ms – 16ms)',
+        desc: '4ms = crisp chord packet safety; 8–14ms = expressive harpist arpeggio roll on chords.',
+        min: 2,
+        max: 16,
+        step: 1,
+        fmt: v => v + ' ms',
+        set: v => { cfg.lyreChordSpread = v; refreshLiveLyreEvents(); commit('lyreChordSpread'); renderLyrePlaylistDrawer(); }
+      },
+      {
+        k: 'lyreHumanize',
+        type: 'switch',
+        label: 'Bard Rhythm Humanizer (±1.8ms)',
+        desc: 'Adds micro-timing warmth to notes while preserving tempo lock.',
+        set: v => { cfg.lyreHumanize = v; refreshLiveLyreEvents(); commit('lyreHumanize'); }
       },
       {
         k: 'lyreSpeed',
@@ -4607,7 +4948,7 @@
       ng.className = grid.className;
       Array.from(grid.attributes).forEach(a => ng.setAttribute(a.name, a.value));
       ng.removeAttribute('id');
-      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.5)' : g.title));
+      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.7)' : g.title));
       items.forEach(i => ng.append(nativeRow(ref, i)));
       sec.append(ng);
     });
@@ -4699,7 +5040,7 @@
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
     const tWrap = h('div', 'sx-pt-wrap');
-    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.6'));
+    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.7'));
 
     // 1-Tap UI Scale Cycle Badge right in the Panel Header (100% -> 125% -> 150% -> 175% -> 200%)
     panelScaleBtn = h('button', 'sx-pscale', 'Scale: ' + Math.round(cfg.uiScale * 100) + '%');
@@ -4763,9 +5104,9 @@
       return b;
     };
     qstrip.append(
+      mkQBtn('Music Bar', 'music', () => { closePanel(); openLyreMiniBar(); lyreState.plistOpen = true; renderLyrePlaylistDrawer(); }, 'pri'),
+      mkQBtn('Lyre Grid', 'grid', () => enterLyreCalibration(), ''),
       mkQBtn('Move UI', 'move', () => enterEdit(), ''),
-      mkQBtn('Lyre Grid', 'grid', () => enterLyreCalibration(), 'pri'),
-      mkQBtn('Unstick', 'shield', () => unstickStreamInput(false), ''),
       mkQBtn('2K Shot', 'camera', () => { closePanel(); setTimeout(screenshot, 120); }, '')
     );
     panel.append(head, qstrip, tabs, body);
@@ -4787,7 +5128,7 @@
   }
 
   /* ================= overlay root: 3-Graph HUD, macro buttons, edit mode, recorder overlay ================= */
-  let root, fxEl, xhairEl, panel, preview, flashEl, toastEl, mLayer, editLayer, lyreCalEl, lyreBarEl, lyreBarTitleEl, lyreBarSpeedBtn, lyreBarLoopBtn, lyreBarTimeEl, lyreBarFillEl, lyreBarPlayBtn, lyreFileInput, barEl, stopBtn, shotEl, qBallEl, recEl, recTimeEl, recCntEl, cdEl, cdNumEl;
+  let root, fxEl, xhairEl, panel, preview, flashEl, toastEl, mLayer, editLayer, lyreCalEl, lyreBarEl, lyreBarTitleEl, lyreBarTitleSpan, lyreBarListBtn, lyreBarSpeedBtn, lyreBarLoopBtn, lyreBarTimeEl, lyreBarFillEl, lyreBarAbEl, lyreBarPlayBtn, lyrePlistEl, lyrePlistListEl, lyreQueueBtn, lyreTransLbl, lyreChordBtn, lyreAbBtn, lyreVizDots, lyreFileInput, barEl, stopBtn, shotEl, qBallEl, recEl, recTimeEl, recCntEl, cdEl, cdNumEl;
   function buildRoot() {
     root = h('div'); root.id = 'sx-root';
     fxEl = h('div'); fxEl.id = 'sx-fx';
@@ -4856,40 +5197,106 @@
     editLayer = h('div'); editLayer.id = 'sx-edit';
     lyreCalEl = h('div'); lyreCalEl.id = 'sx-lyre-cal';
 
-    // Compact & Complete Draggable Mini Music Player Bar for Lyre Playback (Zero Duplicate Icons!)
+    // Pro Lyre Studio Bar v3.7: Draggable, Full Transport (Prev, -10s, Smooth Drag Scrubber, +10s, Next, Play/Pause, Stop-to-00:00) + Floating Song List Drawer
     lyreBarEl = h('div'); lyreBarEl.id = 'sx-lyre-bar';
+    const lTopRow = h('div', 'sx-lbar-top');
+
     const lMusicBtn = h('button', 'sx-lbar-icon');
     lMusicBtn.type = 'button';
-    lMusicBtn.title = 'Tap to restore or open Lyre tab';
+    lMusicBtn.title = 'Drag to move bar · Tap to restore or open Playlist';
     lMusicBtn.append(ico('music', 15));
-    lMusicBtn.onclick = e => {
-      e.stopPropagation();
-      if (lyreState.stealth) {
-        lyreState.stealth = false;
-        updateLyreBarUI(lyreState.pauseElapsed);
-      } else {
-        openPanel('lyre');
+    dragify(
+      lMusicBtn,
+      () => {
+        const r = lyreBarEl.getBoundingClientRect();
+        return {
+          x: cfg.lyreBarPos ? cfg.lyreBarPos.x : ((r.left + r.width / 2) / Math.max(1, window.innerWidth) * 100),
+          y: cfg.lyreBarPos ? cfg.lyreBarPos.y : (r.top / Math.max(1, window.innerHeight) * 100)
+        };
+      },
+      (o, dx, dy) => {
+        cfg.lyreBarPos = {
+          x: cl(o.x + dx, 10, 90),
+          y: cl(o.y + dy, 1, 88)
+        };
+        lyreBarEl.style.left = cfg.lyreBarPos.x + '%';
+        lyreBarEl.style.top = cfg.lyreBarPos.y + '%';
+      },
+      moved => {
+        if (moved) {
+          save();
+        } else if (lyreState.stealth) {
+          lyreState.stealth = false;
+          updateLyreBarUI(getCurLyreElapsed());
+        } else {
+          lyreState.plistOpen = !lyreState.plistOpen;
+          renderLyrePlaylistDrawer();
+        }
       }
+    );
+
+    // Song Selector Button -> toggles floating Song List Drawer right below bar
+    lyreBarTitleEl = h('button', 'sx-lbar-songbtn');
+    lyreBarTitleEl.type = 'button';
+    lyreBarTitleEl.title = 'Open Song List Drawer';
+    lyreBarTitleSpan = h('span', null, 'Select Song');
+    lyreBarTitleEl.append(lyreBarTitleSpan, ico('down', 12));
+    lyreBarTitleEl.onclick = e => {
+      e.stopPropagation();
+      lyreState.plistOpen = !lyreState.plistOpen;
+      renderLyrePlaylistDrawer();
     };
 
-    lyreBarTitleEl = h('select', 'sx-lbar-sel');
-    lyreBarTitleEl.title = 'Switch song';
-    lyreBarTitleEl.addEventListener('pointerdown', e => e.stopPropagation());
-    lyreBarTitleEl.addEventListener('change', e => {
-      e.stopPropagation();
-      const chosen = lyreSongs.find(s => s.id === lyreBarTitleEl.value);
-      if (chosen) startLyreSong(chosen, false);
-    });
+    const mkMiniIb = (iconName, title, fn, cls) => {
+      const b = h('button', 'sx-ib sm ' + (cls || ''));
+      b.type = 'button';
+      b.title = title;
+      b.append(ico(iconName, 13));
+      b.onclick = e => { e.stopPropagation(); fn(); };
+      return b;
+    };
 
+    const lPrevBtn = mkMiniIb('prev', 'Previous Song', () => advanceLyreSong(-1));
+    const lRwBtn = mkMiniIb('rw', 'Rewind -10s', () => seekLyreByMs(-10000));
+
+    // Smooth Interactive Drag Scrubber with Thumb Knob + A-B Loop Highlight
     const progWrap = h('div', 'sx-lbar-prog');
+    const progTrack = h('div', 'sx-lbar-track');
+    lyreBarAbEl = h('div', 'sx-lbar-ab');
     lyreBarFillEl = h('div', 'sx-lbar-fill');
-    progWrap.append(lyreBarFillEl);
+    const progThumb = h('div', 'sx-lbar-thumb');
+    lyreBarFillEl.append(progThumb);
+    progTrack.append(lyreBarAbEl, lyreBarFillEl);
+    progWrap.append(progTrack);
+
     progWrap.addEventListener('pointerdown', e => {
       e.preventDefault();
       e.stopPropagation();
-      const rect = progWrap.getBoundingClientRect();
-      if (rect.width > 0) seekLyreToRatio((e.clientX - rect.left) / rect.width);
+      lyreState.scrubbing = true;
+      const seekFromEvent = ev => {
+        const rect = progWrap.getBoundingClientRect();
+        if (rect.width > 0) {
+          const ratio = cl((ev.clientX - rect.left) / rect.width, 0, 0.995);
+          seekLyreToRatio(ratio);
+        }
+      };
+      seekFromEvent(e);
+      const onMove = ev => seekFromEvent(ev);
+      const onUp = ev => {
+        window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true);
+        window.removeEventListener('pointercancel', onUp, true);
+        seekFromEvent(ev);
+        lyreState.scrubbing = false;
+      };
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onUp, true);
     });
+
+    const lFfBtn = mkMiniIb('ff', 'Fast-Forward +10s', () => seekLyreByMs(10000));
+    const lNextBtn = mkMiniIb('next', 'Next Song', () => advanceLyreSong(1));
+
     lyreBarTimeEl = h('span', 'sx-lbar-time', '00:00 / 00:00');
 
     lyreBarSpeedBtn = h('button', 'sx-lbar-spd', '1.0x');
@@ -4903,51 +5310,137 @@
       cfg.lyreSpeed = spds[(idx + 1) % spds.length];
       refreshLiveLyreEvents();
       save();
-      updateLyreBarUI(lyreState.pauseElapsed);
+      updateLyreBarUI(getCurLyreElapsed());
     };
 
-    lyreBarPlayBtn = h('button', 'sx-ib');
-    lyreBarPlayBtn.type = 'button';
-    lyreBarPlayBtn.title = 'Play / Pause';
-    lyreBarPlayBtn.append(ico('pause', 15));
-    lyreBarPlayBtn.onclick = e => { e.stopPropagation(); pauseOrResumeLyre(); };
-
-    lyreBarLoopBtn = h('button', 'sx-ib' + (cfg.lyreLoop ? ' active-pill' : ''));
-    lyreBarLoopBtn.type = 'button';
-    lyreBarLoopBtn.title = 'Toggle Loop';
-    lyreBarLoopBtn.append(ico('reset', 14));
-    lyreBarLoopBtn.onclick = e => {
-      e.stopPropagation();
-      cfg.lyreLoop = !cfg.lyreLoop;
-      save();
-      updateLyreBarUI(lyreState.pauseElapsed);
-      toast(cfg.lyreLoop ? 'Loop song: ON' : 'Loop song: OFF');
-    };
-
-    const lCalBtn = h('button', 'sx-ib');
-    lCalBtn.type = 'button';
-    lCalBtn.title = 'Calibrate 21-Dot Lyre Grid';
-    lCalBtn.append(ico('grid', 14));
-    lCalBtn.onclick = e => { e.stopPropagation(); enterLyreCalibration(); };
-
-    const lStopBtn = h('button', 'sx-ib danger');
-    lStopBtn.type = 'button';
-    lStopBtn.title = 'Stop';
-    lStopBtn.append(ico('stop', 15));
-    lStopBtn.onclick = e => { e.stopPropagation(); stopLyre(); };
-
-    const lHideBtn = h('button', 'sx-ib');
-    lHideBtn.type = 'button';
-    lHideBtn.title = 'Stealth Mode (Hide bar for video recording)';
-    lHideBtn.append(ico('eye', 15));
-    lHideBtn.onclick = e => {
-      e.stopPropagation();
+    lyreBarPlayBtn = mkMiniIb('play', 'Play / Pause', () => pauseOrResumeLyre());
+    const lStopBtn = mkMiniIb('stop', 'Stop & Reset to 00:00 (keeps bar open)', () => stopLyre(true), 'danger');
+    lyreBarListBtn = mkMiniIb('list', 'Toggle Song Playlist Drawer', () => {
+      lyreState.plistOpen = !lyreState.plistOpen;
+      renderLyrePlaylistDrawer();
+    });
+    const lCalBtn = mkMiniIb('grid', 'Calibrate 21-Dot Lyre Grid', () => enterLyreCalibration());
+    const lHideBtn = mkMiniIb('eye', 'Stealth Mode (Minimize for video recording)', () => {
+      lyreState.plistOpen = false;
       lyreState.stealth = true;
-      updateLyreBarUI(lyreState.pauseElapsed);
+      updateLyreBarUI(getCurLyreElapsed());
       toast('Mini Player minimized (tap music icon to restore)');
+    });
+    const lCloseBtn = mkMiniIb('close', 'Close Music Player Bar', () => stopLyre(false));
+
+    lTopRow.append(
+      lMusicBtn,
+      lyreBarTitleEl,
+      lPrevBtn,
+      lRwBtn,
+      progWrap,
+      lFfBtn,
+      lNextBtn,
+      lyreBarTimeEl,
+      lyreBarSpeedBtn,
+      lyreBarPlayBtn,
+      lStopBtn,
+      lyreBarListBtn,
+      lCalBtn,
+      lHideBtn,
+      lCloseBtn
+    );
+
+    // Build Floating Song List & Creative Studio Drawer (#sx-lyre-plist)
+    lyrePlistEl = h('div', 'sx-lplist');
+    lyrePlistEl.addEventListener('pointerdown', e => e.stopPropagation());
+
+    // 1. Live 21-Key Mini Visualizer & Test Pad (3x7)
+    const vizGrid = h('div', 'sx-lviz');
+    lyreVizDots = [];
+    for (let i = 0; i < 21; i++) {
+      const [kChar] = LYRE_KEY_LABELS[i];
+      const d = h('div', 'sx-lviz-dot', kChar);
+      d.title = 'Tap to test key ' + (i + 1) + ' (' + kChar + ')';
+      d.onclick = e => {
+        e.stopPropagation();
+        strikeLyreKey(i, 45, 1.0);
+      };
+      lyreVizDots.push(d);
+      vizGrid.append(d);
+    }
+
+    // 2. Quick Studio Controls Row (Queue Mode, Pitch Transpose ±1, A-B Section Loop, Chord Roll)
+    const toolsRow = h('div', 'sx-lplist-tools');
+    lyreQueueBtn = h('button', 'sx-lpill on', 'Queue: Loop All');
+    lyreQueueBtn.type = 'button';
+    lyreQueueBtn.onclick = () => {
+      const modes = ['loopAll', 'loopOne', 'shuffle', 'single'];
+      const cur = modes.indexOf(cfg.lyreQueueMode || 'loopAll');
+      cfg.lyreQueueMode = modes[(cur + 1) % modes.length];
+      cfg.lyreLoop = (cfg.lyreQueueMode === 'loopOne');
+      save();
+      renderLyrePlaylistDrawer();
     };
 
-    lyreBarEl.append(lMusicBtn, lyreBarTitleEl, progWrap, lyreBarTimeEl, lyreBarSpeedBtn, lyreBarPlayBtn, lyreBarLoopBtn, lCalBtn, lStopBtn, lHideBtn);
+    const pitchMinus = h('button', 'sx-lpill', '-1 st');
+    pitchMinus.type = 'button';
+    pitchMinus.onclick = () => {
+      cfg.lyreTranspose = cl(Math.round(nv(cfg.lyreTranspose, 0)) - 1, -12, 12);
+      refreshLiveLyreEvents();
+      save();
+      renderLyrePlaylistDrawer();
+    };
+    lyreTransLbl = h('span', 'sx-litem-sub', 'Pitch: 0 st');
+    const pitchPlus = h('button', 'sx-lpill', '+1 st');
+    pitchPlus.type = 'button';
+    pitchPlus.onclick = () => {
+      cfg.lyreTranspose = cl(Math.round(nv(cfg.lyreTranspose, 0)) + 1, -12, 12);
+      refreshLiveLyreEvents();
+      save();
+      renderLyrePlaylistDrawer();
+    };
+
+    lyreAbBtn = h('button', 'sx-lpill', 'A-B Loop: Set A');
+    lyreAbBtn.type = 'button';
+    lyreAbBtn.title = 'Set start point A and end point B to repeat a specific song section';
+    lyreAbBtn.onclick = () => toggleLyreAbPoint();
+
+    lyreChordBtn = h('button', 'sx-lpill', 'Chord Roll: 4ms');
+    lyreChordBtn.type = 'button';
+    lyreChordBtn.title = 'Cycle chord arpeggio spread (4ms crisp / 8ms soft / 12ms bard harp roll)';
+    lyreChordBtn.onclick = () => {
+      const rolls = [4, 8, 12, 15];
+      const idx = rolls.indexOf(cl(nv(cfg.lyreChordSpread, 4), 2, 18));
+      cfg.lyreChordSpread = rolls[(idx + 1) % rolls.length];
+      refreshLiveLyreEvents();
+      save();
+      renderLyrePlaylistDrawer();
+    };
+
+    toolsRow.append(lyreQueueBtn, pitchMinus, lyreTransLbl, pitchPlus, lyreAbBtn, lyreChordBtn);
+
+    // 3. Search Filter + Quick Import .json / Paste JSON
+    const searchRow = h('div', 'sx-lplist-search');
+    const searchInp = h('input');
+    searchInp.type = 'text';
+    searchInp.placeholder = 'Search songs in library...';
+    searchInp.addEventListener('input', () => {
+      lyreState.searchQuery = searchInp.value;
+      renderLyrePlaylistDrawer();
+    });
+    const impBtn = h('button', 'sx-lpill on');
+    impBtn.type = 'button';
+    impBtn.append(ico('upload', 12), h('span', null, '+ JSON'));
+    impBtn.onclick = () => triggerLyreFileImport();
+
+    const pstBtn = h('button', 'sx-lpill');
+    pstBtn.type = 'button';
+    pstBtn.append(ico('copy', 12), h('span', null, 'Paste'));
+    pstBtn.onclick = () => pasteLyreJsonPrompt();
+
+    searchRow.append(searchInp, impBtn, pstBtn);
+
+    // 4. Scrollable Song List Container
+    lyrePlistListEl = h('div', 'sx-lplist-list');
+
+    lyrePlistEl.append(vizGrid, toolsRow, searchRow, lyrePlistListEl);
+    lyreBarEl.append(lTopRow, lyrePlistEl);
     mLayer = h('div'); mLayer.id = 'sx-m';
     barEl = h('div'); barEl.id = 'sx-bar';
 
