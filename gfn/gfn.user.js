@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Nvirya GeForce NOW iOS
 // @namespace    https://nvirya.com/gfn
-// @version      3.7
+// @version      3.8
 // @author       Nvirya
-// @description  iOS PWA bypass, Pro Lyre Studio (Floating Playlist Drawer, Smooth Drag Scrubber, ±10s Seek, Prev/Next, A-B Section Loop, 21-Key Live Visualizer & Bard Arpeggio), Compact UI Scale (80%–250%), 24 Studio Filters, 2K HD Screenshot & Zero-Freeze Hybrid Input.
+// @description  iOS PWA bypass, Zero-Stutter & Zero-Lockup Input Architecture (Fixes iOS Scroll Hijack, CSS Reflow Stutter, Watchdog TouchCancel & Multi-Finger Cross-Talk), Pro Lyre Studio (Playlist Drawer, Scrubber, ±10s Seek, A-B Loop), UI Scale (80%–250%) & 2K HD Screenshot.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=play.geforcenow.com
 // @match        https://play.geforcenow.com/*
 // @run-at       document-start
@@ -540,7 +540,7 @@
     sessionLimitMin: 60,
     quickBall: false,
     quickHideBtns: false,
-    freeDragBtns: true,
+    freeDragBtns: false,
     oledDim: 0,
     gyroAim: false,
     gyroSens: 1.2, gyroDeadzone: 0.15, gyroSmoothing: 0.72, gyroInvert: false,
@@ -565,7 +565,8 @@
     lyreHumanize: false,
     lyreBarPos: { x: 50, y: 3 },
     lyreGrid: { x: 16, y: 50, w: 68, h: 36 },
-    v33Migrated: true
+    v33Migrated: true,
+    v38Migrated: true
   };
   function loadCfg() {
     let o = {};
@@ -577,6 +578,10 @@
       if (o.macroInput === 'pointer') o.macroInput = 'both';
       if (o.shotScale === '1.5' || !o.shotScale) o.shotScale = '2';
       o.v33Migrated = true;
+    }
+    if (!o.v38Migrated) {
+      o.freeDragBtns = false;
+      o.v38Migrated = true;
     }
     const c = Object.assign({}, DEF, o);
     c.uiScale = cl(nv(c.uiScale, 1), 0.8, 2.5);
@@ -1198,13 +1203,15 @@
   function mkSheet() {
     const st = document.createElement('style');
     st.dataset.sx = 'css';
-    let sh = null;
+    let sh = null, lastCss = null;
     return {
       set(css) {
-        st.textContent = css;
         if (!st.isConnected && (document.head || document.documentElement)) {
           (document.head || document.documentElement).append(st);
         }
+        if (css === lastCss) return;
+        lastCss = css;
+        st.textContent = css;
         if (!st.sheet && 'adoptedStyleSheets' in document) {
           try {
             sh = sh || new CSSStyleSheet();
@@ -1232,15 +1239,17 @@
     if (cfg.fxSepia > 0) f.push('sepia(' + cfg.fxSepia + ')');
     if (cfg.fxGray > 0) f.push('grayscale(' + cfg.fxGray + ')');
     let css = '';
-    // Unlock GFN Native Settings & In-Stream Dropdown Menu Scrolling so settings are never cut off on iOS PWA!
-    if (cfg.fixGfnScroll) {
-      css += `
-        nv-settings,.settings-container,.settings-content,.mat-drawer-content,.main-content{overflow-y:auto !important;-webkit-overflow-scrolling:touch !important;touch-action:pan-y !important}
-        .streamer-osc-drop-down-panel,.mat-mdc-menu-panel{max-height:84dvh !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch !important;touch-action:pan-y !important}
-      `;
-    }
-    if (streaming()) {
-      css += '#remote-video,[data-sx-host],.streamer-container,.streamer-container *,#remote-video:focus,*:focus,*:focus-visible{touch-action:none !important;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-user-drag:none !important;overscroll-behavior:none !important;outline:none !important;-webkit-tap-highlight-color:transparent !important}';
+    const isSt = streaming();
+    if (isSt) {
+      // CRITICAL FIX: While streaming, lock page & wrapper containers so iOS UIScrollView NEVER hijacks vertical/diagonal thumb drags (pan-y)!
+      css += 'html,body,.mat-drawer-content,.main-content,.streamer-container,#remote-video,[data-sx-host]{overflow:hidden !important;touch-action:none !important;overscroll-behavior:none !important;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-user-drag:none !important;outline:none !important;-webkit-tap-highlight-color:transparent !important}';
+      css += '.streamer-container canvas,.streamer-container video,.streamer-container button:focus{outline:none !important;-webkit-tap-highlight-color:transparent !important}';
+      if (cfg.fixGfnScroll) {
+        css += '.streamer-osc-drop-down-panel,.mat-mdc-menu-panel,.mat-mdc-menu-content{max-height:84dvh !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch !important;touch-action:pan-y !important}';
+      }
+    } else if (cfg.fixGfnScroll) {
+      // Only enable pan-y scrolling on .mat-drawer-content / .main-content when in GFN Lobby (NOT streaming)!
+      css += 'nv-settings,.settings-container,.settings-content,.mat-drawer-content,.main-content{overflow-y:auto !important;-webkit-overflow-scrolling:touch !important;touch-action:pan-y !important}';
     }
     const tr = ((cfg.viewX || cfg.viewY) ? 'translate:' + cfg.viewX + '% ' + cfg.viewY + '%;' : '') + (cfg.viewZoom !== 1 ? 'scale:' + cfg.viewZoom + ';' : '');
     if (tr) css += '#remote-video,#sx-gl{' + tr + '}';
@@ -1585,11 +1594,18 @@
     }
     if (GL.on && GL.c && !GL.c.isConnected) { glStop(); updateSharpen(); }
 
-    updateSessionTimerUI();
+    if ((panel && panel.classList.contains('open')) || (cfg.hudOn && st)) {
+      updateSessionTimerUI();
+    }
 
     const now = Date.now();
-    if (cfg.inputGuard && runners.size === 0 && (activeMacroPointers.size > 0 || activeMacroTouches.size > 0)) {
-      unstickStreamInput(true);
+    // Safe Orphaned Pointer Cleanup: NEVER fire while Lyre, Gyro, Macros, or Real Fingers are active!
+    if (cfg.inputGuard && runners.size === 0 && !lyreState.playing && !gyroActive && realPointers.size === 0 && realTouches.length === 0 && activeMacroPointers.size > 0) {
+      let hasStale = false;
+      activeMacroPointers.forEach((info) => {
+        if (now - info.t > 5000) hasStale = true;
+      });
+      if (hasStale) unstickStreamInput(true);
     }
 
     if (st && cfg.afkGuard && !runners.size && !recState.on && now - lastUserAct > 210000 && now - lastAfkPulse > 180000) {
@@ -2018,6 +2034,9 @@
       activeMacroPointers.forEach((info, pid) => {
         const tgt = (info.target && info.target.isConnected) ? info.target : streamTgt;
         try {
+          if (typeof tgt.releasePointerCapture === 'function') {
+            try { tgt.releasePointerCapture(pid); } catch (_) {}
+          }
           tgt.dispatchEvent(new PointerEvent('pointerup', {
             bubbles: true, cancelable: true, composed: true, view: window,
             pointerId: pid, pointerType: 'touch', isPrimary: pid === primaryMacroPid,
@@ -2037,26 +2056,44 @@
           }));
         } catch (_) {}
       });
-      if (realTouches.length === 0 && streamTgt) {
-        try {
-          const dummyTouch = mkTouch(streamTgt, Math.round(window.innerWidth * 0.5), Math.round(window.innerHeight * 0.5), 99);
-          if (dummyTouch) {
-            streamTgt.dispatchEvent(new TouchEvent('touchcancel', {
-              bubbles: true, cancelable: true, composed: true, view: window,
-              touches: [], targetTouches: [], changedTouches: [dummyTouch]
-            }));
-          }
-        } catch (_) {}
-      }
       activeMacroPointers.clear();
       activeMacroTouches.clear();
       targetCache.clear();
       primaryMacroPid = null;
       holdIds.clear();
-      if (document.activeElement && root && root.contains(document.activeElement)) {
+
+      // When manually invoked by user (silent === false), perform Safe iOS Notification-Center Equivalent Focus & Capture Reset
+      if (!silent) {
+        realPointers.forEach((_, rpid) => {
+          if (streamTgt && typeof streamTgt.releasePointerCapture === 'function') {
+            try { streamTgt.releasePointerCapture(rpid); } catch (_) {}
+          }
+        });
+        realPointers.clear();
+        realTouches = [];
+        try {
+          if (window.getSelection) {
+            const sel = window.getSelection();
+            if (sel && sel.removeAllRanges) sel.removeAllRanges();
+          }
+        } catch (_) {}
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement !== streamTgt) {
+          try { document.activeElement.blur(); } catch (_) {}
+        }
+        const v = vid();
+        if (v && typeof v.focus === 'function') {
+          try { v.focus({ preventScroll: true }); } catch (_) {}
+        }
+        try {
+          window.dispatchEvent(new Event('blur'));
+          setTimeout(() => {
+            try { window.dispatchEvent(new Event('focus')); } catch (_) {}
+          }, 16);
+        } catch (_) {}
+        toast('Stream input unlocked & control restored');
+      } else if (document.activeElement && root && root.contains(document.activeElement)) {
         try { document.activeElement.blur(); } catch (_) {}
       }
-      if (!silent) toast('Stream input unlocked & refreshed');
     }, 'unstickStreamInput');
   }
 
@@ -2094,14 +2131,20 @@
   }
 
   let cachedStreamTarget = null, cachedStreamTargetAt = 0;
+  function isValidStreamSurface(el) {
+    if (!el || !el.isConnected || el === document.body || el === document.documentElement) return false;
+    if (isOverlayNode(el)) return false;
+    if (el.closest && el.closest('.cdk-overlay-container, .streamer-osc-drop-down-panel, nv-settings')) return false;
+    return true;
+  }
   function pickTarget(x, y) {
     const now = performance.now();
-    if (cachedStreamTarget && cachedStreamTarget.isConnected && (now - cachedStreamTargetAt) < 1500 && ! isOverlayNode(cachedStreamTarget)) {
+    if (cachedStreamTarget && (now - cachedStreamTargetAt) < 800 && isValidStreamSurface(cachedStreamTarget)) {
       return cachedStreamTarget;
     }
     const list = document.elementsFromPoint(x, y);
-    const found = list.find(el => !isOverlayNode(el)) || vid() || document.body;
-    if (found && found !== document.body) {
+    const found = list.find(isValidStreamSurface) || vid() || document.body;
+    if (isValidStreamSurface(found)) {
       cachedStreamTarget = found;
       cachedStreamTargetAt = now;
     }
@@ -2135,18 +2178,20 @@
       target = pickTarget(cx, cy);
       if (target && phase === 'down') targetCache.set(pid, target);
     }
+    const userTouching = realPointers.size > 0 || realTouches.length > 0;
     if (phase === 'up') {
       targetCache.delete(pid);
       activeMacroPointers.delete(pid);
       if (primaryMacroPid === pid) primaryMacroPid = null;
     } else {
       activeMacroPointers.set(pid, { target, x: cx, y: cy, t: Date.now() });
-      if (primaryMacroPid === null && realPointers.size === 0) primaryMacroPid = pid;
+      if (primaryMacroPid === null && !userTouching) primaryMacroPid = pid;
     }
     if (!target) return;
 
     const mode = cfg.macroInput, down = phase !== 'up';
-    const isPrim = (realPointers.size === 0) && (primaryMacroPid === pid || primaryMacroPid === null);
+    // NEVER claim isPrimary if a real human finger is touching the screen!
+    const isPrim = !userTouching && (primaryMacroPid === pid || primaryMacroPid === null);
     const movX = (phase === 'move' && prevX != null) ? (cx - prevX) : 0;
     const movY = (phase === 'move' && prevY != null) ? (cy - prevY) : 0;
     const base = {
@@ -2176,15 +2221,14 @@
         })));
       }, 'pointer');
     }
-    if (mode === 'touch' || mode === 'both') {
+    if (mode === 'touch' || (mode === 'both' && (!userTouching || activeMacroTouches.has(pid)))) {
       guard(() => {
         const t = mkTouch(target, cx, cy, pid);
         if (!t) return;
         if (down) activeMacroTouches.set(pid, t);
         else activeMacroTouches.delete(pid);
         const macroList = Array.from(activeMacroTouches.values());
-        const cleanReal = realTouches.filter(rt => !isOverlayNode(rt.target));
-        const all = cleanReal.concat(macroList);
+        const all = realTouches.length ? realTouches.concat(macroList) : macroList;
         const mine = all.filter(q => q.target === target);
         const type = { down: 'touchstart', move: 'touchmove', up: 'touchend' }[phase];
         target.dispatchEvent(new TouchEvent(type, Object.assign({}, base, {
@@ -2627,8 +2671,12 @@
   function stopAll() {
     activeHoldBtnMacros.clear();
     runners.forEach(r => { r.stop = true; });
-    if (lyreState.playing || lyreState.countingDown) stopLyre();
-    setTimeout(() => unstickStreamInput(true), 40);
+    if (lyreState.playing || lyreState.countingDown) stopLyre(true);
+    setTimeout(() => {
+      if (realPointers.size === 0 && realTouches.length === 0 && (activeMacroPointers.size > 0 || activeMacroTouches.size > 0)) {
+        unstickStreamInput(true);
+      }
+    }, 60);
   }
   function toggleMacro(m) { if (runners.has(m.id)) stopMacro(m.id); else runMacro(m); }
   function markRunning() {
@@ -2657,12 +2705,13 @@
   document.addEventListener('pointerdown', e => {
     if (!e.isTrusted) return;
     lastUserAct = Date.now();
-    if (typeof e.timeStamp === 'number' && e.timeStamp > 0) {
+    if (cfg.hudOn && typeof e.timeStamp === 'number' && e.timeStamp > 0) {
       const d = performance.now() - e.timeStamp;
       if (d >= 0 && d < 150) lastTouchDispMs = lastTouchDispMs * 0.7 + d * 0.3;
     }
     if (!isOverlayNode(e.target)) {
       realPointers.set(e.pointerId, Date.now());
+      primaryMacroPid = null;
     }
     if (!runners.size || cfg.macroPauseMode === 'never') return;
     if (isOverlayNode(e.target)) return;
@@ -2682,20 +2731,24 @@
     }, { capture: true, passive: true });
   });
 
-  ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(t => {
+  // Zero-Overhead Touch Tracker: Only update realTouches on touchstart/touchend/touchcancel (NEVER allocate/filter on 120Hz touchmove!)
+  ['touchstart', 'touchend', 'touchcancel'].forEach(t => {
     document.addEventListener(t, e => {
       if (!e.isTrusted) return;
-      if (typeof e.timeStamp === 'number' && e.timeStamp > 0 && t === 'touchmove') {
-        const d = performance.now() - e.timeStamp;
-        if (d >= 0 && d < 120) lastTouchDispMs = lastTouchDispMs * 0.8 + d * 0.2;
-      }
-      realTouches = Array.from(e.touches).filter(touch => !isOverlayNode(touch.target));
       if (e.touches.length === 0) {
+        realTouches = [];
         realPointers.clear();
         holdIds.clear();
         if (activeHoldBtnMacros.size > 0) {
           activeHoldBtnMacros.forEach(id => stopMacro(id));
         }
+      } else {
+        const out = [];
+        for (let i = 0; i < e.touches.length; i++) {
+          const tch = e.touches[i];
+          if (!isOverlayNode(tch.target)) out.push(tch);
+        }
+        realTouches = out;
       }
     }, { capture: true, passive: true });
   });
@@ -3650,6 +3703,7 @@
       recState.countingDown = false;
       if (cdEl) cdEl.classList.remove('on');
       recState.on = true;
+      attachRecListeners();
       recState.t0 = performance.now();
       recState.firstActionT = 0;
       recState.lastEventEndTime = 0;
@@ -3750,6 +3804,7 @@
       finalizeRecordedPointer(p, p.xLast, p.yLast, now);
     });
     recState.on = false;
+    detachRecListeners();
     recState.ptrs.clear();
     clearInterval(recState.timerId);
     updateRecUI();
@@ -3810,6 +3865,7 @@
     if (!recState.on && !recState.countingDown) return;
     recState.countingDown = false;
     recState.on = false;
+    detachRecListeners();
     recState.ptrs.clear();
     recState.steps = [];
     recState.rawEv = [];
@@ -3822,7 +3878,7 @@
     openPanel('rec');
   }
 
-  document.addEventListener('pointerdown', e => {
+  const onRecPointerDown = e => {
     if (!recState.on || !e.isTrusted) return;
     if (isOverlayNode(e.target)) return;
     const now = performance.now();
@@ -3863,9 +3919,9 @@
       lastSampleT: now
     });
     updateRecUI();
-  }, { capture: true, passive: true });
+  };
 
-  document.addEventListener('pointermove', e => {
+  const onRecPointerMove = e => {
     if (!recState.on || !e.isTrusted) return;
     const p = recState.ptrs.get(e.pointerId);
     if (!p) return;
@@ -3898,9 +3954,9 @@
       }
       p.lastSampleT = now;
     }
-  }, { capture: true, passive: true });
+  };
 
-  document.addEventListener('pointerup', e => {
+  const onRecPointerUp = e => {
     if (!recState.on || !e.isTrusted) return;
     const p = recState.ptrs.get(e.pointerId);
     if (!p) return;
@@ -3909,9 +3965,9 @@
     const endY = (typeof e.clientY === 'number' && e.clientY > 0) ? e.clientY : p.yLast;
     finalizeRecordedPointer(p, endX, endY, performance.now());
     updateRecUI();
-  }, { capture: true, passive: true });
+  };
 
-  document.addEventListener('pointercancel', e => {
+  const onRecPointerCancel = e => {
     if (!recState.on || !e.isTrusted) return;
     const p = recState.ptrs.get(e.pointerId);
     if (!p) return;
@@ -3922,9 +3978,9 @@
     recState.ptrs.delete(e.pointerId);
     finalizeRecordedPointer(p, p.xLast, p.yLast, performance.now());
     updateRecUI();
-  }, { capture: true, passive: true });
+  };
 
-  document.addEventListener('touchend', e => {
+  const onRecTouchEnd = e => {
     if (!recState.on || !e.isTrusted) return;
     if (e.touches.length === 0 && recState.ptrs.size > 0) {
       const now = performance.now();
@@ -3936,7 +3992,27 @@
       });
       updateRecUI();
     }
-  }, { capture: true, passive: true });
+  };
+
+  let recListenersAttached = false;
+  function attachRecListeners() {
+    if (recListenersAttached) return;
+    recListenersAttached = true;
+    document.addEventListener('pointerdown', onRecPointerDown, { capture: true, passive: true });
+    document.addEventListener('pointermove', onRecPointerMove, { capture: true, passive: true });
+    document.addEventListener('pointerup', onRecPointerUp, { capture: true, passive: true });
+    document.addEventListener('pointercancel', onRecPointerCancel, { capture: true, passive: true });
+    document.addEventListener('touchend', onRecTouchEnd, { capture: true, passive: true });
+  }
+  function detachRecListeners() {
+    if (!recListenersAttached) return;
+    recListenersAttached = false;
+    document.removeEventListener('pointerdown', onRecPointerDown, { capture: true });
+    document.removeEventListener('pointermove', onRecPointerMove, { capture: true });
+    document.removeEventListener('pointerup', onRecPointerUp, { capture: true });
+    document.removeEventListener('pointercancel', onRecPointerCancel, { capture: true });
+    document.removeEventListener('touchend', onRecTouchEnd, { capture: true });
+  }
 
   /* ---- Template Management ---- */
   function testTemplate(tpl) {
@@ -4948,7 +5024,7 @@
       ng.className = grid.className;
       Array.from(grid.attributes).forEach(a => ng.setAttribute(a.name, a.value));
       ng.removeAttribute('id');
-      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.7)' : g.title));
+      ng.append(h('div', 'sx-ghead', g.id === 'gen' ? 'Nvirya GeForce NOW (v3.8)' : g.title));
       items.forEach(i => ng.append(nativeRow(ref, i)));
       sec.append(ng);
     });
@@ -4976,7 +5052,7 @@
     if (!tpl) return;
     const quit = btns.find(b => /quit/i.test(b.textContent));
     [
-      ['Nvirya GFN (' + Math.round(cfg.uiScale * 100) + '%)', 'sliders', () => openPanel()],
+      ['Nvirya Geforce NOW (' + Math.round(cfg.uiScale * 100) + '%)', 'sliders', () => openPanel()],
       ['UI Scale: ' + Math.round(cfg.uiScale * 100) + '% (Tap to 150%/200%)', 'zoom', () => cycleUiScale()],
       ['Move / Drag Buttons', 'move', () => enterEdit()],
       ['Lyre Auto-Player', 'music', () => openPanel('lyre')],
@@ -5040,7 +5116,7 @@
     panel.replaceChildren();
     const head = h('div', 'sx-ph');
     const tWrap = h('div', 'sx-pt-wrap');
-    tWrap.append(h('div', 'sx-pt', 'Nvirya GFN'), h('span', 'sx-pv', 'v3.7'));
+    tWrap.append(h('div', 'sx-pt', 'Nvirya Geforce NOW'), h('span', 'sx-pv', 'v3.8'));
 
     // 1-Tap UI Scale Cycle Badge right in the Panel Header (100% -> 125% -> 150% -> 175% -> 200%)
     panelScaleBtn = h('button', 'sx-pscale', 'Scale: ' + Math.round(cfg.uiScale * 100) + '%');
@@ -5272,6 +5348,7 @@
     progWrap.addEventListener('pointerdown', e => {
       e.preventDefault();
       e.stopPropagation();
+      const activePid = e.pointerId;
       lyreState.scrubbing = true;
       const seekFromEvent = ev => {
         const rect = progWrap.getBoundingClientRect();
@@ -5281,8 +5358,12 @@
         }
       };
       seekFromEvent(e);
-      const onMove = ev => seekFromEvent(ev);
+      const onMove = ev => {
+        if (ev.pointerId !== activePid) return;
+        seekFromEvent(ev);
+      };
       const onUp = ev => {
+        if (ev.pointerId !== activePid) return;
         window.removeEventListener('pointermove', onMove, true);
         window.removeEventListener('pointerup', onUp, true);
         window.removeEventListener('pointercancel', onUp, true);
@@ -5557,15 +5638,18 @@
       if (!s) return;
       e.preventDefault();
       e.stopPropagation();
+      const activePid = e.pointerId;
       el.blur();
       const x0 = e.clientX, y0 = e.clientY;
       let moved = false;
       const mv = ev => {
+        if (ev.pointerId !== activePid) return;
         const dx = ev.clientX - x0, dy = ev.clientY - y0;
         if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
         if (moved) move(s, dx / window.innerWidth * 100, dy / window.innerHeight * 100);
       };
-      const up = () => {
+      const up = ev => {
+        if (ev.pointerId !== activePid) return;
         window.removeEventListener('pointermove', mv, true);
         window.removeEventListener('pointerup', up, true);
         window.removeEventListener('pointercancel', up, true);
@@ -5634,6 +5718,8 @@
         b.addEventListener('pointerdown', e => {
           e.preventDefault();
           e.stopPropagation();
+          const activePid = e.pointerId;
+          const downAt = performance.now();
           b.blur();
           const x0 = e.clientX, y0 = e.clientY;
           const origX = m.btn.x, origY = m.btn.y;
@@ -5645,9 +5731,10 @@
           }
 
           const onMove = ev => {
+            if (ev.pointerId !== activePid) return;
             if (!cfg.freeDragBtns) return;
             const dx = ev.clientX - x0, dy = ev.clientY - y0;
-            if (!dragged && Math.hypot(dx, dy) > 9) {
+            if (!dragged && (performance.now() - downAt >= 220) && Math.hypot(dx, dy) > 10) {
               dragged = true;
               if (m.mode === 'hold') stopMacro(m.id);
             }
@@ -5658,7 +5745,8 @@
             }
           };
 
-          const onUp = () => {
+          const onUp = ev => {
+            if (ev.pointerId !== activePid) return;
             window.removeEventListener('pointermove', onMove, true);
             window.removeEventListener('pointerup', onUp, true);
             window.removeEventListener('pointercancel', onUp, true);
@@ -5889,34 +5977,44 @@
     });
   }
 
-  let scanQ = false;
+  let scanQ = false, lastInGameScanAt = 0;
   function scheduleScan() {
     if (scanQ) return;
+    if (streaming() && (performance.now() - lastInGameScanAt < 350)) return;
     scanQ = true;
-    requestAnimationFrame(() => { scanQ = false; guard(scan, 'scan'); });
+    requestAnimationFrame(() => {
+      scanQ = false;
+      if (streaming()) lastInGameScanAt = performance.now();
+      guard(scan, 'scan');
+    });
   }
   function scan() {
     baseSheet.set(CSS);
     ensureRoot();
-    const anchor = findLobbyAnchor();
-    if (anchor && !document.getElementById('sx-section')) injectLobby(anchor);
-    injectMenu();
-    updateSharpen();
-    if (document.querySelector('.cdk-overlay-container button')) {
-      const b = Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(x => x.textContent && x.textContent.includes('BACK TO GAME'));
-      if (b) b.click();
+    const isSt = streaming();
+    if (!isSt) {
+      const anchor = findLobbyAnchor();
+      if (anchor && !document.getElementById('sx-section')) injectLobby(anchor);
+    } else {
+      if (document.querySelector('.streamer-osc-drop-down-panel')) injectMenu();
+      const cdk = document.querySelector('.cdk-overlay-container');
+      if (cdk && cdk.firstElementChild) {
+        const b = Array.from(cdk.querySelectorAll('button')).find(x => x.textContent && x.textContent.includes('BACK TO GAME'));
+        if (b) b.click();
+      }
     }
+    updateSharpen();
   }
   function init() {
     baseSheet.set(CSS);
     applyDyn();
     new MutationObserver(recs => {
-      if (root && recs.every(r => root.contains(r.target) || r.target === fxEl)) return;
+      if (root && recs.every(r => root.contains(r.target) || r.target === fxEl || (GL.c && r.target === GL.c))) return;
       scheduleScan();
     }).observe(document.documentElement, { childList: true, subtree: true });
     ['fullscreenchange', 'webkitfullscreenchange', 'DOMContentLoaded', 'load'].forEach(t => window.addEventListener(t, scheduleScan));
     setInterval(() => {
-      guard(scan, 'scanPoll');
+      if (!streaming()) guard(scan, 'scanPoll');
       tick().catch(() => {});
     }, 1000);
     applySilent();
